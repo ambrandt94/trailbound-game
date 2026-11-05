@@ -37,6 +37,7 @@ export default tseslint.config(
       'coverage/**',
       'test-results/**',
       'playwright-report/**',
+      'public/vendor/**',
     ],
   },
   ...tseslint.configs.recommended,

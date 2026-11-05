@@ -4,7 +4,7 @@ import type { AreaExit, WorldState } from '../core/state/world-state';
 import type { Keyboard } from '../input/keyboard';
 import type { SceneStack } from './scene-stack';
 
-export type AppMode = 'boot' | 'title' | 'map' | 'transition' | 'area';
+export type AppMode = 'boot' | 'title' | 'map' | 'transition' | 'area' | 'creator';
 
 export interface GameHost {
   readonly stack: SceneStack;
@@ -17,6 +17,8 @@ export interface GameHost {
   readonly view: 'map' | 'area';
   setMode(mode: AppMode): void;
   setView(view: 'map' | 'area'): void;
+  /** Hide the map and area canvases while the character creator is open. */
+  setCreatorVisible(visible: boolean): void;
   setFade(opacity: number): void;
   paintMap(pose: { x: number; y: number; yaw: number }): void;
   buildArea(): void;

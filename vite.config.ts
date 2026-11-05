@@ -65,7 +65,8 @@ export default defineConfig({
   preview: { host: true, port: 4173, strictPort: true },
   build: {
     // Three.js is one chunk in this shell. Later scenes can split it.
-    chunkSizeWarningLimit: 700,
+    // Three plus the creator shell. Character Forge itself stays a separate public file.
+    chunkSizeWarningLimit: 900,
   },
   test: {
     projects: [

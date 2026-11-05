@@ -9,3 +9,4 @@ export {
   type TownRef,
   type WorldEvent,
 } from './world-state';
+export type { PlayerAvatar } from '../people/avatar';

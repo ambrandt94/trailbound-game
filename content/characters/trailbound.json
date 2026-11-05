@@ -1,0 +1,59 @@
+{
+  "profile": "trailbound",
+  "profileVersion": 1,
+  "engineApi": 1,
+  "generatorVersion": 1,
+  "defaults": {
+    "richness": 0.45,
+    "ages": { "adult": 1 },
+    "genders": { "m": 1, "f": 1 },
+    "races": {
+      "human": 3,
+      "halfling": 1.2,
+      "gnome": 1.2,
+      "dwarf": 1.4,
+      "orc": 1.4,
+      "goblin": 1.2,
+      "elf": 1.4,
+      "tiefling": 1.1,
+      "imp": 0.7,
+      "wood_elf": 1.1,
+      "dark_elf": 0.9,
+      "great_elf": 0.6,
+      "goliath": 0.8,
+      "firbolg": 0.7,
+      "mousefolk": 0.7,
+      "pixie": 0.8,
+      "kobold": 0.8,
+      "dragonborn": 0.8,
+      "djinn": 0.5,
+      "elder": 0.4,
+      "thug": 0.4
+    }
+  },
+  "roles": {
+    "player": {
+      "styles": { "wanderer": 2, "ranger": 1, "villager": 1 },
+      "ages": { "adult": 1 },
+      "richness": 0.45
+    },
+    "guard": { "styles": { "guard": 3, "soldier": 1 }, "richness": 0.4 },
+    "merchant": { "styles": { "merchant": 1 }, "richness": 0.55 },
+    "villager": { "styles": { "villager": 2, "villager_man": 1, "villager_woman": 1 } },
+    "smith": { "styles": { "smith": 1, "miner": 0.4 } },
+    "mage": { "styles": { "mage": 1, "scholar": 0.6 } },
+    "ranger": { "styles": { "ranger": 1, "wanderer": 0.4 } },
+    "innkeeper": { "styles": { "merchant": 1, "villager": 1 }, "richness": 0.5 }
+  },
+  "tiers": {
+    "hamlet": { "richness": 0.15 },
+    "village": { "richness": 0.3 },
+    "town": { "richness": 0.5 },
+    "city": { "richness": 0.7 },
+    "capital": { "richness": 0.9 }
+  },
+  "cultures": {
+    "road": { "styles": { "wanderer": 2, "pioneer": 1, "ranger": 1 } },
+    "town": { "styles": { "villager": 2, "merchant": 1, "guard": 1 } }
+  }
+}

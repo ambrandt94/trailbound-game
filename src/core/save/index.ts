@@ -10,3 +10,4 @@ export type {
   SavePatch,
   SlotInfo,
 } from './types';
+export type { PlayerAvatar, PlayerProfileEntry } from '../people/avatar';

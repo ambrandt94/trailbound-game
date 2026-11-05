@@ -1,3 +1,5 @@
+import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
+import type { PlayerAvatar } from '../people/avatar';
 import { DEFAULT_WORLD_SEED } from '../world/index';
 import { GAME_HOURS_PER_REAL_SECOND, START_HOUR } from '../sim/clock';
 import type { CfPin, PackedWorld, PlayerSave } from '../save/types';
@@ -27,6 +29,7 @@ export interface HeroPose {
 export type WorldEvent =
   | { type: 'clock-tick'; rev: number }
   | { type: 'area-exit'; rev: number; exit: AreaExit }
+  | { type: 'avatar-changed'; rev: number }
   | { type: 'loaded'; rev: number };
 
 /** How far outside the town center an area exit places the hero. Farther than the enter radius. */
@@ -38,6 +41,7 @@ export class WorldState {
   readonly events: WorldEvent[] = [];
   seed = DEFAULT_WORLD_SEED;
   hero: HeroPose = { x: 0, y: 0, yaw: 0 };
+  avatar: PlayerAvatar = defaultPlayerAvatar();
   town: TownRef = { id: 'waystead', name: 'Waystead', x: 8, y: 8 };
 
   advanceClock(realSeconds: number): void {
@@ -89,15 +93,23 @@ export class WorldState {
       y: core.player.mapY,
       yaw: core.player.yaw,
     };
+    this.avatar = copyAvatar(core.player.avatar, core.player.name);
     this.record({ type: 'loaded', rev: this.bump() });
   }
 
-  toPacked(meta: { gameVersion: string; cfPin: CfPin; playerName: string }): PackedWorld {
+  setAvatar(avatar: PlayerAvatar): void {
+    this.avatar = copyAvatar(avatar, avatar.name);
+    this.record({ type: 'avatar-changed', rev: this.bump() });
+  }
+
+  toPacked(meta: { gameVersion: string; cfPin: CfPin; playerName?: string }): PackedWorld {
+    const avatar = copyAvatar(this.avatar, this.avatar.name || meta.playerName || 'Traveller');
     const player: PlayerSave = {
-      name: meta.playerName,
+      name: avatar.name,
       mapX: this.hero.x,
       mapY: this.hero.y,
       yaw: this.hero.yaw,
+      avatar,
     };
     return {
       clockHours: this.clockHours,
@@ -126,6 +138,19 @@ export function createWorld(town: TownRef, seed = DEFAULT_WORLD_SEED): WorldStat
   world.hero = { x: town.x - 2.5, y: town.y, yaw: 0 };
   world.clockHours = START_HOUR;
   return world;
+}
+
+function copyAvatar(avatar: PlayerAvatar | undefined, name: string): PlayerAvatar {
+  if (!isPlayerAvatar(avatar)) return defaultPlayerAvatar(name || 'Traveller');
+  return {
+    name: avatar.name,
+    seed: avatar.seed,
+    profileEntry: JSON.parse(JSON.stringify(avatar.profileEntry)) as PlayerAvatar['profileEntry'],
+    generatorVersion: avatar.generatorVersion,
+    recipeHash: avatar.recipeHash,
+    race: avatar.race,
+    gender: avatar.gender,
+  };
 }
 
 function clamp01(value: number): number {

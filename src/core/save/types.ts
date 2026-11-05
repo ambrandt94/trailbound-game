@@ -1,3 +1,5 @@
+import type { PlayerAvatar } from '../people/avatar';
+
 /**
  * Save seam from the project plan. Platform backends implement this.
  * Game saves never go through localStorage.
@@ -12,6 +14,8 @@ export interface PlayerSave {
   mapX: number;
   mapY: number;
   yaw: number;
+  /** Present from schema 4. Schema 3 saves gain one in the migration. */
+  avatar?: PlayerAvatar;
 }
 
 export interface SaveManifest {
