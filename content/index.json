@@ -1,0 +1,5 @@
+{
+  "id": "trailbound.content",
+  "version": 1,
+  "entries": [{ "id": "places/waystead", "path": "places/waystead.json" }]
+}

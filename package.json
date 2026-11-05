@@ -1,0 +1,43 @@
+{
+  "name": "trailbound-game",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Trailbound — map, towns, and the road between them.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc -p src/core/tsconfig.json --noEmit && tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "assets:guard": "node tools/asset-guard.mjs",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run assets:guard"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.4",
+    "preact": "11.1.1",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "@types/node": "24.10.0",
+    "@types/three": "0.187.0",
+    "eslint": "10.14.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-boundaries": "7.4.2",
+    "fake-indexeddb": "6.2.7",
+    "happy-dom": "21.0.4",
+    "playwright": "1.65.0",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}

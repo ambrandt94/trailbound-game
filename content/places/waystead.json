@@ -1,0 +1,7 @@
+{
+  "id": "waystead",
+  "name": "Waystead",
+  "kind": "town",
+  "map": { "x": 8, "y": 8 },
+  "blurb": "A small town on the road. The gate is open."
+}
