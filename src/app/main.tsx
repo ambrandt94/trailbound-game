@@ -33,10 +33,12 @@ const game = new Game({
   mapCanvas,
   areaCanvas,
   fade,
+  baseUrl: import.meta.env.BASE_URL,
   content: createFetchContentSource(import.meta.env.BASE_URL),
   saves: createIdbSaveBackend(),
   settings: createBrowserSettings(globalThis.localStorage ?? null),
 });
 
 render(<Shell />, ui);
+Object.assign(globalThis, { __TRAILBOUND__: game });
 void game.start();
