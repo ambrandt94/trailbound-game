@@ -205,7 +205,7 @@ export class Game implements GameHost {
   }
 
   /** Frame the whole continent, a coast with a river, or Ironmarch up close. */
-  frameScene(kind: 'world' | 'coast' | 'ironmarch'): boolean {
+  frameScene(kind: 'world' | 'coast' | 'river' | 'snow' | 'ash' | 'ironmarch'): boolean {
     const data = this.world.data;
     if (!data || !this.mapScene) return false;
     if (kind === 'ironmarch') {
@@ -214,6 +214,22 @@ export class Game implements GameHost {
     }
     if (kind === 'world') {
       this.mapScene.lookAt(data.width / 2, data.height / 2, startScaleFor(data.width));
+      return true;
+    }
+    if (kind === 'river') {
+      const river = findRiver(data);
+      if (!river) return false;
+      this.mapScene.lookAt(river.x, river.y, 1.15);
+      return true;
+    }
+    if (kind === 'snow' || kind === 'ash') {
+      const id = kind === 'snow' ? Biome.Snow : Biome.Ashlands;
+      const spot =
+        findBiomeEdge(data, id, Biome.Sand) ??
+        findBiomeEdge(data, id, Biome.Plains) ??
+        findAnyEdge(data, id);
+      if (!spot) return false;
+      this.mapScene.lookAt(spot.x, spot.y, 1.15);
       return true;
     }
     const coast = findCoast(data);
@@ -487,6 +503,7 @@ export class Game implements GameHost {
     const text = formatClock(this.world.clockHours);
     root.dataset.clock = text;
     root.dataset.bakeMs = this.mapRenderer.bakeMs.toFixed(1);
+    root.dataset.detailMs = this.mapRenderer.detailMs.toFixed(1);
     root.dataset.fps = this.mapRenderer.fps.toFixed(1);
     root.dataset.skin = settings.value.mapSkin;
     root.dataset.place = this.world.town.name;
@@ -507,6 +524,49 @@ export class Game implements GameHost {
     );
     this.raf = requestAnimationFrame(this.onFrame);
   };
+}
+
+function findRiver(world: WorldData): { x: number; y: number } | null {
+  const width = world.width;
+  for (let y = 20; y < world.height - 20; y += 6) {
+    for (let x = 20; x < width - 20; x += 6) {
+      if (world.biomes[x + y * width] !== Biome.Water) continue;
+      const land =
+        (world.biomes[x + 3 + y * width] !== Biome.Water ? 1 : 0) +
+        (world.biomes[x - 3 + y * width] !== Biome.Water ? 1 : 0);
+      const along =
+        world.biomes[x + (y - 6) * width] === Biome.Water &&
+        world.biomes[x + (y + 6) * width] === Biome.Water;
+      if (land >= 1 && along && y > world.height * 0.2 && y < world.height * 0.8) return { x, y };
+    }
+  }
+  return null;
+}
+
+function findAnyEdge(world: WorldData, id: Biome): { x: number; y: number } | null {
+  const width = world.width;
+  for (let y = 8; y < world.height - 8; y += 3) {
+    for (let x = 8; x < width - 8; x += 3) {
+      if (world.biomes[x + y * width] !== id) continue;
+      const east = world.biomes[x + 1 + y * width];
+      if (east !== undefined && east !== id) return { x, y };
+    }
+  }
+  return null;
+}
+
+function findBiomeEdge(world: WorldData, a: Biome, b: Biome): { x: number; y: number } | null {
+  const width = world.width;
+  for (let y = 8; y < world.height - 8; y += 4) {
+    for (let x = 8; x < width - 8; x += 4) {
+      const here = world.biomes[x + y * width];
+      if (here !== a) continue;
+      const east = world.biomes[x + 1 + y * width];
+      const south = world.biomes[x + (y + 1) * width];
+      if (east === b || south === b) return { x, y };
+    }
+  }
+  return null;
 }
 
 function findCoast(world: WorldData): { x: number; y: number } | null {

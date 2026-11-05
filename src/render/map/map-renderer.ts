@@ -1,5 +1,4 @@
 import {
-  DETAIL_START,
   TILE,
   type CameraState,
   type ChunkData,
@@ -9,7 +8,7 @@ import {
 } from '../../core/world/models';
 import type { MapSkinId } from '../../core/state/settings';
 import { AssetLibrary } from './assets';
-import { loadTrailbound, type TrailboundTiles } from './trailbound-bake';
+import { loadTrailbound, type RegionBake, type TrailboundTiles } from './trailbound-bake';
 import { WorldRenderer } from './wm-renderer';
 
 export interface MapDrawState {
@@ -41,8 +40,11 @@ export class MapRenderer {
   private bakedFor: WorldData | null = null;
   private skinId: MapSkinId = 'trailbound48';
   private waterStamp = -1;
-  private readonly regionCache = new Map<string, { canvas: HTMLCanvasElement; frame: number }>();
+  private overviewStarted = 0;
+  private detailDone = false;
+  private readonly regionCache = new Map<string, RegionBake>();
   bakeMs = 0;
+  detailMs = 0;
   frames = 0;
   private fpsWindow = 0;
   private fpsFrames = 0;
@@ -66,6 +68,7 @@ export class MapRenderer {
     this.worldRenderer.clearChunks();
     this.worldRenderer.regions = [];
     this.regionCache.clear();
+    this.detailDone = false;
     this.bakedFor = null;
     if (world) this.bake(world);
   }
@@ -99,14 +102,23 @@ export class MapRenderer {
       return;
     }
     if (this.bakedFor !== world) this.bake(world);
+    if (!this.detailDone && this.skinId === 'trailbound48') {
+      const done = this.worldRenderer.stepOverview(world, 8);
+      if (done) {
+        this.detailDone = true;
+        this.detailMs = now - this.overviewStarted;
+        this.worldRenderer.detailMs = this.detailMs;
+      }
+    }
     const frame = Math.floor(now / 220) % 4;
     if (frame !== this.waterStamp) {
       this.waterStamp = frame;
       this.worldRenderer.waterFrame = frame;
     }
-    this.fillRegions(world, camera, cssW, cssH, frame);
+    const drawn = crispCamera(camera);
+    this.fillRegions(world, drawn, cssW, cssH);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.worldRenderer.draw(ctx, world, camera, player, cssW, cssH, {
+    this.worldRenderer.draw(ctx, world, drawn, player, cssW, cssH, {
       showOutlines: true,
       showPois: true,
       hoveredId: null,
@@ -153,18 +165,12 @@ export class MapRenderer {
     this.worldRenderer.terrain = this.skinId === 'trailbound48' ? this.trailbound : null;
   }
 
-  private fillRegions(
-    world: WorldData,
-    camera: CameraState,
-    viewW: number,
-    viewH: number,
-    frame: number,
-  ): void {
+  private fillRegions(world: WorldData, camera: CameraState, viewW: number, viewH: number): void {
     this.worldRenderer.regions = [];
     const tiles = this.trailbound;
     if (!tiles || this.skinId !== 'trailbound48') return;
     const tilePx = TILE * camera.scale;
-    if (tilePx < 8 || camera.scale >= DETAIL_START) return;
+    if (tilePx < 6) return;
     const span = 24;
     const stamp = 48;
     const halfW = viewW / (2 * camera.scale) / TILE;
@@ -173,22 +179,28 @@ export class MapRenderer {
     const yStart = Math.floor((camera.y - halfH) / span) * span;
     const xEnd = camera.x + halfW;
     const yEnd = camera.y + halfH;
-    const regions: Array<{ canvas: HTMLCanvasElement; x: number; y: number; span: number }> = [];
-    let baked = 0;
+    const regions: typeof this.worldRenderer.regions = [];
+    const started = performance.now();
     for (let y = yStart; y < yEnd + span; y += span) {
       if (y >= world.height) break;
       for (let x = xStart; x < xEnd + span; x += span) {
         if (y < 0) continue;
         const key = `${x}:${y}`;
         let entry = this.regionCache.get(key);
-        if (!entry && baked < 2) {
-          tiles.frame = frame;
-          const canvas = tiles.bakeRegion(world, x, y, span, stamp);
-          entry = { canvas, frame };
+        if (!entry && performance.now() - started < 12) {
+          entry = tiles.bakeRegion(world, x, y, span, stamp);
           this.regionCache.set(key, entry);
-          baked += 1;
         }
-        if (entry) regions.push({ canvas: entry.canvas, x, y, span });
+        if (entry) {
+          regions.push({
+            canvas: entry.canvas,
+            x,
+            y,
+            span,
+            shores: entry.shores,
+            waters: entry.waters,
+          });
+        }
       }
     }
     if (this.regionCache.size > 72) {
@@ -205,8 +217,29 @@ export class MapRenderer {
 
   private bake(world: WorldData): void {
     this.worldRenderer.terrain = this.skinId === 'trailbound48' ? this.trailbound : null;
+    this.overviewStarted = performance.now();
+    this.detailDone = this.skinId !== 'trailbound48';
     this.worldRenderer.bakeWorld(world);
     this.bakedFor = world;
     this.bakeMs = this.worldRenderer.bakeMs;
+    this.detailMs = 0;
   }
+}
+
+/** Screen pixels per world tile land on a divisor of the 48 px art when zoomed in. */
+function crispCamera(camera: CameraState): CameraState {
+  const px = TILE * camera.scale;
+  if (px < 8) return camera;
+  // 12, 24 and 48 keep the 48 px tiles on whole source pixels. 16 px would throw away the shore curves.
+  const steps = [12, 24, 48, 96, 144];
+  let best = steps[0] ?? 24;
+  let bestDistance = Infinity;
+  for (const step of steps) {
+    const distance = Math.abs(step - px);
+    if (distance < bestDistance || (distance === bestDistance && step > best)) {
+      best = step;
+      bestDistance = distance;
+    }
+  }
+  return { ...camera, scale: best / TILE, targetScale: best / TILE };
 }

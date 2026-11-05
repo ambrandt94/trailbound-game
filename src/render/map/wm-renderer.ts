@@ -65,7 +65,7 @@ import {
   contourWindow,
   type ContourPaths,
 } from './height-view';
-import type { TrailboundTiles } from './trailbound-bake';
+import type { OverviewJob, TrailboundTiles } from './trailbound-bake';
 
 const PIXEL_FONT = 'Tiny5, "Press Start 2P", ui-monospace, monospace';
 
@@ -442,12 +442,12 @@ function drawBoatMarker(
 }
 
 export class WorldRenderer {
-  worldBake: HTMLCanvasElement | null = null;
+  worldBake: CanvasImageSource | null = null;
   zoneBake: HTMLCanvasElement | null = null;
   cloudBake: HTMLCanvasElement | null = null;
   /** When false, chunk bakes omit tile roofs so Town Tale sprites can stand in. */
   bakeRoofs = true;
-  private readonly chunkBakes = new Map<string, HTMLCanvasElement>();
+  private readonly chunkBakes = new Map<string, CanvasImageSource>();
   private isoLayer: HTMLCanvasElement | null = null;
   private fogLayer: HTMLCanvasElement | null = null;
   private blurLayer: HTMLCanvasElement | null = null;
@@ -460,11 +460,20 @@ export class WorldRenderer {
   terrain: TrailboundTiles | null = null;
   waterFrame = 0;
   /** Higher-resolution terrain for the visible window, drawn over the kingdom bake. */
-  regions: Array<{ canvas: HTMLCanvasElement; x: number; y: number; span: number }> = [];
+  regions: Array<{
+    canvas: CanvasImageSource;
+    x: number;
+    y: number;
+    span: number;
+    shores: Array<{ lx: number; ly: number; bits: number }>;
+    waters: Array<{ lx: number; ly: number; kind: 'shallow' | 'deep' }>;
+  }> = [];
   private featureBuckets: Map<string, WorldFeature[]> | null = null;
   private featureWorld: WorldData | null = null;
-  /** Last overworld bake, in milliseconds. */
+  /** Last overworld bake, in milliseconds. First paint is the flat pass. */
   bakeMs = 0;
+  detailMs = 0;
+  overview: OverviewJob | null = null;
 
   constructor(private readonly assets: AssetLibrary) {}
 
@@ -472,7 +481,9 @@ export class WorldRenderer {
     const started = performance.now();
     if (this.terrain) {
       this.terrain.frame = this.waterFrame;
-      this.worldBake = this.terrain.bakeWorld(world);
+      const job = this.terrain.bakeFast(world);
+      this.worldBake = job.canvas;
+      this.overview = job;
       this.bakeMs = performance.now() - started;
       return;
     }
@@ -1182,8 +1193,10 @@ export class WorldRenderer {
   }
 
   private paintRegions(ctx: CanvasRenderingContext2D): void {
-    if (!this.regions.length) return;
+    if (!this.regions.length || !this.terrain) return;
     ctx.imageSmoothingEnabled = false;
+    const tiles = this.terrain;
+    tiles.frame = this.waterFrame;
     for (const region of this.regions) {
       ctx.drawImage(
         region.canvas,
@@ -1192,7 +1205,24 @@ export class WorldRenderer {
         region.span * TILE,
         region.span * TILE,
       );
+      ctx.save();
+      ctx.translate(region.x * TILE, region.y * TILE);
+      ctx.scale(TILE / 48, TILE / 48);
+      tiles.paintOverlays(ctx, region.shores, region.waters, 48);
+      ctx.restore();
     }
+  }
+
+  /** A few textured overview rows. Returns true when the kingdom sheet is finished. */
+  stepOverview(world: WorldData, budgetMs: number): boolean {
+    const job = this.overview;
+    const tiles = this.terrain;
+    if (!job || !tiles || job.row >= job.rows) return true;
+    const started = performance.now();
+    while (job.row < job.rows && performance.now() - started < budgetMs) {
+      tiles.paintOverviewRow(world, job);
+    }
+    return job.row >= job.rows;
   }
 
   private ensureLayer(
@@ -1418,7 +1448,9 @@ export class WorldRenderer {
         ctx.save();
         ctx.translate(wx * TILE, wy * TILE);
         ctx.imageSmoothingEnabled = false;
-        const fit = TILE / Math.max(1, bake.width);
+        const width =
+          bake instanceof HTMLCanvasElement || bake instanceof OffscreenCanvas ? bake.width : TILE;
+        const fit = TILE / Math.max(1, width);
         ctx.scale(fit, fit);
         ctx.drawImage(bake, -1, -1);
         ctx.restore();
