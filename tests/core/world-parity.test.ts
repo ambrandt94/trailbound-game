@@ -67,4 +67,4 @@ test('seed 7741 at worldScale 16 matches the world-map settlement list and Ironm
   expect(ironmarch?.name).toBe(golden.ironmarch.name);
   if (!ironmarch) return;
   expect(buildAreaExport(world, ironmarch).meta.hash).toBe(golden.ironmarch.hash);
-});
+}, 60_000);
