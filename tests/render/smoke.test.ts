@@ -1,6 +1,4 @@
 import { expect, test } from 'vitest';
-import * as THREE from 'three';
-import { AREA_GROUND_COLOR, createAreaContent } from '../../src/render/area/area-content';
 import { cellColor } from '../../src/render/map/grid';
 import { MapRenderer } from '../../src/render/map/map-renderer';
 
@@ -27,21 +25,4 @@ test('seeded map cells vary and the renderer can paint a canvas', () => {
   ).not.toThrow();
   renderer.dispose();
   expect(renderer.isDisposed).toBe(true);
-});
-
-test('area content builds a lit cube, ground, and pawn without a black ground', () => {
-  const content = createAreaContent();
-  expect(content.cube).toBeInstanceOf(THREE.Mesh);
-  expect(content.ground).toBeInstanceOf(THREE.Mesh);
-  expect(content.pawn).toBeInstanceOf(THREE.Mesh);
-  const lights = content.scene.children.filter((child) => child instanceof THREE.Light);
-  expect(lights.length).toBeGreaterThanOrEqual(2);
-  const material = content.ground.material;
-  if (!(material instanceof THREE.MeshLambertMaterial)) throw new Error('expected lambert ground');
-  expect(`#${material.color.getHexString()}`).toBe(AREA_GROUND_COLOR);
-  expect(material.color.getHexString()).not.toBe('000000');
-  const background = content.scene.background;
-  if (!(background instanceof THREE.Color)) throw new Error('expected a sky color');
-  expect(background.getHexString()).not.toBe('000000');
-  content.dispose();
 });

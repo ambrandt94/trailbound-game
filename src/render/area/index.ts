@@ -1,8 +1,14 @@
 export {
-  AREA_CUBE_COLOR,
-  AREA_GROUND_COLOR,
-  AREA_PAWN_COLOR,
-  AREA_SKY_COLOR,
-  createAreaContent,
-} from './area-content';
-export { AreaRenderer, type AreaPose } from './area-renderer';
+  AreaRenderer,
+  type AreaActionSnapshot,
+  type AreaHooks,
+  type AreaPose,
+} from './area-renderer';
+export {
+  areaFromExport,
+  loadTownFixture,
+  townFixtureId,
+  type AreaEntry,
+  type AreaExport,
+  type FixtureId,
+} from './area-from-export';

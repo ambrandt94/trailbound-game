@@ -1,24 +1,28 @@
+import { music } from '../../audio/music';
 import type { AreaHandoff } from '../../core/state/world-state';
-import { hint } from '../../ui/state';
-import { exitFromCancel, exitFromPose, type AreaExit } from '../area-exit';
+import type { AreaEntry } from '../../render/area/area-from-export';
+import { AreaRenderer } from '../../render/area/area-renderer';
+import { hint, settings } from '../../ui/state';
+import {
+  controllerExitToMap,
+  exitFromCancel,
+  type AreaExit,
+  type ControllerExit,
+} from '../area-exit';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
-import { AreaRenderer } from '../../render/area/area-renderer';
 import { TransitionScene } from './transition';
-import { AREA_HALF, PAWN_SPEED } from '../travel';
 
-function lerp(from: number, to: number, alpha: number): number {
-  return from + (to - from) * alpha;
+export interface AreaEnter {
+  areaExport: unknown;
+  entry?: AreaEntry;
 }
+
+const CONTROLS =
+  'WASD move · Space jump · Shift sprint · F use · Q/E camera · V zoom. Walk off the edge to leave.';
 
 export class AreaView implements Scene {
   readonly id = 'area';
-  private x = 0;
-  private z = 0;
-  private yaw = 0;
-  private prevX = 0;
-  private prevZ = 0;
-  private spin = 0;
   private leaving = false;
 
   readonly handoff: AreaHandoff | null;
@@ -39,41 +43,34 @@ export class AreaView implements Scene {
     return this.handoff?.entry ?? null;
   }
 
-  enter(): void {
+  /** Stack calls this with no args after the town is already loaded. */
+  async enter(ctx?: AreaEnter): Promise<void> {
     this.host.keyboard.clearPresses();
     this.host.setMode('area');
     this.host.setView('area');
+    if (ctx?.areaExport && this.renderer) {
+      await this.renderer.start(ctx.areaExport, ctx.entry);
+    }
+    music.start();
   }
 
   update(dt: number): void {
-    if (this.leaving) return;
-    this.prevX = this.x;
-    this.prevZ = this.z;
-    const move = this.host.keyboard.areaAxis();
-    if (move.x !== 0 || move.z !== 0) {
-      const len = Math.hypot(move.x, move.z);
-      this.x += (move.x / len) * PAWN_SPEED * dt;
-      this.z += (move.z / len) * PAWN_SPEED * dt;
-      this.yaw = Math.atan2(move.x, -move.z);
-    }
-    this.spin += dt;
+    if (this.leaving || !this.renderer) return;
+    this.renderer.step(dt);
     this.host.world.advanceClock(dt);
     if (this.host.keyboard.consumePress('Escape')) {
-      this.leave(exitFromCancel(this.yaw));
-      return;
+      this.leave(exitFromCancel(0));
     }
-    const edged = exitFromPose(this.x, this.z, this.yaw, AREA_HALF);
-    if (edged) this.leave(edged);
   }
 
-  render(alpha: number): void {
-    hint.value = 'Walk off the edge, or press Esc, to return to the map.';
-    this.renderer?.draw({
-      x: lerp(this.prevX, this.x, alpha),
-      z: lerp(this.prevZ, this.z, alpha),
-      yaw: this.yaw,
-      spin: this.spin,
-    });
+  render(_alpha: number): void {
+    if (!this.renderer) return;
+    this.renderer.frame();
+    const mix = settings.value;
+    music.setVolume((mix.music / 100) * (mix.master / 100));
+    music.setMuffle(this.renderer.indoors() ? 1 : 0);
+    const line = this.renderer.prompt();
+    hint.value = line ? `${line}  ·  ${CONTROLS}` : CONTROLS;
   }
 
   exit(): void {
@@ -81,7 +78,12 @@ export class AreaView implements Scene {
     this.renderer = null;
   }
 
+  leaveFromController(info: ControllerExit): void {
+    this.leave(controllerExitToMap(info, this.renderer?.bounds() ?? null));
+  }
+
   private leave(exit: AreaExit): void {
+    if (this.leaving) return;
     this.leaving = true;
     void this.host.stack.push(new TransitionScene(this.host, 'to-map', exit));
   }

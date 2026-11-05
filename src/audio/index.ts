@@ -1,2 +1,2 @@
-/** Voice synth, music, and mixer buses land in G4. Settings already store the voice mix. */
-export const AUDIO_PORT = 'g4' as const;
+/** Chiptune from the controller. Voice synth lands with the talk milestone. */
+export { music } from './music';
