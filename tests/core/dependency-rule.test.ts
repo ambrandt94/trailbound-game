@@ -65,17 +65,15 @@ test('core tsconfig has no DOM lib and rejects document', () => {
   const fileName = resolve(root, 'src/core/dom-probe.ts');
   const options: ts.CompilerOptions = { ...parsed.options, noEmit: true };
   const host = ts.createCompilerHost(options);
-  const source = ts.createSourceFile(
-    fileName,
-    'export const el = document.body;\n',
-    ts.ScriptTarget.ES2022,
-    true,
-    ts.ScriptKind.TS,
-  );
+  const probeText = 'export const el = document.body;\n';
+  const isProbe = (file: string) =>
+    file.replaceAll('\\', '/').toLowerCase().endsWith('src/core/dom-probe.ts');
   const original = host.getSourceFile.bind(host);
-  host.fileExists = (file) => file === fileName || ts.sys.fileExists(file);
+  host.fileExists = (file) => isProbe(file) || ts.sys.fileExists(file);
   host.getSourceFile = (file, languageVersion, onError, shouldCreate) => {
-    if (file === fileName) return source;
+    if (isProbe(file)) {
+      return ts.createSourceFile(file, probeText, languageVersion, true, ts.ScriptKind.TS);
+    }
     return original(file, languageVersion, onError, shouldCreate);
   };
   const program = ts.createProgram({
@@ -85,9 +83,16 @@ test('core tsconfig has no DOM lib and rejects document', () => {
   });
   const diagnostics = ts
     .getPreEmitDiagnostics(program)
-    .filter((diag) => diag.file?.fileName === fileName);
+    .filter((diag) => diag.file !== undefined && isProbe(diag.file.fileName));
   const text = diagnostics
     .map((diag) => ts.flattenDiagnosticMessageText(diag.messageText, '\n'))
     .join('\n');
-  expect(text).toMatch(/document/);
+  const debug = ts
+    .getPreEmitDiagnostics(program)
+    .map(
+      (diag) =>
+        `${diag.file?.fileName ?? '<no file>'}: ${ts.flattenDiagnosticMessageText(diag.messageText, ' ')}`,
+    )
+    .join('\n');
+  expect(text, debug).toMatch(/document/);
 });
