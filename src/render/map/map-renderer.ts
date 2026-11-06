@@ -187,11 +187,14 @@ export class MapRenderer {
         if (y < 0) continue;
         const key = `${x}:${y}`;
         let entry = this.regionCache.get(key);
-        if (!entry && performance.now() - started < 12) {
-          entry = tiles.bakeRegion(world, x, y, span, stamp);
+        if (!entry) {
+          entry = tiles.beginRegion(x, y, span, stamp);
           this.regionCache.set(key, entry);
         }
-        if (entry) {
+        if (entry.row < span && performance.now() - started < 10) {
+          tiles.stepRegion(world, entry, 6);
+        }
+        if (entry.row > 0) {
           regions.push({
             canvas: entry.canvas,
             x,
@@ -199,6 +202,7 @@ export class MapRenderer {
             span,
             shores: entry.shores,
             waters: entry.waters,
+            curves: entry.curves,
           });
         }
       }

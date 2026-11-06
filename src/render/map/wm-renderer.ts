@@ -466,7 +466,20 @@ export class WorldRenderer {
     y: number;
     span: number;
     shores: Array<{ lx: number; ly: number; bits: number }>;
-    waters: Array<{ lx: number; ly: number; kind: 'shallow' | 'deep' }>;
+    waters: Array<{
+      lx: number;
+      ly: number;
+      kind: 'shallow' | 'deep';
+      ox: number;
+      oy: number;
+      flipX: boolean;
+      flipY: boolean;
+    }>;
+    curves: Array<{
+      lx: number;
+      ly: number;
+      foam: readonly [CanvasImageSource, CanvasImageSource] | null;
+    }>;
   }> = [];
   private featureBuckets: Map<string, WorldFeature[]> | null = null;
   private featureWorld: WorldData | null = null;
@@ -1208,7 +1221,7 @@ export class WorldRenderer {
       ctx.save();
       ctx.translate(region.x * TILE, region.y * TILE);
       ctx.scale(TILE / 48, TILE / 48);
-      tiles.paintOverlays(ctx, region.shores, region.waters, 48);
+      tiles.paintOverlays(ctx, region.shores, region.waters, 48, region.curves);
       ctx.restore();
     }
   }
