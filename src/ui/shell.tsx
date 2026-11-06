@@ -7,6 +7,8 @@ import {
   canEnter,
   clockRate,
   clockText,
+  diveCue,
+  diveIntent,
   commands,
   generating,
   hint,
@@ -142,6 +144,18 @@ function SettingsPanel() {
 function Hud() {
   return (
     <div class="hud">
+      <div class="vignette" style={{ opacity: String(diveCue.value) }} />
+      {diveIntent.value > 0.02 ? (
+        <div class="dive-cue" aria-hidden="true">
+          <div
+            class="dive-ring"
+            style={{
+              background: `conic-gradient(#f6f1e6 ${Math.round(diveIntent.value * 360)}deg, rgba(246, 241, 230, 0.28) 0)`,
+            }}
+          />
+          <p>Keep zooming</p>
+        </div>
+      ) : null}
       <div class="pill clock">
         {clockText.value}
         {clockRate.value ? (

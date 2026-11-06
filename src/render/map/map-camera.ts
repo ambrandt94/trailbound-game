@@ -1,5 +1,5 @@
 import {
-  MAX_SCALE,
+  MAP_ZOOM_CAP,
   TILE,
   clamp,
   clampLatY,
@@ -39,7 +39,7 @@ export class MapCamera {
   }
 
   zoomAt(sx: number, sy: number, factor: number, viewW: number, viewH: number): void {
-    const next = clamp(this.targetScale * factor, minScaleFor(this.width), MAX_SCALE);
+    const next = clamp(this.targetScale * factor, minScaleFor(this.width), MAP_ZOOM_CAP);
     if (this.follow) {
       this.targetScale = next;
       this.scale += (next - this.scale) * 0.18;
@@ -71,7 +71,7 @@ export class MapCamera {
     this.x = this.targetX;
     this.y = this.targetY;
     if (scale) {
-      this.targetScale = clamp(scale, minScaleFor(this.width), MAX_SCALE);
+      this.targetScale = clamp(scale, minScaleFor(this.width), MAP_ZOOM_CAP);
       this.scale = this.targetScale;
     }
   }
