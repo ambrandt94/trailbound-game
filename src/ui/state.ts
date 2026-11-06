@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
 import { DEFAULT_SETTINGS, type GameSettings } from '../core/state/settings';
 
-export type UiScreen = 'boot' | 'title' | 'play';
+export type UiScreen = 'boot' | 'title' | 'play' | 'creator';
 
 export const screen = signal<UiScreen>('boot');
 export const bootMessage = signal('Loading the road…');
@@ -21,6 +21,7 @@ export interface UiCommands {
   closeSettings(): void;
   changeSettings(partial: Partial<GameSettings>): void;
   save(): void;
+  editAvatar(): void;
 }
 
 export const commands: UiCommands = {
@@ -42,6 +43,9 @@ export const commands: UiCommands = {
   save() {
     return;
   },
+  editAvatar() {
+    return;
+  },
 };
 
 export function bindCommands(next: UiCommands): void {
@@ -51,4 +55,5 @@ export function bindCommands(next: UiCommands): void {
   commands.closeSettings = next.closeSettings;
   commands.changeSettings = next.changeSettings;
   commands.save = next.save;
+  commands.editAvatar = next.editAvatar;
 }

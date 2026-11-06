@@ -17,6 +17,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "assets:guard": "node tools/asset-guard.mjs",
+    "sync:cf": "node tools/sync-character-bundle.mjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm run test && npm run assets:guard"
   },
   "dependencies": {

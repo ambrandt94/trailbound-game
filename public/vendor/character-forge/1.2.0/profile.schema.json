@@ -1,0 +1,437 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "cf.profile/1",
+ "title": "Character Forge profileEntry (generator input) or profile document",
+ "description": "CF.generate(seed, profileEntry, {generatorVersion}). The game flattens role+tier+culture into one profileEntry; the engine knows nothing about roles. Enum lists are filled from the bundle's tags at build time.",
+ "oneOf": [
+  {
+   "$ref": "#/$defs/profileEntry"
+  },
+  {
+   "$ref": "#/$defs/profileDocument"
+  }
+ ],
+ "$defs": {
+  "weights": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "number",
+    "minimum": 0
+   }
+  },
+  "slotRule": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "include": {
+     "type": "array",
+     "uniqueItems": true,
+     "description": "only these garments may occupy the slot; if the slot ends up empty one of them is added",
+     "items": {
+      "enum": [
+       "apron",
+       "armwraps",
+       "bandana",
+       "bandolier",
+       "belt",
+       "blouse",
+       "bodice",
+       "boots",
+       "bracers_leather",
+       "bracers_steel",
+       "braces",
+       "breastplate",
+       "broadfall",
+       "cap",
+       "cape",
+       "capelet",
+       "carpet_bag",
+       "coif",
+       "crown",
+       "doublet",
+       "earrings",
+       "felt_hat",
+       "glasses",
+       "gloves",
+       "gorget",
+       "greaves",
+       "harem_pants",
+       "headband",
+       "helm_horned",
+       "helm_knight",
+       "hood",
+       "jacket",
+       "jerkin",
+       "kerchief",
+       "laceboots",
+       "legwraps",
+       "long_coat",
+       "mage_hat",
+       "mantle",
+       "neck_wrap",
+       "necklace",
+       "pack",
+       "pants",
+       "pauldrons_leather",
+       "pauldrons_plate",
+       "pauldrons_spiked",
+       "plumed_hat",
+       "poncho",
+       "rags",
+       "riding_boots",
+       "robe",
+       "royal_sash",
+       "sabatons",
+       "sandals",
+       "satchel",
+       "scabbard",
+       "shawl",
+       "shirt",
+       "shoes",
+       "silk_shirt",
+       "skirt",
+       "socks",
+       "straw_hat",
+       "sunbonnet",
+       "tabard",
+       "tunic",
+       "turban",
+       "vest"
+      ]
+     }
+    },
+    "exclude": {
+     "type": "array",
+     "uniqueItems": true,
+     "description": "these garments never occupy the slot",
+     "items": {
+      "enum": [
+       "apron",
+       "armwraps",
+       "bandana",
+       "bandolier",
+       "belt",
+       "blouse",
+       "bodice",
+       "boots",
+       "bracers_leather",
+       "bracers_steel",
+       "braces",
+       "breastplate",
+       "broadfall",
+       "cap",
+       "cape",
+       "capelet",
+       "carpet_bag",
+       "coif",
+       "crown",
+       "doublet",
+       "earrings",
+       "felt_hat",
+       "glasses",
+       "gloves",
+       "gorget",
+       "greaves",
+       "harem_pants",
+       "headband",
+       "helm_horned",
+       "helm_knight",
+       "hood",
+       "jacket",
+       "jerkin",
+       "kerchief",
+       "laceboots",
+       "legwraps",
+       "long_coat",
+       "mage_hat",
+       "mantle",
+       "neck_wrap",
+       "necklace",
+       "pack",
+       "pants",
+       "pauldrons_leather",
+       "pauldrons_plate",
+       "pauldrons_spiked",
+       "plumed_hat",
+       "poncho",
+       "rags",
+       "riding_boots",
+       "robe",
+       "royal_sash",
+       "sabatons",
+       "sandals",
+       "satchel",
+       "scabbard",
+       "shawl",
+       "shirt",
+       "shoes",
+       "silk_shirt",
+       "skirt",
+       "socks",
+       "straw_hat",
+       "sunbonnet",
+       "tabard",
+       "tunic",
+       "turban",
+       "vest"
+      ]
+     }
+    }
+   }
+  },
+  "profileEntry": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "races": {
+     "$ref": "#/$defs/weights",
+     "description": "{raceId: weight}; empty/absent = engine race weights (bundle.engineDefaults.raceWeights)",
+     "propertyNames": {
+      "enum": [
+       "dark_elf",
+       "djinn",
+       "dragonborn",
+       "dwarf",
+       "elder",
+       "elf",
+       "firbolg",
+       "gnome",
+       "goblin",
+       "goliath",
+       "great_elf",
+       "halfling",
+       "human",
+       "imp",
+       "kobold",
+       "mousefolk",
+       "orc",
+       "pixie",
+       "thug",
+       "tiefling",
+       "wood_elf"
+      ]
+     }
+    },
+    "genders": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "m": {
+       "type": "number",
+       "minimum": 0
+      },
+      "f": {
+       "type": "number",
+       "minimum": 0
+      }
+     }
+    },
+    "styles": {
+     "$ref": "#/$defs/weights",
+     "description": "{styleTag: weight}; tags are archetypes (procedural outfit) or looks (fixed outfit, generated dyes) - see bundle.tags.styleKinds. Absent = engine 'auto'",
+     "propertyNames": {
+      "anyOf": [
+       {
+        "enum": [
+         "knight",
+         "ranger",
+         "rogue",
+         "villager",
+         "warrior",
+         "mage",
+         "redmage",
+         "monk",
+         "scholar",
+         "thug",
+         "djinn",
+         "merchant",
+         "miner",
+         "sage",
+         "maiden",
+         "royal",
+         "pioneer",
+         "freelancer",
+         "white_mage",
+         "black_mage",
+         "red_mage",
+         "thief",
+         "viking",
+         "ninja",
+         "villager_man",
+         "villager_woman",
+         "soldier",
+         "smith",
+         "elder",
+         "villager_maiden",
+         "villager_boy",
+         "guard",
+         "sky_captain",
+         "shield_maiden",
+         "wanderer",
+         "royal_king",
+         "royal_queen",
+         "royal_prince",
+         "royal_princess",
+         "royal_guard_captain",
+         "pioneer_mother",
+         "pioneer_father",
+         "pioneer_elder",
+         "pioneer_girl",
+         "w2_highlander",
+         "w2_man_at_arms",
+         "w2_lady",
+         "pioneer_bonnet",
+         "pioneer_teamster",
+         "pioneer_winter",
+         "w2_wanderer",
+         "w2_courier",
+         "w2_brawler",
+         "mouse_villager"
+        ]
+       },
+       {
+        "pattern": "^(look|arche):"
+       }
+      ]
+     }
+    },
+    "slots": {
+     "type": "object",
+     "additionalProperties": {
+      "$ref": "#/$defs/slotRule"
+     },
+     "propertyNames": {
+      "enum": [
+       "head_outer",
+       "head_inner",
+       "face_upper",
+       "face_lower",
+       "neck_wrap",
+       "neck",
+       "earrings",
+       "gorget",
+       "back",
+       "straps",
+       "shoulders",
+       "mantle",
+       "torso_outer",
+       "chest",
+       "torso_mid",
+       "torso_inner",
+       "braces",
+       "belt",
+       "sash",
+       "apron",
+       "bandolier",
+       "forearms",
+       "hands",
+       "legs",
+       "skirt",
+       "shins",
+       "feet",
+       "socks"
+      ]
+     }
+    },
+    "richness": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "default": 0.5
+    },
+    "excludeRaces": {
+     "type": "array",
+     "uniqueItems": true,
+     "items": {
+      "enum": [
+       "dark_elf",
+       "djinn",
+       "dragonborn",
+       "dwarf",
+       "elder",
+       "elf",
+       "firbolg",
+       "gnome",
+       "goblin",
+       "goliath",
+       "great_elf",
+       "halfling",
+       "human",
+       "imp",
+       "kobold",
+       "mousefolk",
+       "orc",
+       "pixie",
+       "thug",
+       "tiefling",
+       "wood_elf"
+      ]
+     }
+    },
+    "ages": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "adult": {
+       "type": "number",
+       "minimum": 0
+      },
+      "child": {
+       "type": "number",
+       "minimum": 0
+      }
+     },
+     "description": "{adult:w, child:w}; absent = adults only (generatorVersion 1 output unchanged). Children never get adult-only gear (bundle.tags.child.adultOnly)."
+    }
+   }
+  },
+  "profileDocument": {
+   "type": "object",
+   "required": [
+    "profile"
+   ],
+   "properties": {
+    "profile": {
+     "type": "string"
+    },
+    "profileVersion": {
+     "type": "integer"
+    },
+    "engineApi": {
+     "const": 1
+    },
+    "generatorVersion": {
+     "type": "integer"
+    },
+    "defaults": {
+     "$ref": "#/$defs/profileEntry"
+    },
+    "roles": {
+     "type": "object",
+     "additionalProperties": {
+      "$ref": "#/$defs/profileEntry"
+     }
+    },
+    "tiers": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "properties": {
+       "richness": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+       }
+      }
+     }
+    },
+    "cultures": {
+     "type": "object",
+     "additionalProperties": {
+      "$ref": "#/$defs/profileEntry"
+     }
+    }
+   }
+  }
+ }
+}

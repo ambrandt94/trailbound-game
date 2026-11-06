@@ -1,3 +1,4 @@
+import { CreatorScreen } from './creator';
 import type { GameSettings } from '../core/state/settings';
 import {
   bootError,
@@ -96,6 +97,9 @@ function SettingsPanel() {
           />
           Mute voices
         </label>
+        <button type="button" class="action secondary" onClick={() => commands.editAvatar()}>
+          Edit avatar
+        </button>
         <button type="button" class="action" onClick={() => commands.closeSettings()}>
           Back
         </button>
@@ -111,6 +115,9 @@ function Hud() {
       <button type="button" class="pill save" onClick={() => commands.save()}>
         Save
       </button>
+      <button type="button" class="pill avatar" onClick={() => commands.editAvatar()}>
+        Avatar
+      </button>
       <p class="hint">{hint.value}</p>
       {savedFlash.value ? <p class="flash">{savedFlash.value}</p> : null}
     </div>
@@ -118,8 +125,9 @@ function Hud() {
 }
 
 export function Shell() {
-  if (settingsOpen.value) return <SettingsPanel />;
+  if (settingsOpen.value && screen.value !== 'creator') return <SettingsPanel />;
   if (screen.value === 'boot') return <BootScreen />;
   if (screen.value === 'title') return <TitleScreen />;
+  if (screen.value === 'creator') return <CreatorScreen />;
   return <Hud />;
 }

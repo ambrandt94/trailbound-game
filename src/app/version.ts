@@ -3,10 +3,10 @@ import type { CfPin } from '../core/save/types';
 export const GAME_VERSION = '0.0.0';
 export const SAVE_SLOT = 'slot-1';
 
-/** No Character Forge bundle is vendored in G0. The pin is stored so saves stay shaped for G4. */
+/** Matches `public/vendor/character-forge/current.json`. generatorVersion is stored as text on the save. */
 export const CF_PIN: CfPin = {
-  version: 'unvendored',
-  generatorVersion: 'none',
+  version: '1.2.0',
+  generatorVersion: '1',
 };
 
 export const PLAYER_NAME = 'Traveller';

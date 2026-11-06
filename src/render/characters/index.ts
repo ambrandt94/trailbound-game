@@ -1,5 +1,41 @@
-/**
- * `forge.ts` will be the only caller of Character Forge (G4).
- * Until the r187 ESM build exists, the area view uses a placeholder pawn.
- */
-export const CHARACTER_FORGE_CALLER = 'render/characters/forge.ts' as const;
+export {
+  adoptPlayerBody,
+  aimForgeSun,
+  buildAvatar,
+  forgeBuildError,
+  forgeCatalog,
+  forgeReady,
+  forgeStats,
+  checkRecipeEdit,
+  cloneRecipe,
+  describeRecipe,
+  editRecipe,
+  forgeTimings,
+  generateRecipe,
+  getPlayerBody,
+  initForge,
+  optionsFor,
+  packsForRecipe,
+  placeholderAvatar,
+  recipeFromStored,
+  recipeHashOf,
+  tickPlayerBody,
+  validateGameProfile,
+  type AvatarBody,
+  type CharacterRecipe,
+  type EditIssue,
+  type EditOptions,
+  type EditPatch,
+  type EditReport,
+  type EditSnapshot,
+  type ForgeCatalog,
+  type ForgeStatus,
+  type ForgeTimings,
+  type GarmentOption,
+  type HairStyleOption,
+  type ProfileReport,
+  type SliderSpec,
+  type Swatch,
+  type WornPiece,
+} from './forge';
+export { AvatarPreview } from './preview';

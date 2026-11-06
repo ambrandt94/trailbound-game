@@ -1,5 +1,8 @@
 {
   "id": "trailbound.content",
   "version": 1,
-  "entries": [{ "id": "places/waystead", "path": "places/waystead.json" }]
+  "entries": [
+    { "id": "places/waystead", "path": "places/waystead.json" },
+    { "id": "characters/trailbound", "path": "characters/trailbound.json" }
+  ]
 }

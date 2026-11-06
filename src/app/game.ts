@@ -9,6 +9,7 @@ import { attachTouchControls } from '../input/touch/index';
 import { AreaRenderer } from '../render/area/area-renderer';
 import { MapRenderer } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
+import { creatorBusy, creatorSerial, creatorSource, creatorView } from '../ui/creator-state';
 import {
   bindCommands,
   canContinue,
@@ -20,12 +21,24 @@ import {
   settings,
   settingsOpen,
 } from '../ui/state';
+import {
+  adoptPlayerBody,
+  buildAvatar,
+  forgeReady,
+  forgeTimings,
+  generateRecipe,
+  initForge,
+  placeholderAvatar,
+  recipeFromStored,
+} from '../render/characters/forge';
+import type { PlayerAvatar } from '../core/people/avatar';
 import type { Clock } from './fixed-step';
 import { FrameClock } from './fixed-step';
 import type { AppMode, GameHost } from './host';
 import { SceneStack } from './scene-stack';
 import { AreaView } from './scenes/area-view';
 import { BootScene } from './scenes/boot';
+import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
 import { codeForTouchAction } from './touch-wire';
 import { CF_PIN, GAME_VERSION, PLAYER_NAME, SAVE_SLOT } from './version';
@@ -61,6 +74,8 @@ export class Game implements GameHost {
   private raf = 0;
   private saveCount = 0;
   private saved = false;
+  private creatorOpen = false;
+  private avatarToken = 0;
   private detachTouch: (() => void) | null = null;
   private readonly jobs: Array<() => void> = [];
 
@@ -118,13 +133,18 @@ export class Game implements GameHost {
     this.options.root.dataset.mode = mode;
     if (mode === 'boot') screen.value = 'boot';
     else if (mode === 'title') screen.value = 'title';
+    else if (mode === 'creator') screen.value = 'creator';
     else screen.value = 'play';
   }
 
   setView(view: 'map' | 'area'): void {
     this.view = view;
-    this.options.mapCanvas.style.visibility = 'visible';
-    this.options.areaCanvas.style.visibility = view === 'area' ? 'visible' : 'hidden';
+    this.applyCanvasVisibility();
+  }
+
+  setCreatorVisible(visible: boolean): void {
+    this.creatorOpen = visible;
+    this.applyCanvasVisibility();
   }
 
   setFade(opacity: number): void {
@@ -195,6 +215,9 @@ export class Game implements GameHost {
       save: () => {
         void this.save();
       },
+      editAvatar: () => {
+        void this.editAvatar();
+      },
     });
   }
 
@@ -208,7 +231,7 @@ export class Game implements GameHost {
     });
     settingsOpen.value = false;
     savedFlash.value = '';
-    await this.enterMap();
+    await this.openCreator('new');
   }
 
   private async continueGame(): Promise<void> {
@@ -231,7 +254,81 @@ export class Game implements GameHost {
     }
     settingsOpen.value = false;
     savedFlash.value = '';
+    this.warmAvatar();
     await this.enterMap();
+  }
+
+  private async openCreator(intent: 'new' | 'edit'): Promise<void> {
+    if (this.stack.current()?.id === 'CharacterCreator') return;
+    this.avatarToken += 1;
+    const returnMode = this.mode === 'creator' ? 'map' : this.mode;
+    const returnView = this.view;
+    settingsOpen.value = false;
+    if (intent === 'edit' && returnMode === 'title') {
+      const manifest = await this.saves.readManifest(this.slot);
+      const core = await this.saves.readCore(this.slot);
+      if (manifest && core) {
+        const migrated = migrate(manifest, core);
+        if (migrated.core) this.world.load(migrated.core);
+      }
+    }
+    await this.stack.push(
+      new CharacterCreatorScene(this, {
+        intent,
+        initial: this.world.avatar,
+        onConfirm: async (avatar) => {
+          this.world.setAvatar(avatar);
+          await this.persist();
+          await this.stack.pop();
+          if (intent === 'new') {
+            await this.enterMap();
+            return;
+          }
+          this.setMode(returnMode);
+          this.setView(returnView);
+          this.setCreatorVisible(false);
+        },
+        onCancel: async () => {
+          await this.stack.pop();
+          this.setMode(intent === 'new' ? 'title' : returnMode);
+          this.setView(returnView);
+          this.setCreatorVisible(false);
+        },
+      }),
+    );
+  }
+
+  private warmAvatar(): void {
+    const token = this.avatarToken;
+    const avatar = this.world.avatar;
+    void this.buildSaved(avatar).then((body) => {
+      if (token !== this.avatarToken) {
+        body.dispose();
+        return;
+      }
+      adoptPlayerBody(body);
+    });
+  }
+
+  private async buildSaved(avatar: PlayerAvatar) {
+    await initForge();
+    if (!forgeReady().ok) return placeholderAvatar(avatar.seed);
+    if (avatar.recipe)
+      return buildAvatar(recipeFromStored(avatar.recipe, avatar.seed), { budgetMs: 8 });
+    return buildAvatar(
+      generateRecipe({
+        seed: avatar.seed,
+        profileEntry: avatar.profileEntry,
+        race: avatar.race,
+        gender: avatar.gender,
+        generatorVersion: avatar.generatorVersion,
+      }),
+      { budgetMs: 8 },
+    );
+  }
+
+  private async editAvatar(): Promise<void> {
+    await this.openCreator('edit');
   }
 
   private async enterMap(): Promise<void> {
@@ -268,6 +365,12 @@ export class Game implements GameHost {
     this.options.root.dataset.canContinue = 'true';
   }
 
+  private applyCanvasVisibility(): void {
+    this.options.mapCanvas.style.visibility = this.creatorOpen ? 'hidden' : 'visible';
+    this.options.areaCanvas.style.visibility =
+      !this.creatorOpen && this.view === 'area' ? 'visible' : 'hidden';
+  }
+
   private flushJobs(): void {
     const pending = this.jobs.splice(0, this.jobs.length);
     for (const job of pending) job();
@@ -291,6 +394,20 @@ export class Game implements GameHost {
     root.dataset.saved = this.saved ? 'true' : 'false';
     root.dataset.saveCount = String(this.saveCount);
     root.dataset.canContinue = canContinue.value ? 'true' : 'false';
+    root.dataset.scene = this.stack.current()?.id ?? '';
+    const drafting = this.mode === 'creator';
+    const draft = creatorView.value;
+    root.dataset.avatarName = drafting ? draft.name : this.world.avatar.name;
+    root.dataset.avatarRace = drafting ? draft.race : this.world.avatar.race;
+    root.dataset.avatarGender = drafting ? draft.gender : this.world.avatar.gender;
+    root.dataset.avatarSeed = String(drafting ? draft.seed : this.world.avatar.seed);
+    root.dataset.avatarHash = drafting && draft.hash ? draft.hash : this.world.avatar.recipeHash;
+    root.dataset.building = creatorBusy.value ? 'true' : 'false';
+    root.dataset.avatarSource = creatorSource.value;
+    const timings = forgeTimings();
+    root.dataset.cfInitMs = timings.initMs.toFixed(0);
+    root.dataset.cfBuildMs = timings.buildMs.toFixed(0);
+    root.dataset.buildSerial = String(creatorSerial.value);
     const text = formatClock(this.world.clockHours);
     root.dataset.clock = text;
     if (clockText.value !== text) clockText.value = text;
