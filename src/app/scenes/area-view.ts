@@ -1,3 +1,4 @@
+import type { AreaHandoff } from '../../core/state/world-state';
 import { hint } from '../../ui/state';
 import { exitFromCancel, exitFromPose, type AreaExit } from '../area-exit';
 import type { GameHost } from '../host';
@@ -20,10 +21,23 @@ export class AreaView implements Scene {
   private spin = 0;
   private leaving = false;
 
+  readonly handoff: AreaHandoff | null;
+
   constructor(
     private readonly host: GameHost,
     private renderer: AreaRenderer | null,
-  ) {}
+    handoff: AreaHandoff | null = null,
+  ) {
+    this.handoff = handoff;
+  }
+
+  get areaExport(): AreaHandoff['areaExport'] | null {
+    return this.handoff?.areaExport ?? null;
+  }
+
+  get entry(): AreaHandoff['entry'] | null {
+    return this.handoff?.entry ?? null;
+  }
 
   enter(): void {
     this.host.keyboard.clearPresses();

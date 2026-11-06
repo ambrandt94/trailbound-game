@@ -1,4 +1,15 @@
-import { cellColor } from './grid';
+import {
+  TILE,
+  type CameraState,
+  type ChunkData,
+  type MapEntity,
+  type PlayerState,
+  type WorldData,
+} from '../../core/world/models';
+import type { MapSkinId } from '../../core/state/settings';
+import { AssetLibrary } from './assets';
+import { loadTrailbound, type RegionBake, type TrailboundTiles } from './trailbound-bake';
+import { WorldRenderer } from './wm-renderer';
 
 export interface MapDrawState {
   seed: number;
@@ -8,118 +19,231 @@ export interface MapDrawState {
   townX: number;
   townY: number;
   townName: string;
+  world?: WorldData | null;
+  camera?: CameraState;
+  player?: PlayerState;
+  entities?: MapEntity[];
+  chunks?: Map<string, ChunkData>;
 }
 
-const VIEW_WORLD = 14;
-
 /**
- * Placeholder overworld. A seeded flat grid, a town marker, and a hero dot.
- * The real Canvas2D map port replaces this in G1; the class stays resident
- * across 3D visits so the return does not rebuild it.
+ * Canvas2D overworld. Classic uses the frozen map's sheets. Trailbound 48
+ * stamps Alex's atlas through the same camera, with the map sprites on top.
+ * Bakes are detached canvases, not on the document.
  */
 export class MapRenderer {
   private disposed = false;
+  private readonly assets = new AssetLibrary();
+  private readonly worldRenderer: WorldRenderer;
+  private trailbound: TrailboundTiles | null = null;
+  private ready: Promise<void> | null = null;
+  private bakedFor: WorldData | null = null;
+  private skinId: MapSkinId = 'trailbound48';
+  private waterStamp = -1;
+  private overviewStarted = 0;
+  private detailDone = false;
+  private readonly regionCache = new Map<string, RegionBake>();
+  bakeMs = 0;
+  detailMs = 0;
+  frames = 0;
+  private fpsWindow = 0;
+  private fpsFrames = 0;
+  fps = 0;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {}
+  constructor(private readonly canvas: HTMLCanvasElement) {
+    this.worldRenderer = new WorldRenderer(this.assets);
+  }
+
+  load(base = './'): Promise<void> {
+    if (this.ready) return this.ready;
+    this.ready = this.loadSheets(base);
+    return this.ready;
+  }
+
+  async setSkin(skin: MapSkinId, world: WorldData | null): Promise<void> {
+    if (this.skinId === skin && this.bakedFor === world) return;
+    this.skinId = skin;
+    await this.load();
+    this.worldRenderer.terrain = skin === 'trailbound48' ? this.trailbound : null;
+    this.worldRenderer.clearChunks();
+    this.worldRenderer.regions = [];
+    this.regionCache.clear();
+    this.detailDone = false;
+    this.bakedFor = null;
+    if (world) this.bake(world);
+  }
 
   draw(state: MapDrawState): void {
     if (this.disposed) return;
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
-    const cssW = this.canvas.clientWidth;
-    const cssH = this.canvas.clientHeight;
+    const cssW = this.canvas.clientWidth || this.canvas.width;
+    const cssH = this.canvas.clientHeight || this.canvas.height;
     if (cssW < 2 || cssH < 2) return;
-    const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
-    const bufferW = Math.floor(cssW * dpr);
-    const bufferH = Math.floor(cssH * dpr);
-    if (this.canvas.width !== bufferW || this.canvas.height !== bufferH) {
-      this.canvas.width = bufferW;
-      this.canvas.height = bufferH;
+    if (this.canvas.width !== cssW || this.canvas.height !== cssH) {
+      this.canvas.width = cssW;
+      this.canvas.height = cssH;
     }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#c9d7a4';
-    ctx.fillRect(0, 0, cssW, cssH);
-
-    const scale = cssW / VIEW_WORLD;
-    const viewH = cssH / scale;
-    const toX = (worldX: number) => cssW / 2 + (worldX - state.heroX) * scale;
-    const toY = (worldY: number) => cssH / 2 + (worldY - state.heroY) * scale;
-
-    const i0 = Math.floor(state.heroX - VIEW_WORLD / 2 - 1);
-    const i1 = Math.ceil(state.heroX + VIEW_WORLD / 2 + 1);
-    const j0 = Math.floor(state.heroY - viewH / 2 - 1);
-    const j1 = Math.ceil(state.heroY + viewH / 2 + 1);
-
-    for (let i = i0; i < i1; i += 1) {
-      for (let j = j0; j < j1; j += 1) {
-        ctx.fillStyle = cellColor(i, j, state.seed);
-        ctx.fillRect(toX(i), toY(j), scale + 0.5, scale + 0.5);
+    const now = performance.now();
+    this.frames += 1;
+    this.fpsFrames += 1;
+    if (now - this.fpsWindow > 500) {
+      this.fps = (this.fpsFrames * 1000) / (now - this.fpsWindow);
+      this.fpsWindow = now;
+      this.fpsFrames = 0;
+    }
+    const world = state.world;
+    const camera = state.camera;
+    const player = state.player;
+    if (!world || !camera || !player || !this.assets.grasslands) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#7faf72';
+      ctx.fillRect(0, 0, cssW, cssH);
+      return;
+    }
+    if (this.bakedFor !== world) this.bake(world);
+    if (!this.detailDone && this.skinId === 'trailbound48') {
+      const done = this.worldRenderer.stepOverview(world, 8);
+      if (done) {
+        this.detailDone = true;
+        this.detailMs = now - this.overviewStarted;
+        this.worldRenderer.detailMs = this.detailMs;
       }
     }
-
-    ctx.strokeStyle = 'rgba(70, 90, 52, 0.18)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let i = i0; i <= i1; i += 1) {
-      ctx.moveTo(toX(i), toY(j0));
-      ctx.lineTo(toX(i), toY(j1));
+    const frame = Math.floor(now / 220) % 4;
+    if (frame !== this.waterStamp) {
+      this.waterStamp = frame;
+      this.worldRenderer.waterFrame = frame;
     }
-    for (let j = j0; j <= j1; j += 1) {
-      ctx.moveTo(toX(i0), toY(j));
-      ctx.lineTo(toX(i1), toY(j));
+    const drawn = crispCamera(camera);
+    this.fillRegions(world, drawn, cssW, cssH);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.worldRenderer.draw(ctx, world, drawn, player, cssW, cssH, {
+      showOutlines: true,
+      showPois: true,
+      hoveredId: null,
+      hoveredPoiId: null,
+      hoveredEntityId: null,
+      detailNode: null,
+      entities: state.entities ?? [],
+      chunks: state.chunks,
+      showPlayer: true,
+      spriteBuildings: true,
+      cloudAmt: 0,
+    });
+    this.bakeMs = this.worldRenderer.bakeMs;
+  }
+
+  syncChunks(chunks: Iterable<ChunkData>, world: WorldData): void {
+    let baked = 0;
+    for (const chunk of chunks) {
+      if (this.worldRenderer.hasChunk(chunk.wx, chunk.wy)) continue;
+      if (baked >= 6) break;
+      const neighbors = new Map<string, ChunkData>();
+      this.worldRenderer.bakeChunk(chunk, neighbors, world);
+      baked += 1;
     }
-    ctx.stroke();
-
-    const townX = toX(state.townX);
-    const townY = toY(state.townY);
-    ctx.fillStyle = '#ead9b4';
-    ctx.beginPath();
-    ctx.arc(townX, townY, scale * 0.95, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#f3e6cf';
-    ctx.fillRect(townX - scale * 0.34, townY - scale * 0.08, scale * 0.68, scale * 0.5);
-    ctx.beginPath();
-    ctx.moveTo(townX - scale * 0.48, townY - scale * 0.05);
-    ctx.lineTo(townX, townY - scale * 0.48);
-    ctx.lineTo(townX + scale * 0.48, townY - scale * 0.05);
-    ctx.closePath();
-    ctx.fillStyle = '#c4532c';
-    ctx.fill();
-    ctx.fillStyle = '#6a4636';
-    ctx.fillRect(townX - scale * 0.08, townY + scale * 0.12, scale * 0.16, scale * 0.28);
-
-    ctx.font = '600 15px Candara, "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#3a2e24';
-    ctx.fillText(state.townName, townX, townY - scale * 0.7);
-
-    const heroX = toX(state.heroX);
-    const heroY = toY(state.heroY);
-    const radius = Math.max(8, scale * 0.28);
-    ctx.beginPath();
-    ctx.arc(heroX, heroY, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#f7f3ea';
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#2c261f';
-    ctx.stroke();
-    const noseX = Math.sin(state.heroYaw);
-    const noseY = -Math.cos(state.heroYaw);
-    ctx.beginPath();
-    ctx.moveTo(heroX + noseX * radius * 1.7, heroY + noseY * radius * 1.7);
-    ctx.lineTo(heroX + noseY * radius * 0.45, heroY - noseX * radius * 0.45);
-    ctx.lineTo(heroX - noseY * radius * 0.45, heroY + noseX * radius * 0.45);
-    ctx.closePath();
-    ctx.fillStyle = '#2c261f';
-    ctx.fill();
   }
 
   dispose(): void {
     this.disposed = true;
+    this.worldRenderer.clearChunks();
   }
 
   get isDisposed(): boolean {
     return this.disposed;
   }
+
+  private async loadSheets(base: string): Promise<void> {
+    await this.assets.load(base);
+    try {
+      this.trailbound = await loadTrailbound(base);
+    } catch (error) {
+      console.error(error);
+      this.trailbound = null;
+    }
+    this.worldRenderer.terrain = this.skinId === 'trailbound48' ? this.trailbound : null;
+  }
+
+  private fillRegions(world: WorldData, camera: CameraState, viewW: number, viewH: number): void {
+    this.worldRenderer.regions = [];
+    const tiles = this.trailbound;
+    if (!tiles || this.skinId !== 'trailbound48') return;
+    const tilePx = TILE * camera.scale;
+    if (tilePx < 6) return;
+    const span = 24;
+    const stamp = 48;
+    const halfW = viewW / (2 * camera.scale) / TILE;
+    const halfH = viewH / (2 * camera.scale) / TILE;
+    const xStart = Math.floor((camera.x - halfW) / span) * span;
+    const yStart = Math.floor((camera.y - halfH) / span) * span;
+    const xEnd = camera.x + halfW;
+    const yEnd = camera.y + halfH;
+    const regions: typeof this.worldRenderer.regions = [];
+    const started = performance.now();
+    for (let y = yStart; y < yEnd + span; y += span) {
+      if (y >= world.height) break;
+      for (let x = xStart; x < xEnd + span; x += span) {
+        if (y < 0) continue;
+        const key = `${x}:${y}`;
+        let entry = this.regionCache.get(key);
+        if (!entry) {
+          entry = tiles.beginRegion(x, y, span, stamp);
+          this.regionCache.set(key, entry);
+        }
+        if (entry.row < span && performance.now() - started < 10) {
+          tiles.stepRegion(world, entry, 6);
+        }
+        if (entry.row > 0) {
+          regions.push({
+            canvas: entry.canvas,
+            x,
+            y,
+            span,
+            shores: entry.shores,
+            waters: entry.waters,
+            curves: entry.curves,
+          });
+        }
+      }
+    }
+    if (this.regionCache.size > 72) {
+      const drop = this.regionCache.size - 48;
+      let removed = 0;
+      for (const key of this.regionCache.keys()) {
+        this.regionCache.delete(key);
+        removed += 1;
+        if (removed >= drop) break;
+      }
+    }
+    this.worldRenderer.regions = regions;
+  }
+
+  private bake(world: WorldData): void {
+    this.worldRenderer.terrain = this.skinId === 'trailbound48' ? this.trailbound : null;
+    this.overviewStarted = performance.now();
+    this.detailDone = this.skinId !== 'trailbound48';
+    this.worldRenderer.bakeWorld(world);
+    this.bakedFor = world;
+    this.bakeMs = this.worldRenderer.bakeMs;
+    this.detailMs = 0;
+  }
+}
+
+/** Screen pixels per world tile land on a divisor of the 48 px art when zoomed in. */
+function crispCamera(camera: CameraState): CameraState {
+  const px = TILE * camera.scale;
+  if (px < 8) return camera;
+  // 12, 24 and 48 keep the 48 px tiles on whole source pixels. 16 px would throw away the shore curves.
+  const steps = [12, 24, 48, 96, 144];
+  let best = steps[0] ?? 24;
+  let bestDistance = Infinity;
+  for (const step of steps) {
+    const distance = Math.abs(step - px);
+    if (distance < bestDistance || (distance === bestDistance && step > best)) {
+      best = step;
+      bestDistance = distance;
+    }
+  }
+  return { ...camera, scale: best / TILE, targetScale: best / TILE };
 }

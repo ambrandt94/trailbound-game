@@ -1,19 +1,27 @@
 import { migrate } from '../core/save/migrations';
 import type { SaveBackend } from '../core/save/types';
 import { normalizeSettings } from '../core/state/settings';
-import { createWorld, type AreaExit, type WorldState } from '../core/state/world-state';
+import {
+  createWorld,
+  type AreaExit,
+  type AreaHandoff,
+  type WorldState,
+} from '../core/state/world-state';
+import { DEFAULT_WORLD_SEED } from '../core/world/index';
+import { Biome, startScaleFor, type ChunkData, type WorldData } from '../core/world/models';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { Keyboard } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
 import { AreaRenderer } from '../render/area/area-renderer';
-import { MapRenderer } from '../render/map/map-renderer';
+import { MapRenderer, type MapDrawState } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
 import { creatorBusy, creatorSerial, creatorSource, creatorView } from '../ui/creator-state';
 import {
   bindCommands,
   canContinue,
   clockText,
+  generating,
   hint,
   nearTown,
   savedFlash,
@@ -40,6 +48,7 @@ import { AreaView } from './scenes/area-view';
 import { BootScene } from './scenes/boot';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
+import { TransitionScene } from './scenes/transition';
 import { codeForTouchAction } from './touch-wire';
 import { CF_PIN, GAME_VERSION, PLAYER_NAME, SAVE_SLOT } from './version';
 
@@ -48,6 +57,7 @@ export interface GameOptions {
   root: HTMLElement;
   mapCanvas: HTMLCanvasElement;
   areaCanvas: HTMLCanvasElement;
+  baseUrl?: string;
   fade: HTMLElement;
   content: ContentSource;
   saves: SaveBackend;
@@ -105,7 +115,15 @@ export class Game implements GameHost {
     return this.options.areaCanvas;
   }
 
+  get mapCanvas(): HTMLCanvasElement {
+    return this.options.mapCanvas;
+  }
+
+  pendingArea: AreaHandoff | null = null;
+
   async start(): Promise<void> {
+    void this.mapRenderer.load(this.options.baseUrl ?? './');
+    void this.mapRenderer.setSkin(settings.value.mapSkin, null);
     this.keyboard.attach(window);
     this.detachTouch = attachTouchControls(this.options.root, {
       setHeld: (action, held) => {
@@ -154,23 +172,79 @@ export class Game implements GameHost {
     this.options.root.dataset.fade = clamped.toFixed(3);
   }
 
-  paintMap(pose: { x: number; y: number; yaw: number }): void {
-    this.mapRenderer.draw({
-      seed: this.world.seed,
-      heroX: pose.x,
-      heroY: pose.y,
-      heroYaw: pose.yaw,
-      townX: this.world.town.x,
-      townY: this.world.town.y,
-      townName: this.world.town.name,
-    });
+  paintMap(state: MapDrawState): void {
+    this.mapRenderer.draw(state);
+  }
+
+  syncChunks(chunks: ChunkData[]): void {
+    if (!this.world.data || chunks.length === 0) return;
+    this.mapRenderer.syncChunks(chunks, this.world.data);
+  }
+
+  enterSettlement(): void {
+    const node = this.world.settlementAt();
+    if (!node) return;
+    this.pendingArea = null;
+    void this.stack.push(new TransitionScene(this, 'to-area'));
+  }
+
+  /** Point the map camera at a settlement. Used by the screenshot harness. */
+  lookAt(name: string, scale?: number): boolean {
+    const node = this.world.data?.nodes.find((item) => item.name === name || item.id === name);
+    if (!node || !this.mapScene) return false;
+    this.mapScene.lookAt(node.cx, node.cy, scale);
+    return true;
+  }
+
+  /** Move the hero onto a settlement so the location panel names it. */
+  standAt(name: string): boolean {
+    const node = this.world.data?.nodes.find((item) => item.name === name || item.id === name);
+    if (!node) return false;
+    this.world.moveHero(node.cx - this.world.hero.x, node.cy - this.world.hero.y);
+    return true;
+  }
+
+  /** Frame the whole continent, a coast with a river, or Ironmarch up close. */
+  frameScene(kind: 'world' | 'coast' | 'river' | 'snow' | 'ash' | 'ironmarch'): boolean {
+    const data = this.world.data;
+    if (!data || !this.mapScene) return false;
+    if (kind === 'ironmarch') {
+      this.standAt('Ironmarch');
+      return this.lookAt('Ironmarch', 9);
+    }
+    if (kind === 'world') {
+      this.mapScene.lookAt(data.width / 2, data.height / 2, startScaleFor(data.width));
+      return true;
+    }
+    if (kind === 'river') {
+      const river = findRiver(data);
+      if (!river) return false;
+      this.mapScene.lookAt(river.x, river.y, 1.15);
+      return true;
+    }
+    if (kind === 'snow' || kind === 'ash') {
+      const id = kind === 'snow' ? Biome.Snow : Biome.Ashlands;
+      const spot =
+        findBiomeEdge(data, id, Biome.Sand) ??
+        findBiomeEdge(data, id, Biome.Plains) ??
+        findAnyEdge(data, id);
+      if (!spot) return false;
+      this.mapScene.lookAt(spot.x, spot.y, 1.15);
+      return true;
+    }
+    const coast = findCoast(data);
+    if (!coast) return false;
+    this.mapScene.lookAt(coast.x, coast.y, 1.15);
+    return true;
   }
 
   buildArea(): void {
     if (this.areaScene) return;
     try {
+      const node = this.world.settlementAt();
+      if (node) this.pendingArea = this.world.buildHandoff(node);
       const renderer = new AreaRenderer(this.options.areaCanvas);
-      const view = new AreaView(this, renderer);
+      const view = new AreaView(this, renderer, this.pendingArea);
       this.areaScene = view;
       this.stack.insertUnderTop(view);
       this.setView('area');
@@ -211,6 +285,10 @@ export class Game implements GameHost {
         const next = normalizeSettings({ ...settings.value, ...partial });
         settings.value = next;
         this.options.settings.save(next);
+        if (partial.mapSkin) void this.mapRenderer.setSkin(next.mapSkin, this.world.data);
+      },
+      enterPlace: () => {
+        this.enterSettlement();
       },
       save: () => {
         void this.save();
@@ -223,14 +301,22 @@ export class Game implements GameHost {
 
   private async newGame(): Promise<void> {
     if (!this.place) return;
+    generating.value = true;
+    settingsOpen.value = false;
+    savedFlash.value = '';
+    await new Promise((resolve) => {
+      setTimeout(resolve, 40);
+    });
     this.world = createWorld({
       id: this.place.id,
       name: this.place.name,
       x: this.place.map.x,
       y: this.place.map.y,
     });
-    settingsOpen.value = false;
-    savedFlash.value = '';
+    this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED);
+    await this.mapRenderer.load(this.options.baseUrl ?? './');
+    await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
+    generating.value = false;
     await this.openCreator('new');
   }
 
@@ -243,15 +329,21 @@ export class Game implements GameHost {
     }
     const migrated = migrate(manifest, core);
     if (!migrated.core) return;
+    generating.value = true;
+    await new Promise((resolve) => {
+      setTimeout(resolve, 40);
+    });
+    this.world = createWorld({
+      id: this.place?.id ?? 'waystead',
+      name: this.place?.name ?? 'Waystead',
+      x: this.place?.map.x ?? 8,
+      y: this.place?.map.y ?? 8,
+    });
+    this.world.beginGeneratedWorld(migrated.core.worldSeed, { keepHero: true });
     this.world.load(migrated.core);
-    if (this.place) {
-      this.world.town = {
-        id: this.place.id,
-        name: this.place.name,
-        x: this.place.map.x,
-        y: this.place.map.y,
-      };
-    }
+    await this.mapRenderer.load(this.options.baseUrl ?? './');
+    await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
+    generating.value = false;
     settingsOpen.value = false;
     savedFlash.value = '';
     this.warmAvatar();
@@ -410,6 +502,12 @@ export class Game implements GameHost {
     root.dataset.buildSerial = String(creatorSerial.value);
     const text = formatClock(this.world.clockHours);
     root.dataset.clock = text;
+    root.dataset.bakeMs = this.mapRenderer.bakeMs.toFixed(1);
+    root.dataset.detailMs = this.mapRenderer.detailMs.toFixed(1);
+    root.dataset.fps = this.mapRenderer.fps.toFixed(1);
+    root.dataset.skin = settings.value.mapSkin;
+    root.dataset.place = this.world.town.name;
+    root.dataset.chunks = String(this.world.chunks.size);
     if (clockText.value !== text) clockText.value = text;
   }
 
@@ -426,4 +524,73 @@ export class Game implements GameHost {
     );
     this.raf = requestAnimationFrame(this.onFrame);
   };
+}
+
+function findRiver(world: WorldData): { x: number; y: number } | null {
+  const width = world.width;
+  for (let y = 20; y < world.height - 20; y += 6) {
+    for (let x = 20; x < width - 20; x += 6) {
+      if (world.biomes[x + y * width] !== Biome.Water) continue;
+      const land =
+        (world.biomes[x + 3 + y * width] !== Biome.Water ? 1 : 0) +
+        (world.biomes[x - 3 + y * width] !== Biome.Water ? 1 : 0);
+      const along =
+        world.biomes[x + (y - 6) * width] === Biome.Water &&
+        world.biomes[x + (y + 6) * width] === Biome.Water;
+      if (land >= 1 && along && y > world.height * 0.2 && y < world.height * 0.8) return { x, y };
+    }
+  }
+  return null;
+}
+
+function findAnyEdge(world: WorldData, id: Biome): { x: number; y: number } | null {
+  const width = world.width;
+  for (let y = 8; y < world.height - 8; y += 3) {
+    for (let x = 8; x < width - 8; x += 3) {
+      if (world.biomes[x + y * width] !== id) continue;
+      const east = world.biomes[x + 1 + y * width];
+      if (east !== undefined && east !== id) return { x, y };
+    }
+  }
+  return null;
+}
+
+function findBiomeEdge(world: WorldData, a: Biome, b: Biome): { x: number; y: number } | null {
+  const width = world.width;
+  for (let y = 8; y < world.height - 8; y += 4) {
+    for (let x = 8; x < width - 8; x += 4) {
+      const here = world.biomes[x + y * width];
+      if (here !== a) continue;
+      const east = world.biomes[x + 1 + y * width];
+      const south = world.biomes[x + (y + 1) * width];
+      if (east === b || south === b) return { x, y };
+    }
+  }
+  return null;
+}
+
+function findCoast(world: WorldData): { x: number; y: number } | null {
+  const width = world.width;
+  let best: { x: number; y: number; score: number } | null = null;
+  for (let y = 12; y < width - 12; y += 8) {
+    for (let x = 12; x < width - 12; x += 8) {
+      if (world.biomes[x + y * width] !== Biome.Water) continue;
+      let land = 0;
+      let water = 0;
+      for (const [dx, dy] of [
+        [8, 0],
+        [-8, 0],
+        [0, 8],
+        [0, -8],
+      ] as const) {
+        const neighbor = world.biomes[x + dx + (y + dy) * width];
+        if (neighbor === Biome.Water) water += 1;
+        else land += 1;
+      }
+      if (land < 1 || water < 1) continue;
+      const score = land * 2 + (water === 2 ? 4 : 0);
+      if (!best || score > best.score) best = { x, y, score };
+    }
+  }
+  return best;
 }

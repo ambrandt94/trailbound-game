@@ -4,9 +4,14 @@ import {
   bootError,
   bootMessage,
   canContinue,
+  canEnter,
   clockText,
   commands,
+  generating,
   hint,
+  placeKind,
+  placeName,
+  placeTier,
   savedFlash,
   screen,
   settings,
@@ -49,9 +54,18 @@ function TitleScreen() {
     <section class="screen">
       <p class="eyebrow">A road game</p>
       <h1>Trailbound</h1>
-      <p class="lede">Walk the map. Step through a town gate. The road keeps your place.</p>
+      <p class="lede">
+        {generating.value
+          ? 'Charting the continent…'
+          : 'Walk the map. Step through a town gate. The road keeps your place.'}
+      </p>
       <div class="actions">
-        <button type="button" class="action" onClick={() => commands.newGame()}>
+        <button
+          type="button"
+          class="action"
+          disabled={generating.value}
+          onClick={() => commands.newGame()}
+        >
           New
         </button>
         <button
@@ -86,6 +100,22 @@ function SettingsPanel() {
           onChange={(effects) => change({ effects })}
         />
         <Slider label="Voices" value={current.voices} onChange={(voices) => change({ voices })} />
+        <label class="field">
+          Map
+          <select
+            aria-label="Map"
+            value={current.mapSkin}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (!(target instanceof HTMLSelectElement)) return;
+              const mapSkin = target.value === 'classic' ? 'classic' : 'trailbound48';
+              change({ mapSkin });
+            }}
+          >
+            <option value="trailbound48">Trailbound 48</option>
+            <option value="classic">Classic</option>
+          </select>
+        </label>
         <label class="check">
           <input
             type="checkbox"
@@ -112,12 +142,43 @@ function Hud() {
   return (
     <div class="hud">
       <div class="pill clock">{clockText.value}</div>
+      <label class="pill skin">
+        <span>Map</span>
+        <select
+          aria-label="Map skin"
+          value={settings.value.mapSkin}
+          onChange={(event) => {
+            const target = event.currentTarget;
+            if (!(target instanceof HTMLSelectElement)) return;
+            commands.changeSettings({
+              mapSkin: target.value === 'classic' ? 'classic' : 'trailbound48',
+            });
+          }}
+        >
+          <option value="trailbound48">Trailbound 48</option>
+          <option value="classic">Classic</option>
+        </select>
+      </label>
       <button type="button" class="pill save" onClick={() => commands.save()}>
         Save
       </button>
       <button type="button" class="pill avatar" onClick={() => commands.editAvatar()}>
         Avatar
       </button>
+      {placeName.value ? (
+        <section class="place">
+          <p class="eyebrow">{placeTier.value || placeKind.value}</p>
+          <h2>{placeName.value}</h2>
+          <button
+            type="button"
+            class="action"
+            disabled={!canEnter.value}
+            onClick={() => commands.enterPlace()}
+          >
+            Enter
+          </button>
+        </section>
+      ) : null}
       <p class="hint">{hint.value}</p>
       {savedFlash.value ? <p class="flash">{savedFlash.value}</p> : null}
     </div>

@@ -13,6 +13,11 @@ export const clockText = signal('Day 1  08:00');
 export const hint = signal('');
 export const nearTown = signal(false);
 export const savedFlash = signal('');
+export const placeName = signal('');
+export const placeTier = signal('');
+export const placeKind = signal('');
+export const canEnter = signal(false);
+export const generating = signal(false);
 
 export interface UiCommands {
   newGame(): void;
@@ -22,6 +27,7 @@ export interface UiCommands {
   changeSettings(partial: Partial<GameSettings>): void;
   save(): void;
   editAvatar(): void;
+  enterPlace(): void;
 }
 
 export const commands: UiCommands = {
@@ -46,6 +52,9 @@ export const commands: UiCommands = {
   editAvatar() {
     return;
   },
+  enterPlace() {
+    return;
+  },
 };
 
 export function bindCommands(next: UiCommands): void {
@@ -56,4 +65,5 @@ export function bindCommands(next: UiCommands): void {
   commands.changeSettings = next.changeSettings;
   commands.save = next.save;
   commands.editAvatar = next.editAvatar;
+  commands.enterPlace = next.enterPlace;
 }

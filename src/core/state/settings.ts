@@ -1,9 +1,12 @@
+export type MapSkinId = 'classic' | 'trailbound48';
+
 export interface GameSettings {
   master: number;
   music: number;
   effects: number;
   voices: number;
   muteVoices: boolean;
+  mapSkin: MapSkinId;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -12,6 +15,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   effects: 80,
   voices: 40,
   muteVoices: false,
+  mapSkin: 'trailbound48',
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -32,5 +36,6 @@ export function normalizeSettings(value: unknown): GameSettings {
     voices: clampPercent(record.voices, DEFAULT_SETTINGS.voices),
     muteVoices:
       typeof record.muteVoices === 'boolean' ? record.muteVoices : DEFAULT_SETTINGS.muteVoices,
+    mapSkin: record.mapSkin === 'classic' ? 'classic' : 'trailbound48',
   };
 }
