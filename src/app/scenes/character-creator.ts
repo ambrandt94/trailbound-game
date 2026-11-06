@@ -1,48 +1,49 @@
 import {
-  AVATAR_HISTORY_LIMIT,
-  avatarFromChoices,
-  choiceHistory,
-  choicesFromAvatar,
-  cloneChoices,
-  isRegaliaId,
   playableIds,
-  profileEntryFromChoices,
-  randomizeChoices,
-  recordChoices,
-  redoChoices,
-  sameChoices,
-  undoChoices,
-  type AvatarChoices,
-  type ChoiceHistory,
+  type AvatarGender,
   type PlayerAvatar,
-  type SlotMode,
+  type PlayerProfileEntry,
 } from '../../core/people/avatar';
 import {
   adoptPlayerBody,
   buildAvatar,
+  checkRecipeEdit,
+  cloneRecipe,
+  describeRecipe,
+  editRecipe,
   forgeBuildError,
   forgeCatalog,
   forgeReady,
   generateRecipe,
   initForge,
+  optionsFor,
   placeholderAvatar,
-  type AvatarBody,
-  type ForgeCatalog,
+  recipeFromStored,
+  recipeHashOf,
+  type CharacterRecipe,
+  type EditOptions,
+  type EditPatch,
+  type EditSnapshot,
 } from '../../render/characters/index';
 import { AvatarPreview } from '../../render/characters/preview';
 import {
   bindCreator,
   creatorBusy,
+  creatorCommands,
   creatorSerial,
   creatorSource,
   creatorView,
+  type CreatorCommands,
   type CreatorView,
-  type StyleOption,
+  type PartView,
+  type SliderView,
 } from '../../ui/creator-state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
 
 const DEBOUNCE_SECONDS = 0.16;
+const HISTORY_LIMIT = 12;
+const LENGTH_ORDER = ['hairLength', 'bangLength', 'beardLength', 'hairGrey', 'beardGrey'] as const;
 
 export interface CreatorOptions {
   intent: 'new' | 'edit';
@@ -51,101 +52,85 @@ export interface CreatorOptions {
   onCancel(): Promise<void> | void;
 }
 
+interface LookSnap {
+  recipe: CharacterRecipe;
+  seed: number;
+  race: string;
+  gender: AvatarGender;
+}
+
 export class CharacterCreatorScene implements Scene {
   readonly id = 'CharacterCreator';
 
-  private history: ChoiceHistory;
-  private catalog: ForgeCatalog | null = null;
-  private profile: unknown = null;
-  private profileRaces: string[] = [];
+  private name: string;
+  private seed: number;
+  private race: string;
+  private gender: AvatarGender;
+  private recipe: CharacterRecipe | null = null;
+  private options: EditOptions | null = null;
+  private snap: EditSnapshot | null = null;
+  private past: LookSnap[] = [];
+  private future: LookSnap[] = [];
+  private slot = 'head_outer';
+  private facePreset = 'race';
+  private warnings: string[] = [];
+  private errors: string[] = [];
+  private note = '';
+  private hash = '';
+  private flyerRaces: string[] = ['pixie'];
+  private races: string[] = ['human'];
   private preview: AvatarPreview | null = null;
   private canvas: HTMLCanvasElement | null = null;
-  private working: AvatarBody | null = null;
+  private working: Awaited<ReturnType<typeof buildAvatar>> | null = null;
   private handedOff = false;
   private clip: 'Idle' | 'Walk' = 'Idle';
   private turntable = false;
-  private slot = '';
-  private garment = '';
-  private slotMode: 'any' | SlotMode = 'any';
-  private note = '';
-  private hash = '';
   private dirty = false;
   private wait = 0;
   private generation = 0;
   private building = false;
-  private gestureBase: AvatarChoices | null = null;
+  private chain: Promise<void> = Promise.resolve();
+  private gesture: CharacterRecipe | null = null;
   private nameBase: string | null = null;
   private closed = false;
+  private profile: unknown = null;
 
   constructor(
     private readonly host: GameHost,
-    private readonly options: CreatorOptions,
+    private readonly optionsIn: CreatorOptions,
   ) {
-    this.history = choiceHistory(choicesFromAvatar(options.initial));
+    this.name = optionsIn.initial.name;
+    this.seed = optionsIn.initial.seed >>> 0;
+    this.race = optionsIn.initial.race || 'human';
+    this.gender = optionsIn.initial.gender === 'f' ? 'f' : 'm';
   }
 
   async enter(): Promise<void> {
     this.host.setMode('creator');
     this.host.setCreatorVisible(true);
     this.mountCanvas();
-    bindCreator({
-      setName: (name) => this.setName(name),
-      commitName: () => this.commitName(),
-      setRace: (race) => this.commit({ ...this.present(), race }),
-      setGender: (gender) => this.commit({ ...this.present(), gender }),
-      setStyle: (style) => this.commit({ ...this.present(), style }),
-      beginGesture: () => this.beginGesture(),
-      setRichness: (value) => this.setRichness(value),
-      endGesture: () => this.endGesture(),
-      toggleLock: (field) => this.toggleLock(field),
-      setSlot: (slot) => this.setSlot(slot),
-      setGarment: (garment) => {
-        this.garment = garment;
-        this.publish();
-      },
-      setSlotMode: (mode) => {
-        this.slotMode = mode;
-        this.publish();
-      },
-      applySlot: () => this.applySlot(),
-      clearSlot: (slot) => this.clearSlot(slot),
-      randomize: () => this.randomize(),
-      undo: () => this.step(undoChoices(this.history)),
-      redo: () => this.step(redoChoices(this.history)),
-      setClip: (clip) => this.setClip(clip),
-      setTurntable: (on) => {
-        this.turntable = on;
-        this.preview?.setTurntable(on);
-        this.publish();
-      },
-      frame: (mode) => {
-        if (mode === 'face') this.preview?.frameFace();
-        else this.preview?.frameBody();
-      },
-      confirm: () => {
-        void this.confirm();
-      },
-      cancel: () => {
-        void this.cancel();
-      },
-    });
+    bindCreator(this.commands());
     creatorBusy.value = true;
     this.publish();
     try {
       this.profile = await this.host.content.load('characters/trailbound');
-      this.profileRaces = racesInProfile(this.profile);
     } catch {
       this.profile = null;
     }
     const ready = await initForge({ profile: this.profile });
-    this.catalog = forgeCatalog();
+    const catalog = forgeCatalog();
+    if (catalog) {
+      this.flyerRaces = catalog.flyerRaces;
+      this.races = playableIds([...catalog.races, ...racesInProfile(this.profile)], 0.5);
+    }
     if (!ready.ok) {
       this.note =
         ready.reason === 'cf=0'
           ? 'Forge is off (?cf=0). Showing a stand-in.'
           : `Forge did not start (${ready.reason}). Showing a stand-in.`;
+    } else {
+      this.restoreOrGenerate(this.optionsIn.initial.recipe);
     }
-    this.ensureSlot();
     this.dirty = true;
     this.wait = DEBOUNCE_SECONDS;
     creatorBusy.value = false;
@@ -154,8 +139,8 @@ export class CharacterCreatorScene implements Scene {
 
   update(dt: number): void {
     this.orbitFromKeys(dt);
-    this.preview?.update(dt);
     this.working?.update(dt);
+    this.preview?.update(dt);
     if (!this.dirty || this.building) return;
     this.wait += dt;
     if (this.wait < DEBOUNCE_SECONDS) return;
@@ -170,30 +155,7 @@ export class CharacterCreatorScene implements Scene {
 
   exit(): void {
     this.closed = true;
-    bindCreator({
-      setName: noop,
-      commitName: noop,
-      setRace: noop,
-      setGender: noop,
-      setStyle: noop,
-      beginGesture: noop,
-      setRichness: noop,
-      endGesture: noop,
-      toggleLock: noop,
-      setSlot: noop,
-      setGarment: noop,
-      setSlotMode: noop,
-      applySlot: noop,
-      clearSlot: noop,
-      randomize: noop,
-      undo: noop,
-      redo: noop,
-      setClip: noop,
-      setTurntable: noop,
-      frame: noop,
-      confirm: noop,
-      cancel: noop,
-    });
+    bindCreator(silentCommands());
     this.preview?.releaseBody();
     this.preview?.dispose();
     this.preview = null;
@@ -205,142 +167,233 @@ export class CharacterCreatorScene implements Scene {
     creatorBusy.value = false;
   }
 
-  private present(): AvatarChoices {
-    return this.history.present;
+  private commands(): CreatorCommands {
+    return {
+      setName: (name) => {
+        if (this.nameBase === null) this.nameBase = this.name;
+        this.name = name;
+        this.publish();
+      },
+      commitName: () => {
+        this.nameBase = null;
+      },
+      setRace: (race) => this.changeOrigin({ race }),
+      setGender: (gender) => this.changeOrigin({ gender }),
+      randomize: () => {
+        this.remember();
+        this.seed = Math.floor(Math.random() * 0x1_0000_0000) >>> 0;
+        this.facePreset = 'race';
+        this.generateLook();
+      },
+      undo: () => this.step(-1),
+      redo: () => this.step(1),
+      setSkin: (id) => this.apply({ skin: id }, true),
+      setHairColor: (id) => this.apply({ hairColor: id }, true),
+      setEye: (id) => this.apply({ eyeColor: id }, true),
+      setSclera: (id) => this.apply({ sclera: id }, true),
+      setHairStyle: (id) => this.apply({ hairStyle: id }, true),
+      setFacialHair: (id) => this.apply({ facialHair: id || null }, true),
+      setStubble: (value) => this.applyOntoGesture({ stubble: value }),
+      beginGesture: () => {
+        if (this.recipe && !this.gesture) this.gesture = cloneRecipe(this.recipe);
+      },
+      setLength: (id, value) => this.applyOntoGesture({ [id]: value }),
+      setSlider: (id, value) => this.applyOntoGesture({ sliders: { [id]: value } }),
+      setFaceParam: (id, value) => this.applyOntoGesture({ face: { params: { [id]: value } } }),
+      endGesture: () => this.endGesture(),
+      setFacePreset: (id) => {
+        this.facePreset = id;
+        this.apply({ face: { preset: id } }, true);
+      },
+      setFacePart: (key, value) => this.apply({ face: { [key]: value } }, true),
+      setSlot: (slot) => {
+        this.slot = slot;
+        this.publish();
+      },
+      setGarment: (id) => this.apply({ outfit: { [this.slot]: id || null } }, true),
+      setDye: (region, rgb) => {
+        const worn = this.snap?.outfit[this.slot];
+        if (!worn) return;
+        this.apply({ dye: { [worn.id]: { [region]: rgb } } }, true);
+      },
+      setClip: (clip) => {
+        this.clip = clip;
+        this.working?.play(clip);
+        this.publish();
+      },
+      setTurntable: (on) => {
+        this.turntable = on;
+        this.preview?.setTurntable(on);
+        this.publish();
+      },
+      frame: (mode) => {
+        if (mode === 'face') this.preview?.frameFace();
+        else this.preview?.frameBody();
+      },
+      confirm: () => {
+        void this.confirm();
+      },
+      cancel: () => {
+        void this.optionsIn.onCancel();
+      },
+    };
   }
 
-  private commit(next: AvatarChoices): void {
-    this.history = recordChoices(this.history, next);
-    this.schedule();
-  }
-
-  private step(next: ChoiceHistory): void {
-    if (next === this.history) return;
-    this.history = next;
-    this.schedule();
-  }
-
-  private schedule(): void {
-    this.generation += 1;
-    this.dirty = true;
-    this.wait = 0;
-    this.publish();
-  }
-
-  private setName(name: string): void {
-    if (this.nameBase === null) this.nameBase = this.present().name;
-    this.history = { ...this.history, present: { ...this.present(), name } };
-    this.publish();
-  }
-
-  private commitName(): void {
-    if (this.nameBase === null) return;
-    const previous = this.nameBase;
-    this.nameBase = null;
-    const current = this.present();
-    if (previous === current.name) return;
-    const past = [...this.history.past, { ...cloneChoices(current), name: previous }];
-    while (past.length > AVATAR_HISTORY_LIMIT) past.shift();
-    this.history = { past, present: current, future: [] };
-    this.publish();
-  }
-
-  private beginGesture(): void {
-    if (!this.gestureBase) this.gestureBase = cloneChoices(this.present());
-  }
-
-  private setRichness(value: number): void {
-    const richness = clamp01(value);
-    let present = { ...this.present(), richness };
-    if (!present.locks.race && present.race.startsWith('royal_') && richness < 0.85) {
-      present = { ...present, race: 'human' };
+  private restoreOrGenerate(stored: PlayerAvatar['recipe']): void {
+    if (stored && forgeReady().ok) {
+      try {
+        this.recipe = recipeFromStored(stored, this.seed);
+        this.snap = describeRecipe(this.recipe);
+        this.race = this.snap.race || this.race;
+        this.gender = this.snap.gender;
+        this.options = optionsFor(this.race, this.gender, 'adult');
+        this.hash = recipeHashOf(this.recipe);
+        if (!this.options.slots[this.slot]) this.slot = Object.keys(this.options.slots)[0] ?? '';
+        return;
+      } catch {
+        this.note = 'The saved look could not be read. Rolling it again from the seed.';
+      }
     }
-    this.history = { ...this.history, present };
+    this.generateLook();
+  }
+
+  private changeOrigin(partial: { race?: string; gender?: AvatarGender }): void {
+    this.remember();
+    if (partial.race) this.race = partial.race;
+    if (partial.gender) this.gender = partial.gender;
+    this.facePreset = 'race';
+    this.generateLook();
+  }
+
+  private generateLook(): void {
+    if (!forgeReady().ok) return;
+    try {
+      this.recipe = generateRecipe({
+        seed: this.seed,
+        profileEntry: entryFor(this.race, this.gender),
+        race: this.race,
+        gender: this.gender,
+        generatorVersion: 1,
+      });
+      this.options = optionsFor(this.race, this.gender, 'adult');
+      this.snap = describeRecipe(this.recipe);
+      this.errors = [];
+      this.warnings = [];
+      this.hash = recipeHashOf(this.recipe);
+      if (!this.options.slots[this.slot])
+        this.slot = Object.keys(this.options.slots)[0] ?? this.slot;
+      this.schedule();
+    } catch (error) {
+      this.errors = [error instanceof Error ? error.message : 'Could not roll this look'];
+      this.publish();
+    }
+  }
+
+  private apply(patch: EditPatch, record: boolean): void {
+    if (!this.recipe) return;
+    this.applyTo(this.recipe, patch, record);
+  }
+
+  private applyOntoGesture(patch: EditPatch): void {
+    const base = this.gesture ?? this.recipe;
+    if (!base) return;
+    this.applyTo(base, patch, false);
+  }
+
+  private applyTo(base: CharacterRecipe, patch: EditPatch, record: boolean): void {
+    const check = checkRecipeEdit(base, patch);
+    if (!check.ok || !check.recipe) {
+      this.errors = check.errors.map((issue) => issue.msg);
+      this.warnings = check.warnings.map((issue) => issue.msg);
+      this.publish();
+      return;
+    }
+    let next = check.recipe;
+    try {
+      next = editRecipe(base, patch);
+    } catch (error) {
+      this.errors = [error instanceof Error ? error.message : 'Edit was rejected'];
+      this.publish();
+      return;
+    }
+    if (record && this.recipe) this.remember();
+    this.recipe = next;
+    this.snap = describeRecipe(next);
+    this.errors = [];
+    this.warnings = check.warnings.map((issue) => issue.msg);
+    this.hash = recipeHashOf(next);
     this.schedule();
   }
 
   private endGesture(): void {
-    if (!this.gestureBase) return;
-    const base = this.gestureBase;
-    this.gestureBase = null;
-    const next = cloneChoices(this.present());
-    if (sameChoices(base, next)) return;
-    const past = [...this.history.past, base];
-    while (past.length > AVATAR_HISTORY_LIMIT) past.shift();
-    this.history = { past, present: next, future: [] };
-    this.publish();
-  }
-
-  private toggleLock(field: keyof AvatarChoices['locks']): void {
-    const locks = { ...this.present().locks, [field]: !this.present().locks[field] };
-    this.history = recordChoices(this.history, { ...this.present(), locks });
-    this.publish();
-  }
-
-  private setSlot(slot: string): void {
-    this.slot = slot;
-    const garments = this.garmentsFor(slot);
-    const existing = this.present().slots[slot];
-    if (existing) {
-      this.garment = existing.garment;
-      this.slotMode = existing.mode;
-    } else {
-      this.garment = garments[0] ?? '';
-      this.slotMode = 'any';
+    if (!this.gesture || !this.recipe) {
+      this.gesture = null;
+      return;
     }
+    const before = this.gesture;
+    this.gesture = null;
+    if (recipeHashOf(before) !== recipeHashOf(this.recipe)) this.remember(before);
     this.publish();
   }
 
-  private applySlot(): void {
-    const slots = { ...this.present().slots };
-    if (this.slotMode === 'any' || !this.garment) delete slots[this.slot];
-    else slots[this.slot] = { mode: this.slotMode, garment: this.garment };
-    this.commit({ ...this.present(), slots });
+  private remember(before?: CharacterRecipe): void {
+    const recipe = before ?? this.recipe;
+    if (!recipe) return;
+    this.past = [
+      ...this.past,
+      { recipe: cloneRecipe(recipe), seed: this.seed, race: this.race, gender: this.gender },
+    ];
+    if (this.past.length > HISTORY_LIMIT) this.past.shift();
+    this.future = [];
   }
 
-  private clearSlot(slot: string): void {
-    const slots = { ...this.present().slots };
-    delete slots[slot];
-    if (slot === this.slot) this.slotMode = 'any';
-    this.commit({ ...this.present(), slots });
-  }
-
-  private randomize(): void {
-    const catalog = this.catalog;
-    const next = randomizeChoices(this.present(), {
-      races: this.racePool(this.present().richness),
-      styles: catalog?.styles ?? [this.present().style],
+  private step(direction: -1 | 1): void {
+    const from = direction < 0 ? this.past : this.future;
+    const to = direction < 0 ? this.future : this.past;
+    const snap = from.pop();
+    if (!snap || !this.recipe) return;
+    to.push({
+      recipe: cloneRecipe(this.recipe),
+      seed: this.seed,
+      race: this.race,
+      gender: this.gender,
     });
-    this.commit(next);
-  }
-
-  private setClip(clip: 'Idle' | 'Walk'): void {
-    this.clip = clip;
-    this.working?.play(clip);
-    this.publish();
+    this.seed = snap.seed;
+    this.race = snap.race;
+    this.gender = snap.gender;
+    this.recipe = snap.recipe;
+    try {
+      this.options = optionsFor(this.race, this.gender, 'adult');
+      this.snap = describeRecipe(this.recipe);
+      this.hash = recipeHashOf(this.recipe);
+    } catch (error) {
+      this.errors = [error instanceof Error ? error.message : 'Could not restore that look'];
+    }
+    this.schedule();
   }
 
   private async confirm(): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || !this.recipe) return;
     this.generation += 1;
     this.dirty = false;
     await this.enqueue(this.generation);
-    if (this.closed) return;
-    const avatar = avatarFromChoices(
-      this.present(),
-      this.working?.recipeHash ?? '',
-      this.catalog?.generatorVersion ?? 1,
-    );
+    if (this.closed || !this.recipe) return;
+    const engine = JSON.parse(JSON.stringify(this.recipe.engine)) as Record<string, unknown>;
+    const avatar: PlayerAvatar = {
+      name: this.name.trim() || 'Traveller',
+      seed: this.seed >>> 0,
+      profileEntry: entryFor(this.race, this.gender),
+      generatorVersion: this.recipe.generatorVersion,
+      recipeHash: recipeHashOf(this.recipe),
+      race: this.race,
+      gender: this.gender,
+      recipe: engine,
+    };
     if (this.working) {
       adoptPlayerBody(this.working);
       this.handedOff = true;
     }
-    await this.options.onConfirm(avatar);
-  }
-
-  private async cancel(): Promise<void> {
-    if (this.closed) return;
-    await this.options.onCancel();
+    await this.optionsIn.onConfirm(avatar);
   }
 
   private enqueue(generation: number): Promise<void> {
@@ -352,35 +405,24 @@ export class CharacterCreatorScene implements Scene {
     return run;
   }
 
-  private chain: Promise<void> = Promise.resolve();
-
   private async rebuild(generation: number): Promise<void> {
     if (generation !== this.generation || this.closed) return;
     this.building = true;
     creatorBusy.value = true;
     this.publish();
-    const choices = cloneChoices(this.present());
     try {
-      let body: AvatarBody;
-      if (!forgeReady().ok) {
-        body = placeholderAvatar(choices.seed);
-      } else {
-        const recipe = generateRecipe({
-          seed: choices.seed,
-          profileEntry: profileEntryFromChoices(choices),
-          generatorVersion: this.catalog?.generatorVersion,
-        });
-        body = await buildAvatar(recipe, { budgetMs: 8 });
-        if (body.source === 'placeholder' && forgeBuildError()) {
-          this.note = 'This look could not be built. Showing a stand-in.';
-        } else if (body.source === 'forge') {
-          const failure = forgeReady().reason;
-          if (!failure) this.note = '';
-        }
-      }
+      const body =
+        !forgeReady().ok || !this.recipe
+          ? placeholderAvatar(this.seed)
+          : await buildAvatar(this.recipe, { budgetMs: 8 });
       if (generation !== this.generation || this.closed) {
         body.dispose();
         return;
+      }
+      if (body.source === 'placeholder' && forgeBuildError()) {
+        this.note = 'This look could not be built. Showing a stand-in.';
+      } else if (body.source === 'forge' && forgeReady().ok) {
+        this.note = '';
       }
       body.play(this.clip);
       const previous = this.working;
@@ -391,17 +433,7 @@ export class CharacterCreatorScene implements Scene {
       this.preview?.setBody(body.object3D);
       if (previous && previous !== body) previous.dispose();
     } catch (error) {
-      if (generation !== this.generation || this.closed) return;
       this.note = error instanceof Error ? error.message : 'Could not build this look.';
-      const body = placeholderAvatar(choices.seed);
-      body.play(this.clip);
-      const previous = this.working;
-      this.working = body;
-      this.hash = body.recipeHash;
-      creatorSource.value = 'placeholder';
-      creatorSerial.value += 1;
-      this.preview?.setBody(body.object3D);
-      if (previous) previous.dispose();
     } finally {
       this.building = false;
       creatorBusy.value = false;
@@ -410,88 +442,95 @@ export class CharacterCreatorScene implements Scene {
     }
   }
 
+  private schedule(): void {
+    this.generation += 1;
+    this.dirty = true;
+    this.wait = 0;
+    this.publish();
+  }
+
   private publish(): void {
-    const choices = this.present();
-    const catalog = this.catalog;
-    const min = catalog?.regaliaMinRichness ?? 0.85;
-    const races = this.racePool(choices.richness);
-    const raceList = races.includes(choices.race) ? races : [choices.race, ...races];
-    const garments = this.garmentsFor(this.slot);
-    const garment = garments.includes(this.garment) ? this.garment : (garments[0] ?? '');
-    this.garment = garment;
-    const blocked =
-      choices.richness < min &&
-      (isRegaliaId(choices.style) ||
-        (catalog?.regaliaStyles.includes(choices.style) ?? false) ||
-        choices.race.startsWith('royal_') ||
-        Object.values(choices.slots).some((slot) =>
-          catalog?.regaliaGarments.includes(slot.garment),
-        ));
+    const options = this.options;
+    const snap = this.snap;
+    const worn = snap?.outfit[this.slot] ?? null;
+    const garments = options?.slots[this.slot] ?? [];
+    const wornOption = garments.find((item) => item.id === worn?.id);
+    const style = options?.styles.find((item) => item.id === snap?.hairStyle);
     const view: CreatorView = {
-      intent: this.options.intent,
-      name: choices.name,
-      race: choices.race,
-      gender: choices.gender,
-      style: choices.style,
-      richness: choices.richness,
-      seed: choices.seed,
-      locks: { ...choices.locks },
-      races: raceList,
-      styles: styleOptions(catalog, choices.style),
-      slots: catalog?.slots ?? (this.slot ? [this.slot] : []),
-      garments,
-      slot: this.slot,
-      garment,
-      slotMode: this.slotMode,
-      chips: Object.entries(choices.slots).map(([slot, rule]) => ({
-        slot,
-        label: labelize(slot),
-        mode: rule.mode,
-        garment: rule.garment,
+      intent: this.optionsIn.intent,
+      name: this.name,
+      race: this.race,
+      gender: this.gender,
+      races: this.races.includes(this.race) ? this.races : [this.race, ...this.races],
+      seed: this.seed,
+      skins: (options?.skins ?? []).map(swatchLabel),
+      skin: snap?.skin ?? '',
+      hairColors: (options?.hairColors ?? [])
+        .filter((item) => !snap?.skin || !item.deniedSkins?.includes(snap.skin))
+        .map(swatchLabel),
+      hairColor: snap?.hairColor ?? '',
+      showHairColor: options?.controls.hairColor !== false,
+      iris: (options?.iris ?? []).map(swatchLabel),
+      eyeColor: snap?.eyeColor ?? '',
+      scleras: (options?.sclera ?? []).map(swatchLabel),
+      sclera: snap?.sclera ?? '',
+      styles: (options?.styles ?? []).map((item) => ({
+        id: item.id,
+        label: item.name || pretty(item.id),
       })),
-      regaliaWarning:
-        choices.richness >= min
-          ? ''
-          : blocked
-            ? `This look uses regalia. Forge leaves it off until richness reaches ${min.toFixed(2)}.`
-            : `Regalia — crowns, royal styles, royal races — needs richness ${min.toFixed(2)} or higher.`,
-      pixieNote: (catalog?.flyerRaces ?? ['pixie']).includes(choices.race)
-        ? `${labelize(choices.race)} hovers. Idle is a hover and Walk is flight.`
-        : '',
+      hairStyle: snap?.hairStyle ?? '',
+      showHairStyle: options?.controls.hairStyle !== false,
+      hatNote: hatNote(style?.headwear ?? {}, worn?.id, snap),
+      facialHair: (options?.facialHair ?? []).map((item) => ({
+        id: item.id,
+        label: item.name || pretty(item.id),
+      })),
+      facial: snap?.facialHair ?? '',
+      showFacial: options?.controls.facialHair === true,
+      showStubble: options?.controls.stubble === true,
+      stubble: snap?.stubble ?? 0,
+      lengths: lengthSliders(options, snap),
+      heightSliders: bodySliders(options, snap, 'height'),
+      buildSliders: bodySliders(options, snap, 'build'),
+      shapeSliders: bodySliders(options, snap, 'shape'),
+      facePresets: options?.face.presets ?? [],
+      facePreset: this.facePreset,
+      faceParts: faceParts(options, snap),
+      faceParams: (options?.face.params ?? []).map((spec) => ({
+        id: spec.id,
+        label: pretty(spec.id.replace(/^face_/, '')),
+        min: spec.min,
+        max: spec.max,
+        step: spec.step,
+        value: snap?.face.params[spec.id] ?? spec.default,
+      })),
+      slots: Object.keys(options?.slots ?? {}),
+      slot: this.slot,
+      garment: worn?.id ?? '',
+      garments: garments.map((item) => item.id),
+      dyes: (wornOption?.dyeRegions ?? []).map((region) => ({
+        region,
+        rgb: snap?.dye[worn?.id ?? '']?.[region] ?? [],
+        swatches: dyeSwatches(region, options?.palettes ?? {}),
+      })),
+      warnings: this.warnings,
+      errors: this.errors,
       note: this.note,
       hash: this.hash,
-      canUndo: this.history.past.length > 0,
-      canRedo: this.history.future.length > 0,
+      canUndo: this.past.length > 0,
+      canRedo: this.future.length > 0,
       clip: this.clip,
       turntable: this.turntable,
+      pixieNote: this.flyerRaces.includes(this.race)
+        ? `${pretty(this.race)} hovers. Idle is a hover and Walk is flight.`
+        : '',
     };
     creatorView.value = view;
     const root = this.canvas?.parentElement;
-    if (root) {
-      root.dataset.building = creatorBusy.value ? 'true' : 'false';
-      root.dataset.avatarSource = creatorSource.value;
-      root.dataset.cfInitMs = forgeReady().initMs.toFixed(0);
-    }
-  }
-
-  private racePool(richness: number): string[] {
-    const fromBundle = this.catalog?.races ?? [];
-    const merged =
-      fromBundle.length > 0 ? [...fromBundle] : ['human', 'elf', 'dwarf', 'kobold', 'pixie'];
-    for (const race of this.profileRaces) {
-      if (!merged.includes(race)) merged.push(race);
-    }
-    return playableIds(merged, richness, this.catalog?.regaliaMinRichness ?? 0.85);
-  }
-
-  private garmentsFor(slot: string): string[] {
-    return this.catalog?.garmentsBySlot[slot] ?? [];
-  }
-
-  private ensureSlot(): void {
-    const slots = this.catalog?.slots ?? [];
-    this.slot = slots[0] ?? '';
-    this.garment = this.garmentsFor(this.slot)[0] ?? '';
+    if (!root) return;
+    root.dataset.building = creatorBusy.value ? 'true' : 'false';
+    root.dataset.avatarSource = creatorSource.value;
+    root.dataset.cfInitMs = forgeReady().initMs.toFixed(0);
   }
 
   private mountCanvas(): void {
@@ -527,29 +566,96 @@ export class CharacterCreatorScene implements Scene {
   }
 }
 
-function styleOptions(catalog: ForgeCatalog | null, current: string): StyleOption[] {
-  const styles = catalog?.styles ?? ['wanderer', 'ranger', 'knight', 'mage', 'villager'];
-  const kinds = catalog?.styleKinds ?? {};
-  const options: StyleOption[] = [];
-  for (const id of styles) {
-    const kind = kinds[id] ?? '';
-    const dual = kind.includes('also a look');
-    const lookOnly = kind === 'look';
-    options.push({
-      id,
-      label: dual || !lookOnly ? labelize(id) : `${labelize(id)} look`,
-    });
-    if (dual) options.push({ id: `look:${id}`, label: `${labelize(id)} look` });
-  }
-  if (current && !options.some((option) => option.id === current)) {
-    options.unshift({ id: current, label: labelize(current) });
-  }
-  return options;
+function entryFor(race: string, gender: AvatarGender): PlayerProfileEntry {
+  return { races: { [race]: 1 }, genders: { [gender]: 1 }, ages: { adult: 1 } };
 }
 
-function labelize(id: string): string {
-  const bare = id.replace(/^(look|arche):/, '').replaceAll('_', ' ');
-  return bare.replace(/\b\w/g, (letter) => letter.toUpperCase());
+function swatchLabel(item: { id: string; rgb: number[]; name?: string }): {
+  id: string;
+  rgb: number[];
+  label: string;
+} {
+  const label = item.name ? `${item.name}` : pretty(item.id);
+  return { id: item.id, rgb: item.rgb, label };
+}
+
+function lengthSliders(options: EditOptions | null, snap: EditSnapshot | null): SliderView[] {
+  if (!options) return [];
+  const values: Record<string, number> = {
+    hairLength: snap?.hairLength ?? 0,
+    bangLength: snap?.bangLength ?? 0,
+    beardLength: snap?.beardLength ?? 0,
+    hairGrey: snap?.hairGrey ?? 0,
+    beardGrey: snap?.beardGrey ?? 0,
+  };
+  return LENGTH_ORDER.flatMap((id) => {
+    const spec = options.hsld[id];
+    if (!spec) return [];
+    return [
+      {
+        id,
+        label: pretty(id),
+        min: spec.min,
+        max: spec.max,
+        step: spec.step,
+        value: values[id] ?? spec.default,
+      },
+    ];
+  });
+}
+
+function bodySliders(
+  options: EditOptions | null,
+  snap: EditSnapshot | null,
+  group: string,
+): SliderView[] {
+  return (options?.sliders ?? [])
+    .filter((spec) => spec.group === group)
+    .map((spec) => ({
+      id: spec.id,
+      label: pretty(spec.id),
+      min: spec.min,
+      max: spec.max,
+      step: spec.step,
+      value: snap?.sliders[spec.id] ?? spec.default,
+    }));
+}
+
+function faceParts(options: EditOptions | null, snap: EditSnapshot | null): PartView[] {
+  if (!options || !snap) return [];
+  const face = options.face;
+  const current = snap.face;
+  const rows: PartView[] = [
+    { key: 'shape', label: 'Eye shape', value: current.shape ?? '', options: face.shapes },
+    { key: 'brow', label: 'Brow', value: current.brow ?? '', options: face.brows },
+    { key: 'nose', label: 'Nose', value: current.nose ?? '', options: face.noses },
+    { key: 'noseType', label: 'Nose type', value: current.noseType ?? '', options: face.noseTypes },
+    { key: 'mouth', label: 'Mouth', value: current.mouth ?? '', options: face.mouths },
+  ];
+  return rows.filter((row) => row.options.length > 1);
+}
+
+function hatNote(
+  headwear: Record<string, string>,
+  wornId: string | undefined,
+  snap: EditSnapshot | null,
+): string {
+  if (!snap?.hairStyle) return '';
+  if (wornId && headwear[wornId]) {
+    return `${pretty(wornId)} wears this hair ${headwear[wornId].replaceAll('_', ' ')}.`;
+  }
+  const preview = Object.entries(headwear)
+    .slice(0, 3)
+    .map(([garment, state]) => `${pretty(garment)} ${state.replaceAll('_', ' ')}`);
+  return preview.length > 0 ? `Hat preview: ${preview.join(', ')}.` : '';
+}
+
+function dyeSwatches(region: string, palettes: Record<string, number[][]>): number[][] {
+  const direct = palettes[region];
+  if (direct && direct.length > 0) return direct.slice(0, 16);
+  const key = Object.keys(palettes).find((name) => region.includes(name) || name.includes(region));
+  const rows = (key && palettes[key]) || palettes.cloth || palettes.linen || [];
+  return rows.slice(0, 16);
 }
 
 function racesInProfile(profile: unknown): string[] {
@@ -558,10 +664,16 @@ function racesInProfile(profile: unknown): string[] {
   return Object.keys(defaults?.races ?? {});
 }
 
-function clamp01(value: number): number {
-  if (!Number.isFinite(value) || value < 0) return 0;
-  if (value > 1) return 1;
-  return value;
+function pretty(id: string): string {
+  return id.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function silentCommands(): CreatorCommands {
+  const quiet = { ...creatorCommands };
+  for (const key of Object.keys(quiet) as (keyof CreatorCommands)[]) {
+    quiet[key] = noop as never;
+  }
+  return quiet;
 }
 
 function noop(): void {

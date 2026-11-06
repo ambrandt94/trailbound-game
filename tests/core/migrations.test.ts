@@ -16,7 +16,7 @@ const core: PackedWorld = {
   worldSeed: 7741,
   player: { name: 'Mara', mapX: 1, mapY: 2, yaw: 0, avatar },
   gameVersion: '0.0.0',
-  cfPin: { version: '1.1.0', generatorVersion: '1' },
+  cfPin: { version: '1.2.0', generatorVersion: '1' },
 };
 
 function manifest(schema: number): SaveManifest {
@@ -26,7 +26,7 @@ function manifest(schema: number): SaveManifest {
     worldSeed: 7741,
     clockHours: 8,
     player: { name: 'Mara', mapX: 1, mapY: 2, yaw: 0, avatar },
-    cfPin: { version: '1.1.0', generatorVersion: '1' },
+    cfPin: { version: '1.2.0', generatorVersion: '1' },
     savedAt: '2026-11-05T00:00:00.000Z',
   };
 }

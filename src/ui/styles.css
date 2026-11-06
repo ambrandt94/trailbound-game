@@ -325,6 +325,36 @@ input:focus-visible {
   padding: 0;
 }
 
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.swatch {
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 0.28rem;
+  border: 2px solid #e4d8c4;
+  cursor: pointer;
+}
+
+.swatch.on {
+  border-color: #1f6a56;
+  outline: 2px solid #d4652f;
+}
+
+.shape-details {
+  margin: 0.4rem 0 0.6rem;
+}
+
+.shape-details summary {
+  cursor: pointer;
+  color: #1f6a56;
+  margin-bottom: 0.35rem;
+}
+
 .slot-block {
   margin-top: 0.4rem;
 }

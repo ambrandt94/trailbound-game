@@ -5,7 +5,7 @@ export const SAVE_SLOT = 'slot-1';
 
 /** Matches `public/vendor/character-forge/current.json`. generatorVersion is stored as text on the save. */
 export const CF_PIN: CfPin = {
-  version: '1.1.0',
+  version: '1.2.0',
   generatorVersion: '1',
 };
 

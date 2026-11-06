@@ -26,7 +26,7 @@ if (body) {
 }
 ```
 
-`getPlayerBody()` is null until the creator confirms, and after `?cf=0` or a Forge failure it is still a body: `source === 'placeholder'` (a lit capsule pawn, not a block). Do not dispose the body from the area; the creator replaces it on the next confirm.
+`getPlayerBody()` is null until a look is confirmed or a continue warms the saved recipe. After `?cf=0` or a Forge failure it is still a body: `source === 'placeholder'` (a lit capsule pawn, not a block). Do not dispose the body from the area; the creator replaces it on the next confirm. The saved `player.avatar.recipe` is the opaque Forge recipe, so a rebuild of that object matches the creator.
 
 Pixies hover. Keep calling `play('Idle')` / `play('Walk')`. Forge maps those to Hover / FlyMove.
 

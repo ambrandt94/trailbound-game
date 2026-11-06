@@ -89,7 +89,7 @@ test('the world saves an avatar and continue restores it', () => {
   world.hero = { x: 3, y: 4, yaw: 0.5 };
   const packed = world.toPacked({
     gameVersion: '0.0.0',
-    cfPin: { version: '1.1.0', generatorVersion: '1' },
+    cfPin: { version: '1.2.0', generatorVersion: '1' },
   });
   expect(packed.player.name).toBe('Sera');
   expect(packed.player.avatar).toMatchObject({

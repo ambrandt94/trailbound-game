@@ -4,7 +4,7 @@
  *
  * Usage:
  *   node tools/sync-character-bundle.mjs <CF_DIST>
- *   CF_DIST=/path/to/dist/1.1.0 node tools/sync-character-bundle.mjs
+ *   CF_DIST=/path/to/dist/1.2.0 node tools/sync-character-bundle.mjs
  *
  * CF_DIST is the directory that contains bundle.json and cf-runtime.mjs
  * (the unpacked dist/<version>/ folder, not the tarball root).

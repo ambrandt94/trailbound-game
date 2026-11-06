@@ -21,7 +21,17 @@ import {
   settings,
   settingsOpen,
 } from '../ui/state';
-import { forgeTimings } from '../render/characters/index';
+import {
+  adoptPlayerBody,
+  buildAvatar,
+  forgeReady,
+  forgeTimings,
+  generateRecipe,
+  initForge,
+  placeholderAvatar,
+  recipeFromStored,
+} from '../render/characters/forge';
+import type { PlayerAvatar } from '../core/people/avatar';
 import type { Clock } from './fixed-step';
 import { FrameClock } from './fixed-step';
 import type { AppMode, GameHost } from './host';
@@ -65,6 +75,7 @@ export class Game implements GameHost {
   private saveCount = 0;
   private saved = false;
   private creatorOpen = false;
+  private avatarToken = 0;
   private detachTouch: (() => void) | null = null;
   private readonly jobs: Array<() => void> = [];
 
@@ -243,11 +254,13 @@ export class Game implements GameHost {
     }
     settingsOpen.value = false;
     savedFlash.value = '';
+    this.warmAvatar();
     await this.enterMap();
   }
 
   private async openCreator(intent: 'new' | 'edit'): Promise<void> {
     if (this.stack.current()?.id === 'CharacterCreator') return;
+    this.avatarToken += 1;
     const returnMode = this.mode === 'creator' ? 'map' : this.mode;
     const returnView = this.view;
     settingsOpen.value = false;
@@ -282,6 +295,35 @@ export class Game implements GameHost {
           this.setCreatorVisible(false);
         },
       }),
+    );
+  }
+
+  private warmAvatar(): void {
+    const token = this.avatarToken;
+    const avatar = this.world.avatar;
+    void this.buildSaved(avatar).then((body) => {
+      if (token !== this.avatarToken) {
+        body.dispose();
+        return;
+      }
+      adoptPlayerBody(body);
+    });
+  }
+
+  private async buildSaved(avatar: PlayerAvatar) {
+    await initForge();
+    if (!forgeReady().ok) return placeholderAvatar(avatar.seed);
+    if (avatar.recipe)
+      return buildAvatar(recipeFromStored(avatar.recipe, avatar.seed), { budgetMs: 8 });
+    return buildAvatar(
+      generateRecipe({
+        seed: avatar.seed,
+        profileEntry: avatar.profileEntry,
+        race: avatar.race,
+        gender: avatar.gender,
+        generatorVersion: avatar.generatorVersion,
+      }),
+      { budgetMs: 8 },
     );
   }
 

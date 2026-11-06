@@ -5,13 +5,13 @@ import { expect, test } from 'vitest';
 import { CF_PIN } from '../../src/app/version';
 import { syncCharacterBundle } from '../../tools/sync-character-bundle.mjs';
 
-test('the vendored pin is Character Forge 1.1.0 generator 1', async () => {
+test('the vendored pin is Character Forge 1.2.0 generator 1', async () => {
   const pin = JSON.parse(await readFile('public/vendor/character-forge/current.json', 'utf8')) as {
     version: string;
     generatorVersion: number;
   };
-  expect(pin).toEqual({ version: '1.1.0', generatorVersion: 1 });
-  expect(CF_PIN).toEqual({ version: '1.1.0', generatorVersion: '1' });
+  expect(pin).toEqual({ version: '1.2.0', generatorVersion: 1 });
+  expect(CF_PIN).toEqual({ version: '1.2.0', generatorVersion: '1' });
 });
 
 test('sync copies a dist into public/vendor/character-forge/<version> and writes current.json', async () => {

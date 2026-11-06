@@ -1,16 +1,32 @@
 import { signal } from '@preact/signals';
-import type { AvatarGender, SlotMode } from '../core/people/avatar';
+import type { AvatarGender } from '../core/people/avatar';
 
-export interface StyleOption {
+export interface SwatchView {
   id: string;
+  rgb: number[];
   label: string;
 }
 
-export interface SlotChip {
-  slot: string;
+export interface SliderView {
+  id: string;
   label: string;
-  mode: SlotMode;
-  garment: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+}
+
+export interface PartView {
+  key: 'shape' | 'brow' | 'nose' | 'noseType' | 'mouth';
+  label: string;
+  value: string;
+  options: string[];
+}
+
+export interface DyeView {
+  region: string;
+  rgb: number[];
+  swatches: number[][];
 }
 
 export interface CreatorView {
@@ -18,32 +34,48 @@ export interface CreatorView {
   name: string;
   race: string;
   gender: AvatarGender;
-  style: string;
-  richness: number;
-  seed: number;
-  locks: {
-    race: boolean;
-    gender: boolean;
-    style: boolean;
-    richness: boolean;
-    slots: boolean;
-  };
   races: string[];
-  styles: StyleOption[];
+  seed: number;
+  skins: SwatchView[];
+  skin: string;
+  hairColors: SwatchView[];
+  hairColor: string;
+  showHairColor: boolean;
+  iris: SwatchView[];
+  eyeColor: string;
+  scleras: SwatchView[];
+  sclera: string;
+  styles: Array<{ id: string; label: string }>;
+  hairStyle: string;
+  showHairStyle: boolean;
+  hatNote: string;
+  facialHair: Array<{ id: string; label: string }>;
+  facial: string;
+  showFacial: boolean;
+  showStubble: boolean;
+  stubble: number;
+  lengths: SliderView[];
+  heightSliders: SliderView[];
+  buildSliders: SliderView[];
+  shapeSliders: SliderView[];
+  facePresets: string[];
+  facePreset: string;
+  faceParts: PartView[];
+  faceParams: SliderView[];
   slots: string[];
-  garments: string[];
   slot: string;
   garment: string;
-  slotMode: 'any' | SlotMode;
-  chips: SlotChip[];
-  regaliaWarning: string;
-  pixieNote: string;
+  garments: string[];
+  dyes: DyeView[];
+  warnings: string[];
+  errors: string[];
   note: string;
   hash: string;
   canUndo: boolean;
   canRedo: boolean;
   clip: 'Idle' | 'Walk';
   turntable: boolean;
+  pixieNote: string;
 }
 
 export const creatorView = signal<CreatorView>(emptyCreatorView());
@@ -56,19 +88,26 @@ export interface CreatorCommands {
   commitName(): void;
   setRace(race: string): void;
   setGender(gender: AvatarGender): void;
-  setStyle(style: string): void;
-  beginGesture(): void;
-  setRichness(value: number): void;
-  endGesture(): void;
-  toggleLock(field: 'race' | 'gender' | 'style' | 'richness' | 'slots'): void;
-  setSlot(slot: string): void;
-  setGarment(garment: string): void;
-  setSlotMode(mode: 'any' | SlotMode): void;
-  applySlot(): void;
-  clearSlot(slot: string): void;
   randomize(): void;
   undo(): void;
   redo(): void;
+  setSkin(id: string): void;
+  setHairColor(id: string): void;
+  setEye(id: string): void;
+  setSclera(id: string): void;
+  setHairStyle(id: string): void;
+  setFacialHair(id: string): void;
+  setStubble(value: number): void;
+  beginGesture(): void;
+  setLength(id: string, value: number): void;
+  setSlider(id: string, value: number): void;
+  setFaceParam(id: string, value: number): void;
+  endGesture(): void;
+  setFacePreset(id: string): void;
+  setFacePart(key: PartView['key'], value: string): void;
+  setSlot(slot: string): void;
+  setGarment(id: string): void;
+  setDye(region: string, rgb: number[]): void;
   setClip(clip: 'Idle' | 'Walk'): void;
   setTurntable(on: boolean): void;
   frame(mode: 'face' | 'body'): void;
@@ -85,19 +124,26 @@ export const creatorCommands: CreatorCommands = {
   commitName: noop,
   setRace: noop,
   setGender: noop,
-  setStyle: noop,
-  beginGesture: noop,
-  setRichness: noop,
-  endGesture: noop,
-  toggleLock: noop,
-  setSlot: noop,
-  setGarment: noop,
-  setSlotMode: noop,
-  applySlot: noop,
-  clearSlot: noop,
   randomize: noop,
   undo: noop,
   redo: noop,
+  setSkin: noop,
+  setHairColor: noop,
+  setEye: noop,
+  setSclera: noop,
+  setHairStyle: noop,
+  setFacialHair: noop,
+  setStubble: noop,
+  beginGesture: noop,
+  setLength: noop,
+  setSlider: noop,
+  setFaceParam: noop,
+  endGesture: noop,
+  setFacePreset: noop,
+  setFacePart: noop,
+  setSlot: noop,
+  setGarment: noop,
+  setDye: noop,
   setClip: noop,
   setTurntable: noop,
   frame: noop,
@@ -115,25 +161,47 @@ export function emptyCreatorView(): CreatorView {
     name: 'Traveller',
     race: 'human',
     gender: 'm',
-    style: 'wanderer',
-    richness: 0.45,
-    seed: 1,
-    locks: { race: false, gender: false, style: false, richness: false, slots: false },
     races: ['human'],
-    styles: [{ id: 'wanderer', label: 'Wanderer' }],
+    seed: 1,
+    skins: [],
+    skin: '',
+    hairColors: [],
+    hairColor: '',
+    showHairColor: true,
+    iris: [],
+    eyeColor: '',
+    scleras: [],
+    sclera: '',
+    styles: [],
+    hairStyle: '',
+    showHairStyle: true,
+    hatNote: '',
+    facialHair: [],
+    facial: '',
+    showFacial: false,
+    showStubble: false,
+    stubble: 0,
+    lengths: [],
+    heightSliders: [],
+    buildSliders: [],
+    shapeSliders: [],
+    facePresets: [],
+    facePreset: 'race',
+    faceParts: [],
+    faceParams: [],
     slots: [],
-    garments: [],
     slot: '',
     garment: '',
-    slotMode: 'any',
-    chips: [],
-    regaliaWarning: '',
-    pixieNote: '',
+    garments: [],
+    dyes: [],
+    warnings: [],
+    errors: [],
     note: '',
     hash: '',
     canUndo: false,
     canRedo: false,
     clip: 'Idle',
     turntable: false,
+    pixieNote: '',
   };
 }

@@ -36,6 +36,11 @@ export interface PlayerAvatar {
   recipeHash: string;
   race: string;
   gender: AvatarGender;
+  /**
+   * Opaque Character Forge recipe. Once a look is generated or edited, this
+   * is what reload builds, so dye and slider edits survive a new seed roll.
+   */
+  recipe?: Readonly<Record<string, unknown>>;
 }
 
 export interface SlotChoice {
@@ -283,6 +288,7 @@ export function isPlayerAvatar(value: unknown): value is PlayerAvatar {
     return false;
   }
   if (typeof value.recipeHash !== 'string') return false;
+  if ('recipe' in value && value.recipe != null && !isRecord(value.recipe)) return false;
   if (typeof value.race !== 'string' || value.race.length === 0) return false;
   if (value.gender !== 'm' && value.gender !== 'f') return false;
   return true;

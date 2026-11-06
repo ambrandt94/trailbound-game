@@ -150,6 +150,9 @@ function copyAvatar(avatar: PlayerAvatar | undefined, name: string): PlayerAvata
     recipeHash: avatar.recipeHash,
     race: avatar.race,
     gender: avatar.gender,
+    recipe: avatar.recipe
+      ? (JSON.parse(JSON.stringify(avatar.recipe)) as PlayerAvatar['recipe'])
+      : undefined,
   };
 }
 

@@ -27,16 +27,20 @@ function root() {
   return page.locator('#app');
 }
 
-async function settle(previousHash) {
+async function buildSerial() {
+  return (await root().getAttribute('data-build-serial')) ?? '0';
+}
+
+async function settle(previousSerial) {
   await page.waitForFunction((previous) => {
     const node = document.querySelector('#app');
     if (!node) return false;
     if (node.dataset.building !== 'false') return false;
     if (node.dataset.avatarSource !== 'forge') return false;
     if (!node.dataset.avatarHash) return false;
-    return previous ? node.dataset.avatarHash !== previous : true;
-  }, previousHash ?? '');
-  await page.waitForTimeout(500);
+    return node.dataset.buildSerial !== previous;
+  }, previousSerial ?? '0');
+  await page.waitForTimeout(400);
 }
 
 try {
@@ -49,7 +53,7 @@ try {
     () => document.querySelector('#app')?.dataset.scene === 'CharacterCreator',
   );
   console.log('creator open, waiting for the first forge build');
-  await settle();
+  await settle('0');
   const first = {
     race: await root().getAttribute('data-avatar-race'),
     hash: await root().getAttribute('data-avatar-hash'),
@@ -57,32 +61,60 @@ try {
     buildMs: await root().getAttribute('data-cf-build-ms'),
   };
   console.log('first look', first);
-  await page.screenshot({ path: `${out}/creator-human.png` });
+  await page.screenshot({ path: `${out}/creator-human-before.png` });
+  const skin = page.getByRole('listbox', { name: 'Skin' }).getByRole('button');
+  const skinCount = await skin.count();
+  if (skinCount < 2) throw new Error('expected more than one skin swatch');
+  const beforeSkin = await buildSerial();
+  await skin.nth(1).click();
+  await settle(beforeSkin);
+  console.log('human edited', await root().getAttribute('data-cf-build-ms'));
+  await page.screenshot({ path: `${out}/creator-human-after.png` });
 
+  const beforePixie = await buildSerial();
   await page.getByLabel('Race', { exact: true }).selectOption('pixie');
-  await page.getByLabel('Style', { exact: true }).selectOption('mage');
-  await settle(first.hash ?? '');
-  console.log(
-    'pixie mage',
-    await root().getAttribute('data-avatar-race'),
-    await root().getAttribute('data-cf-build-ms'),
-  );
-  await page.screenshot({ path: `${out}/creator-pixie-mage.png` });
+  await settle(beforePixie);
+  console.log('pixie before', await root().getAttribute('data-cf-build-ms'));
+  await page.screenshot({ path: `${out}/creator-pixie-before.png` });
+  const hair = page.getByLabel('Hair style', { exact: true });
+  const hairValue = await hair.inputValue();
+  const hairOptions = await hair.locator('option').all();
+  let nextHair = '';
+  for (const option of hairOptions) {
+    const value = await option.getAttribute('value');
+    if (value && value !== hairValue) {
+      nextHair = value;
+      break;
+    }
+  }
+  if (!nextHair) throw new Error('pixie has no alternate hair style');
+  const beforeHair = await buildSerial();
+  await hair.selectOption(nextHair);
+  await settle(beforeHair);
+  console.log('pixie hair', nextHair, await root().getAttribute('data-cf-build-ms'));
+  await page.screenshot({ path: `${out}/creator-pixie-after.png` });
 
-  const pixieHash = await root().getAttribute('data-avatar-hash');
-  await page.getByLabel('Race', { exact: true }).selectOption('kobold');
-  await page.getByLabel('Style', { exact: true }).selectOption('knight');
-  await settle(pixieHash ?? '');
-  console.log('kobold knight', await root().getAttribute('data-cf-build-ms'));
-  await page.screenshot({ path: `${out}/creator-kobold-knight.png` });
-
-  const koboldHash = await root().getAttribute('data-avatar-hash');
+  const beforeGoliath = await buildSerial();
   await page.getByLabel('Race', { exact: true }).selectOption('goliath');
-  await page.getByLabel('Style', { exact: true }).selectOption('scholar');
-  await settle(koboldHash ?? '');
-  console.log('goliath scholar', await root().getAttribute('data-cf-build-ms'));
+  await settle(beforeGoliath);
+  console.log('goliath before', await root().getAttribute('data-cf-build-ms'));
+  await page.screenshot({ path: `${out}/creator-goliath-before.png` });
+  const beforeEyes = await buildSerial();
+  const eyes = page.getByRole('listbox', { name: 'Eyes' }).getByRole('button');
+  const eyeCount = await eyes.count();
+  let pickedEye = false;
+  for (let index = 0; index < eyeCount; index += 1) {
+    const pressed = await eyes.nth(index).getAttribute('aria-pressed');
+    if (pressed === 'true') continue;
+    await eyes.nth(index).click();
+    pickedEye = true;
+    break;
+  }
+  if (!pickedEye) throw new Error('goliath has no other eye colour');
+  await settle(beforeEyes);
   await page.getByLabel('Name', { exact: true }).fill('Sera');
-  await page.screenshot({ path: `${out}/creator-goliath-scholar.png` });
+  console.log('goliath edited', await root().getAttribute('data-cf-build-ms'));
+  await page.screenshot({ path: `${out}/creator-goliath-after.png` });
 
   const chosen = {
     race: await root().getAttribute('data-avatar-race'),
@@ -116,7 +148,7 @@ try {
     );
   }
 
-  const serial = await root().getAttribute('data-build-serial');
+  const previousSerial = await root().getAttribute('data-build-serial');
   await page.getByRole('button', { name: 'Avatar', exact: true }).click();
   await page.waitForFunction(
     () => document.querySelector('#app')?.dataset.scene === 'CharacterCreator',
@@ -128,7 +160,7 @@ try {
       node.dataset.avatarSource === 'forge' &&
       node.dataset.buildSerial !== previous
     );
-  }, serial ?? '0');
+  }, previousSerial ?? '0');
   await page.waitForTimeout(500);
   const again = await root().getAttribute('data-avatar-hash');
   if (again !== chosen.hash)

@@ -21,7 +21,7 @@ export function sampleCore(clockHours = 9.5): PackedWorld {
       },
     },
     gameVersion: '0.0.0',
-    cfPin: { version: '1.1.0', generatorVersion: '1' },
+    cfPin: { version: '1.2.0', generatorVersion: '1' },
   };
 }
 
@@ -55,7 +55,7 @@ export async function expectSaveRoundTrip(
     race: 'human',
     recipeHash: '0123456789abcdef',
   });
-  expect(manifest?.cfPin).toEqual({ version: '1.1.0', generatorVersion: '1' });
+  expect(manifest?.cfPin).toEqual({ version: '1.2.0', generatorVersion: '1' });
   expect(manifest?.gameVersion).toBe('0.0.0');
   expect(manifest?.savedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
