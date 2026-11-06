@@ -3,9 +3,9 @@
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
 import { THREE } from './three-runtime.js';
-/* Live look controls. Stored in localStorage under tbVisuals, separate from tb3d.
-   The panel is UI only: it never listens for WASD unless a slider inside it is focused,
-   and then the key stops there so the game keeps moving when the panel is unfocused. */
+/* Live look controls. The game settings panel owns persistence (tb-settings).
+   This module only applies the numbers. The old floating panel stays for a host
+   that still has .wrap; it does not write localStorage. */
 (function(){
 const $=s=>document.querySelector(s);
 const AZ0=-7.5*Math.PI/180, ELMAX=38.28418027129749*Math.PI/180, SUNR=47.34976240700686;
@@ -28,11 +28,7 @@ const EXACT={
 "#ffffff":[1,1,1]
 };
 let v=Object.assign({}, FACTORY);
-let hadSave=false, open=false;
-try{
-const s=JSON.parse(localStorage.getItem("tbVisuals")||"null");
-if(s&&s.v){hadSave=true;Object.keys(FACTORY).forEach(k=>{if(s.v[k]!=null)v[k]=s.v[k]});open=!!s.open}
-}catch(e){}
+let open=false;
 try{
 const dbg=(new URLSearchParams(location.search).get("debug")||"").split(/[,\s]+/);
 if(dbg.indexOf("height")>=0){v.heightDebug=1;if(dbg.indexOf("contour")>=0)v.heightContour=1;}
@@ -79,9 +75,7 @@ if(c>1)g.lerp(new THREE.Color(0x7aa4dc), Math.min(1,c-1));
 else if(c<1)g.lerp(new THREE.Color(0xc8c0b4), Math.min(1,1-c));
 return g;
 }
-function save(){
-try{localStorage.setItem("tbVisuals", JSON.stringify({v:v, open:panel.classList.contains("on")}))}catch(e){}
-}
+function save(){}
 function snapshot(){
 const o={_key:"tbVisuals"};
 Object.keys(FACTORY).forEach(k=>{o[k]=v[k]});
@@ -347,6 +341,7 @@ const wrap=$(".wrap");
 if(wrap)wrap.appendChild(panel);
 const fpsEl=document.createElement("div");
 fpsEl.id="fps";fpsEl.hidden=true;
+fpsEl.style.cssText="position:absolute;right:10px;top:10px;z-index:6;background:rgba(0,0,0,.55);color:#fff;font:12px/1.4 ui-monospace,Menlo,monospace;padding:4px 8px;border-radius:6px;pointer-events:none";
 if(wrap)wrap.appendChild(fpsEl);
 const vb=$(".vbar");
 const vbBtn=document.createElement("button");
@@ -376,13 +371,21 @@ const now=performance.now();
 if(fpsPrev){const dt=now-fpsPrev;if(dt>0)fpsEl.textContent=Math.round(1000/dt)+" fps"}
 fpsPrev=now;
 }
+function setLook(next, opt){
+if(!next)return;
+Object.keys(FACTORY).forEach(function(k){if(next[k]!=null)v[k]=next[k]});
+refresh();
+applyLook();
+if(!opt||opt.camera!==false)applyCam();
+}
 function mount(c){
 ctx=c;
-if(!hadSave){v.px=c.P.px;v.camFov=c.P.camFov;v.camDist=c.P.camDist;v.camPitch=c.P.camPitch;refresh()}
 applyLook();
-if(hadSave)applyCam();
+applyCam();
+const parent=c.R&&c.R.domElement&&c.R.domElement.parentElement;
+if(parent&&fpsEl.parentElement!==parent)parent.appendChild(fpsEl);
 }
 /* Apply look values without saving, e.g. the light lab lever. A reload brings back the saved set. */
 function preview(o){Object.assign(v,o);refresh();applyWorld()}
-window.TBVisuals={v:v, mount:mount, preview:preview, frame:frame, sunOffset:sunOffset, applySky:applySky, worldReady:applyWorld};
+window.TBVisuals={v:v, mount:mount, setLook:setLook, preview:preview, frame:frame, sunOffset:sunOffset, applySky:applySky, worldReady:applyWorld};
 })();

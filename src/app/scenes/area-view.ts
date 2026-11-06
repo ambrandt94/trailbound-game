@@ -2,7 +2,7 @@ import { music } from '../../audio/music';
 import type { AreaHandoff } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
 import { AreaRenderer } from '../../render/area/area-renderer';
-import { hint, settings } from '../../ui/state';
+import { hint, settings, settingsOpen } from '../../ui/state';
 import {
   controllerExitToMap,
   exitFromCancel,
@@ -19,7 +19,7 @@ export interface AreaEnter {
 }
 
 const CONTROLS =
-  'WASD move · Space jump · Shift sprint · F use · Q/E camera · V zoom. Walk off the edge to leave.';
+  'WASD move · Space jump · Shift sprint · Ctrl sneak · Alt roll · F use · Q/E orbit · Z/X pitch · V zoom · C overhead/3rd · wheel zoom. Walk off the edge to leave.';
 
 export class AreaView implements Scene {
   readonly id = 'area';
@@ -59,6 +59,10 @@ export class AreaView implements Scene {
     this.renderer.step(dt);
     this.host.world.advanceClock(dt);
     if (this.host.keyboard.consumePress('Escape')) {
+      if (settingsOpen.value) {
+        settingsOpen.value = false;
+        return;
+      }
       this.leave(exitFromCancel(0));
     }
   }

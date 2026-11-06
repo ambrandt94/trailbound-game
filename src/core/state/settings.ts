@@ -1,3 +1,5 @@
+import { DEFAULT_AREA_LOOK, normalizeAreaLook, type AreaLook } from './area-look';
+
 export type MapSkinId = 'classic' | 'trailbound48';
 
 export interface GameSettings {
@@ -7,6 +9,8 @@ export interface GameSettings {
   voices: number;
   muteVoices: boolean;
   mapSkin: MapSkinId;
+  /** 3D area look, camera, and controller feel. Lives with the other preferences. */
+  look: AreaLook;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -16,6 +20,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   voices: 40,
   muteVoices: false,
   mapSkin: 'trailbound48',
+  look: DEFAULT_AREA_LOOK,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -37,5 +42,6 @@ export function normalizeSettings(value: unknown): GameSettings {
     muteVoices:
       typeof record.muteVoices === 'boolean' ? record.muteVoices : DEFAULT_SETTINGS.muteVoices,
     mapSkin: record.mapSkin === 'classic' ? 'classic' : 'trailbound48',
+    look: normalizeAreaLook(record.look),
   };
 }

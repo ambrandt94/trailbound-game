@@ -2,6 +2,7 @@
    Not typechecked: a full TS conversion of these files would stall the port.
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
+import { locomotionSample } from '../locomotion.ts';
 import { THREE } from './three-runtime.js';
 /* Player (and the talkative meadow NPC) visuals.
    Movement stays on the existing rig; this only swaps the cubes for a hero GLB
@@ -56,22 +57,26 @@ return true;
 function dressAll(){claimed.forEach(dress);}
 /* Returns true once a hero mesh owns the pose. Jump and fall keep the clip they left the ground with.
    Walk and Run are foot-locked to ground speed; everything else plays at the rip's native rate. */
-const WALK_MAX=2.2;/* m/s at scale 1: slower than this reads as a walk, even in the run state */
 function drive(rig,p,dt){
 if(!rig.mixer)return false;
-const s=p.st,g=rig.gait,rate=g?g.rate:1,spd=Math.hypot(p.vx,p.vz),size=rig.size*rig.root.scale.x;
-let name=null,scale=rate;
-if(s==="sprint"||s==="dodge"||s==="run")name=g&&spd<WALK_MAX*size?"Walk":"Run";
-else if(s==="sneak"||s==="carry")name="Walk";
-else if(s==="ride"){name="Idle";scale=rate*.8;}
-else if(s==="emote"||s==="yell")name=rig.actions.Cheer?"Cheer":"Interact";
-else if(s==="jump"||s==="fall")name=null;
-else name="Idle";
-if(name)play(rig,name);
-const cur=rig.actions[rig.clip];
-if(g&&cur&&g.stride[rig.clip]&&(name==="Walk"||name==="Run"))scale=Math.max(.15,TBAssets.footLock(cur.getClip(),g.stride[rig.clip],spd,size));
-else if(!g&&name==="Run")scale=s==="sprint"?1.28:s==="dodge"?1.45:1;
-rig.mixer.timeScale=scale;
+const names=Object.keys(rig.actions);
+const durations={};
+for(let i=0;i<names.length;i++){
+const act=rig.actions[names[i]];
+durations[names[i]]=act.getClip().duration;
+}
+const g=rig.gait;
+const sample=locomotionSample({
+state:p.st,
+speed:Math.hypot(p.vx,p.vz),
+scale:rig.size*rig.root.scale.x,
+clips:names,
+durations:durations,
+strides:g?g.stride:undefined,
+gaitRate:g?g.rate:1
+});
+if(sample.clip)play(rig,sample.clip);
+rig.mixer.timeScale=sample.timeScale;
 rig.mixer.update(dt);
 return true;
 }

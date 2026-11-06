@@ -2,6 +2,16 @@
    Default camera is the furthest overhead view (Top-down vista).
    Keyboard and gamepad arrive as an action snapshot; this file does not bind touch.
 */
+import {
+  AREA_VIEWS,
+  cycleZoom,
+  matchView,
+  toggleCameraMode,
+  zoomDistance,
+} from '../../../core/state/area-camera.ts';
+import { visualNumbers } from '../../../core/state/area-look.ts';
+import { forgeClip, locomotionSample } from '../locomotion.ts';
+import { stepMotor, takeSimSteps } from '../motor.ts';
 import { aimForgeSun, getPlayerBody, tickPlayerBody } from '../../characters/forge.ts';
 import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
@@ -40,16 +50,7 @@ const DEF = {
   horseMult: 1.9,
 };
 
-const VIEWS = [
-  { n: 'Top-down vista', camPitch: 50, camDist: 60, camFov: 24, camLag: 0.25 },
-  { n: 'Top-down far', camPitch: 56, camDist: 24, camFov: 24, camLag: 0.2 },
-  { n: 'Top-down mid', camPitch: 42, camDist: 30, camFov: 52, camLag: 0.12 },
-  { n: 'Top-down near', camPitch: 42, camDist: 9, camFov: 36, camLag: 0.1 },
-  { n: '3rd-person vista', tp: 1, camPitch: 20, camDist: 26, camFov: 42, camLag: 0.2 },
-  { n: '3rd-person far', tp: 1, camPitch: 28, camDist: 9, camFov: 45, camLag: 0.16 },
-  { n: '3rd-person mid', tp: 1, camPitch: 20, camDist: 6.5, camFov: 50, camLag: 0.13 },
-  { n: '3rd-person near', tp: 1, camPitch: 14, camDist: 4, camFov: 55, camLag: 0.1 },
-];
+const VIEWS = AREA_VIEWS;
 
 const COLORS = {
   hair: '#d9b25f',
@@ -150,6 +151,15 @@ function blankActions() {
 export async function createTownSession(canvas, hooks) {
   const P = { ...DEF };
   let vi = 0;
+  let lookNow = null;
+  let appliedSig = '';
+  let pushedCam = null;
+  let pushAt = 0;
+  let simAcc = 0;
+  const FEEL_KEYS = [
+    'maxSpeed', 'sprintMult', 'sneakMult', 'horseMult', 'accel', 'decel', 'turn', 'airCtl',
+    'jumpH', 'grav', 'fall', 'coyote', 'buffer', 'dodgeSpeed', 'dodgeTime', 'dodgeCd', 'scale', 'slow',
+  ];
   let NP = playerCount();
   const isTP = () => vi >= 0 && !!VIEWS[vi]?.tp;
 
@@ -332,9 +342,21 @@ export async function createTownSession(canvas, hooks) {
     obj.position.set(p.x, p.y, p.z);
     obj.rotation.y = p.yaw;
     obj.scale.setScalar(P.scale);
-    const moving = p.g && Math.hypot(p.vx, p.vz) > 0.35;
-    const clip = moving ? 'Walk' : 'Idle';
-    if (forgePawn.clip !== clip) forgePawn.play(clip);
+    const speed = Math.hypot(p.vx, p.vz);
+    const sample = locomotionSample({
+      state: p.st,
+      speed,
+      scale: P.scale,
+      clips: ['Idle', 'Walk'],
+    });
+    const clip = forgeClip(sample, forgePawn.clip === 'Walk' ? 'Walk' : 'Idle');
+    const pose = {
+      clip,
+      timeScale: sample.clip ? sample.timeScale : 1,
+      fade: sample.clip && clip !== forgePawn.clip ? sample.fade : 0,
+    };
+    if (typeof forgePawn.present === 'function') forgePawn.present(pose);
+    else if (forgePawn.clip !== clip) forgePawn.play(clip);
   }
 
   function goView(i) {
@@ -346,12 +368,10 @@ export async function createTownSession(canvas, hooks) {
     P.camLag = view.camLag;
   }
   function cycleView() {
-    const base = isTP() ? 4 : 0;
-    goView(vi < 0 ? 2 : base + ((vi - base + 1) % 4));
+    goView(cycleZoom(vi));
   }
   function toggleMode() {
-    const level = vi < 0 ? 2 : vi % 4;
-    goView(isTP() ? level : 4 + level);
+    goView(toggleCameraMode(vi));
   }
 
   const ctx = { scene, BX, players: PLS, rigs: RIGS, sun, things: TH, goView };
@@ -561,127 +581,62 @@ export async function createTownSession(canvas, hooks) {
     }
   }
   let clock = 0;
+  function motorParams(p) {
+    return {
+      maxSpeed: P.maxSpeed,
+      sprintMult: P.sprintMult,
+      sneakMult: P.sneakMult,
+      horseMult: P.horseMult,
+      accel: P.accel,
+      decel: P.decel,
+      turn: P.turn,
+      airCtl: P.airCtl,
+      jumpH: P.jumpH,
+      grav: P.grav,
+      fall: P.fall,
+      coyote: P.coyote,
+      buffer: P.buffer,
+      dodgeSpeed: P.dodgeSpeed,
+      dodgeTime: P.dodgeTime,
+      dodgeCd: P.dodgeCd,
+      stretch: P.stretch,
+      camYaw: P.camYaw,
+      radius: p.mount ? 0.6 : RAD,
+      stepSnap: 0.45,
+    };
+  }
   function step(dt, p) {
     const I = p.i;
     if (!p.n) clock += dt;
     if (pre(p, dt)) return;
-    const ix = clamp(I.r - I.l + I.gx, -1, 1);
-    const iz = clamp(I.u - I.d - I.gy, -1, 1);
-    const th = P.camYaw * Math.PI / 180;
-    let mx = Math.cos(th) * ix - Math.sin(th) * iz;
-    let mz = -Math.sin(th) * ix - Math.cos(th) * iz;
-    let mag = Math.hypot(mx, mz);
-    if (mag > 1) {
-      mx /= mag;
-      mz /= mag;
-      mag = 1;
-    }
-    if (p.emT > 0 || p.lock) {
-      mx = mz = mag = 0;
-    }
-    if (I.jp) {
-      p.bt = P.buffer;
-      I.jp = false;
-    }
-    p.bt -= dt;
-    p.ct = p.g ? P.coyote : p.ct - dt;
-    p.lt -= dt;
-    p.dc -= dt;
-    p.t += dt;
-    if (I.dj && p.dc <= 0 && p.dodge <= 0 && p.emT <= 0 && !p.lock) {
-      p.dodge = P.dodgeTime;
-      p.dc = P.dodgeTime + P.dodgeCd;
-      const dx = mag > 0.1 ? mx / mag : Math.sin(p.yaw);
-      const dz = mag > 0.1 ? mz / mag : Math.cos(p.yaw);
-      p.ddx = dx;
-      p.ddz = dz;
-      p.yaw = Math.atan2(dx, dz);
-      p.lt = 0;
-    }
+    const ix = clamp(I.r - I.l + (I.gx || 0), -1, 1);
+    const iz = clamp(I.u - I.d - (I.gy || 0), -1, 1);
+    const jumpPressed = !!I.jp;
+    const dodgePressed = !!I.dj;
+    I.jp = false;
     I.dj = false;
-    if (p.dodge > 0) {
-      p.dodge -= dt;
-      const k = Math.max(0, p.dodge / P.dodgeTime);
-      p.vx = p.ddx * P.dodgeSpeed * (0.3 + 0.7 * k);
-      p.vz = p.ddz * P.dodgeSpeed * (0.3 + 0.7 * k);
-    } else {
-      const sm = p.carry ? 0.8 : I.c || I.gsn ? P.sneakMult : I.s || I.gsp ? P.sprintMult : 1;
-      p.sm = sm;
-      const ctl = p.g ? 1 : P.airCtl;
-      const tx = mx * P.maxSpeed * sm;
-      const tz = mz * P.maxSpeed * sm;
-      const dx = tx - p.vx;
-      const dz = tz - p.vz;
-      const len = Math.hypot(dx, dz);
-      const a = (mag > 0.05 ? P.accel : P.decel) * ctl * dt;
-      if (len <= a) {
-        p.vx = tx;
-        p.vz = tz;
-      } else {
-        p.vx += (dx / len) * a;
-        p.vz += (dz / len) * a;
-      }
-      if (mag > 0.15) {
-        const ty = Math.atan2(mx, mz);
-        let d = ((ty - p.yaw + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
-        const m = P.turn * dt;
-        p.yaw += clamp(d, -m, m);
-      }
-    }
-    if (p.bt > 0 && p.ct > 0 && p.dodge <= 0 && p.emT <= 0 && !p.lock) {
-      p.vy = Math.sqrt(2 * P.grav * P.jumpH);
-      p.bt = 0;
-      p.ct = 0;
-      p.g = false;
-      p.lt = 0;
-      p.sy = 1 + 0.3 * P.stretch;
-      p.sx = 1 - 0.2 * P.stretch;
-    }
-    p.vy = Math.max(p.vy - P.grav * (p.vy < 0 ? P.fall : 1) * dt, -40);
-    const indoors = window.TBInteriors && TBInteriors.contains(p.x, p.z);
-    if (indoors) {
-      const b = TBInteriors.clamp(p.x + p.vx * dt, p.z + p.vz * dt);
-      p.x = b.x;
-      p.z = b.z;
-    } else if (window.TBArea && TBArea.active()) {
-      const b = TBArea.walkClamp(p.x + p.vx * dt, p.z + p.vz * dt);
-      p.x = b.x;
-      p.z = b.z;
-    } else {
-      p.x += p.vx * dt;
-      p.z += p.vz * dt;
-    }
-    for (const b of BX) {
-      if (b.h > p.y + 0.3 && !(b.y0 != null && p.y < b.y0 - 0.25)) {
-        const cx = clamp(p.x, b.x - b.w / 2, b.x + b.w / 2);
-        const cz = clamp(p.z, b.z - b.d / 2, b.z + b.d / 2);
-        const dx = p.x - cx;
-        const dz = p.z - cz;
-        const d = Math.hypot(dx, dz);
-        if (d < RAD) {
-          if (d > 1e-4) {
-            p.x = cx + (dx / d) * RAD;
-            p.z = cz + (dz / d) * RAD;
-          } else p.x += RAD;
-        }
-      }
-    }
-    const was = p.g;
-    p.y += p.vy * dt;
-    const gh = gAt(p.x, p.z, p.y);
-    p.g = false;
-    if (p.y <= gh && p.vy <= 0) {
-      const v0 = p.vy;
-      p.y = gh;
-      p.vy = 0;
-      p.g = true;
-      if (!was && v0 < -6) {
-        const k = clamp(-v0 / 20, 0.2, 1);
-        p.lt = 0.05 + 0.1 * k;
-        p.sy = 1 - 0.4 * k * P.stretch;
-        p.sx = 1 + 0.3 * k * P.stretch;
-      }
-    }
+    stepMotor(
+      p,
+      {
+        ix,
+        iz,
+        jumpPressed,
+        dodgePressed,
+        sneak: !!(I.c || I.gsn),
+        sprint: !!(I.s || I.gsp),
+      },
+      motorParams(p),
+      {
+        groundY: (x, z, y) => gAt(x, z, y),
+        clampXZ: (x, z, nx, nz) => {
+          if (window.TBInteriors && TBInteriors.contains(x, z)) return TBInteriors.clamp(nx, nz);
+          if (window.TBArea && TBArea.active()) return TBArea.walkClamp(nx, nz);
+          return { x: nx, z: nz };
+        },
+        blocks: BX,
+      },
+      dt,
+    );
     if (p.y < -10 && window.TBArea && TBArea.active()) {
       const s = TBArea.spawn();
       p.x = s.x + (p.n ? 1.2 : 0);
@@ -689,41 +644,28 @@ export async function createTownSession(canvas, hooks) {
       p.y = (s.y || 0) + 2;
       p.vy = 0;
     }
-    const ty = p.g ? 1 : 1 + clamp(Math.abs(p.vy) / 40, 0, 0.2) * P.stretch;
-    const tx2 = p.g ? 1 : 1 - clamp(Math.abs(p.vy) / 80, 0, 0.1) * P.stretch;
-    p.vsy += ((ty - p.sy) * 500 - p.vsy * 22) * dt;
-    p.sy += p.vsy * dt;
-    p.vsx += ((tx2 - p.sx) * 500 - p.vsx * 22) * dt;
-    p.sx += p.vsx * dt;
-    const spd = Math.hypot(p.vx, p.vz);
-    let ns;
-    if (p.emT > 0) ns = p.yl ? 'yell' : 'emote';
-    else if (p.dodge > 0) ns = 'dodge';
-    else if (p.g) ns = p.lt > 0 && mag < 0.1 ? 'land' : spd > 0.4 ? (p.sm < 1 ? 'sneak' : p.sm > 1 ? 'sprint' : 'run') : 'idle';
-    else ns = p.vy > 0 ? 'jump' : 'fall';
-    if (ns !== p.st) {
-      p.st = ns;
-      p.t = 0;
-    }
-    p.ph += spd * dt * 1.9;
     post(p, dt);
   }
 
   function applyPad(I, pad) {
-    I.l = pad.x < -0.2 ? 1 : 0;
-    I.r = pad.x > 0.2 ? 1 : 0;
-    I.u = pad.z > 0.2 ? 1 : 0;
-    I.d = pad.z < -0.2 ? 1 : 0;
-    I.s = pad.sprint ? 1 : 0;
-    I.c = pad.sneak ? 1 : 0;
-    if (pad.jump) I.jp = true;
-    if (pad.roll) I.dj = true;
-    if (pad.use) I.ij = true;
-    I.em = pad.emote ? 1 : 0;
+    const x = pad && typeof pad.x === 'number' ? pad.x : 0;
+    const z = pad && typeof pad.z === 'number' ? pad.z : 0;
+    I.l = x < 0 ? -x : 0;
+    I.r = x > 0 ? x : 0;
+    I.u = z > 0 ? z : 0;
+    I.d = z < 0 ? -z : 0;
+    I.gx = 0;
+    I.gy = 0;
+    I.s = pad && pad.sprint ? 1 : 0;
+    I.c = pad && pad.sneak ? 1 : 0;
+    if (pad && pad.jump) I.jp = true;
+    if (pad && pad.roll) I.dj = true;
+    if (pad && pad.use) I.ij = true;
+    I.em = pad && pad.emote ? 1 : 0;
   }
 
   function animateOne(fdt, rig, p) {
-    const { root, pv, body, cg, hg, armL, armR, legL, legR, cur, sh } = rig;
+    const { root, pv, body, cg, hg, armL, armR, legL, legR, cur, sh, ring } = rig;
     const s = p.st;
     const sp = Math.min(1.3, Math.hypot(p.vx, p.vz) / P.maxSpeed);
     const sw = P.swing;
@@ -738,7 +680,7 @@ export async function createTownSession(canvas, hooks) {
       T.cloak = 0.1 + b * 0.04;
     } else if (s === 'run' || s === 'sprint' || s === 'sneak' || s === 'carry' || s === 'ride') {
       const a = Math.sin(p.ph);
-      const m = s === 'sprint' ? 1.3 : s === 'sneak' ? 0.55 : 1;
+      const m = s === 'sprint' ? 1.3 : s === 'sneak' ? 0.55 : s === 'carry' ? 0.8 * Math.min(1, sp * 3) : 1;
       T.ll = a * 0.95 * sw * m;
       T.lr = -T.ll;
       T.al = -a * 0.8 * sw * m;
@@ -746,7 +688,7 @@ export async function createTownSession(canvas, hooks) {
       T.lean = P.lean * (s === 'sprint' ? 0.5 : s === 'sneak' ? 0.45 : 0.3) * sp;
       T.cloak = 0.25 + sp * 0.5;
       T.crouch = s === 'sneak' ? 0.16 : 0;
-      bob = Math.abs(Math.cos(p.ph)) * 0.07 * (s === 'sneak' ? 0.3 : 1);
+      bob = Math.abs(Math.cos(p.ph)) * 0.07 * (s === 'sneak' ? 0.3 : s === 'carry' ? Math.min(1, sp * 3) : 1);
     } else if (s === 'dodge') {
       roll = (1 - p.dodge / P.dodgeTime) * 6.2832;
       T.ll = T.lr = -1.3;
@@ -761,10 +703,10 @@ export async function createTownSession(canvas, hooks) {
     } else if (s === 'fall') {
       T.ll = -0.3;
       T.lr = 0.2;
-      T.al = T.ar = -2.2;
+      T.al = T.ar = -2.2 + Math.sin(clock * 20) * 0.2;
       T.cloak = 0.9;
     } else if (s === 'emote') {
-      T.ar = -2.5;
+      T.ar = -2.5 + Math.sin(clock * 16) * 0.5;
       T.al = 0.1;
       T.cloak = 0.2;
     } else if (s === 'yell') {
@@ -802,6 +744,10 @@ export async function createTownSession(canvas, hooks) {
     sh.position.set(p.x, ground + 0.05, p.z);
     sh.scale.setScalar(clamp(1 - (p.y - ground) * 0.2, 0.3, 1));
     sh.visible = p.n === 0 || NP > 1;
+    if (ring) {
+      ring.visible = !!(lookNow && lookNow.hitbox) && (p.n === 0 || NP > 1);
+      ring.position.set(p.x, p.y + 0.06, p.z);
+    }
   }
 
   const cs = { d: P.camDist, p: P.camPitch, f: P.camFov, h: 0.8 };
@@ -1127,6 +1073,66 @@ export async function createTownSession(canvas, hooks) {
     triangles = renderer.info.render.triangles;
   }
 
+  function camOf(look) {
+    return {
+      camYaw: +look.camYaw,
+      camPitch: +look.camPitch,
+      camDist: +look.camDist,
+      camFov: +look.camFov,
+      camLag: +look.camLag,
+    };
+  }
+  function camClose(a, b) {
+    if (!a || !b) return false;
+    return Math.abs(a.camYaw - b.camYaw) < 0.08
+      && Math.abs(a.camPitch - b.camPitch) < 0.08
+      && Math.abs(a.camDist - b.camDist) < 0.08
+      && Math.abs(a.camFov - b.camFov) < 0.08
+      && Math.abs(a.camLag - b.camLag) < 0.01;
+  }
+  function liveCam() {
+    return { camYaw: P.camYaw, camPitch: P.camPitch, camDist: P.camDist, camFov: P.camFov, camLag: P.camLag };
+  }
+  function applyExternalLook() {
+    const look = hooks.getLook ? hooks.getLook() : null;
+    if (!look) return;
+    const sig = JSON.stringify(look);
+    if (sig === appliedSig) return;
+    const echo = camClose(pushedCam, camOf(look));
+    appliedSig = sig;
+    lookNow = look;
+    for (const key of FEEL_KEYS) if (look[key] != null) P[key] = look[key];
+    if (look.px != null) P.px = look.px;
+    if (!echo) {
+      P.camYaw = look.camYaw;
+      P.camPitch = look.camPitch;
+      P.camDist = look.camDist;
+      P.camFov = look.camFov;
+      P.camLag = look.camLag;
+      vi = matchView(P.camPitch, P.camDist, P.camFov);
+      pushedCam = liveCam();
+    }
+    if (window.TBVisuals && TBVisuals.setLook) TBVisuals.setLook(visualNumbers(look), { camera: !echo });
+  }
+  function pushCamera(force) {
+    if (!hooks.onLook) return;
+    const patch = liveCam();
+    if (pushedCam && camClose(pushedCam, patch)) return;
+    const now = performance.now();
+    if (!force && now - pushAt < 150) return;
+    pushAt = now;
+    pushedCam = { ...patch };
+    hooks.onLook(patch);
+  }
+  const onWheel = (event) => {
+    if (dead) return;
+    event.preventDefault();
+    P.camDist = zoomDistance(P.camDist, event.deltaY);
+    vi = matchView(P.camPitch, P.camDist, P.camFov);
+    pushCamera(false);
+  };
+  canvas.addEventListener('wheel', onWheel, { passive: false });
+
   let started = false;
   const session = {
     async start(areaExport, entry) {
@@ -1135,36 +1141,52 @@ export async function createTownSession(canvas, hooks) {
       if (err) throw new Error(err);
       TBArea.receive(areaExport, null);
       if (entry) applyEntry(entry);
-      goView(0);
+      applyExternalLook();
+      if (!hooks.getLook) goView(0);
       started = true;
       publishDebug();
     },
     step(dt) {
       if (dead || !started) return;
+      applyExternalLook();
       const next = hooks.getActions ? hooks.getActions() : blankActions();
       actions = next || blankActions();
-      if (actions.view) cycleView();
-      if (actions.mode) toggleMode();
+      if (actions.view) {
+        cycleView();
+        pushCamera(true);
+      }
+      if (actions.mode) {
+        toggleMode();
+        pushCamera(true);
+      }
       applyPad(PLS[0].i, actions.p1 || blankActions().p1);
       if (NP > 1) applyPad(PLS[1].i, actions.p2 || blankActions().p2);
-      for (let i = 0; i < NP; i++) step(dt, PLS[i]);
+      const taken = takeSimSteps(simAcc, dt, P.slow);
+      simAcc = taken.acc;
+      const h = 1 / 120;
+      for (let s = 0; s < taken.steps; s++) {
+        for (let i = 0; i < NP; i++) step(h, PLS[i]);
+      }
     },
     frame() {
       if (dead || !started) return;
       const now = performance.now();
       const fdt = Math.min(0.05, Math.max(0, (now - lastFrame) / 1000));
       lastFrame = now;
+      const yawSign = lookNow && lookNow.invertX ? -1 : 1;
+      const pitchSign = lookNow && lookNow.invertY ? -1 : 1;
       const rot = ((actions.camRight ? 1 : 0) - (actions.camLeft ? 1 : 0)) * 90;
-      if (rot) P.camYaw = (P.camYaw - rot * fdt + 360) % 360;
+      if (rot) P.camYaw = (P.camYaw - rot * fdt * yawSign + 360) % 360;
       const pit = (actions.camUp ? 1 : 0) - (actions.camDown ? 1 : 0);
-      if (isTP() && pit) P.camPitch = clamp(P.camPitch + pit * 70 * fdt, -5, 85);
-      if (dragX || dragY) {
-        if (dragX) P.camYaw = (P.camYaw - dragX * 0.3 + 360) % 360;
-        if (isTP() && dragY) P.camPitch = clamp(P.camPitch + dragY * 0.25, -5, 85);
+      if (isTP() && pit) P.camPitch = clamp(P.camPitch + pit * 70 * fdt * pitchSign, -5, 85);
+      const dragged = dragX || dragY;
+      if (dragged) {
+        if (dragX) P.camYaw = (P.camYaw - dragX * 0.3 * yawSign + 360) % 360;
+        if (isTP() && dragY) P.camPitch = clamp(P.camPitch + dragY * 0.25 * pitchSign, -5, 85);
         dragX = 0;
         dragY = 0;
-        vi = -1;
       }
+      if (rot || (isTP() && pit) || dragged) pushCamera(false);
       syncForgePawn();
       for (let i = 0; i < NP; i++) animateOne(fdt, RIGS[i], PLS[i]);
       RIGS[1].root.visible = RIGS[1].sh.visible = NP > 1;
@@ -1194,7 +1216,11 @@ export async function createTownSession(canvas, hooks) {
       const p = PLS[0];
       const t = target(p);
       const place = zoneName(p);
-      return t ? `${t.label}  ·  ${place}` : place;
+      const line = t ? `${t.label}  ·  ${place}` : place;
+      if (!(lookNow && lookNow.showHud)) return line;
+      const speed = Math.hypot(p.vx, p.vz).toFixed(1);
+      const view = vi < 0 ? 'custom' : VIEWS[vi].n;
+      return `${line}  ·  ${p.st} ${speed} m/s  ·  ${view}`;
     },
     indoors() {
       return zoneOf(PLS[0]) === 1;
@@ -1222,6 +1248,7 @@ export async function createTownSession(canvas, hooks) {
     },
     dispose() {
       dead = true;
+      canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContext);
       canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('pointermove', onMove);
