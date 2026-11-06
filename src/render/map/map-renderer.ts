@@ -45,6 +45,8 @@ export class MapRenderer {
   private readonly regionCache = new Map<string, RegionBake>();
   bakeMs = 0;
   detailMs = 0;
+  /** Smoothed time of the map paint, in milliseconds. */
+  drawMs = 0;
   frames = 0;
   private fpsWindow = 0;
   private fpsFrames = 0;
@@ -102,6 +104,13 @@ export class MapRenderer {
       return;
     }
     if (this.bakedFor !== world) this.bake(world);
+    const paintStarted = performance.now();
+    const drawnEarly = crispCamera(camera);
+    this.worldRenderer.chunkDestPx = Math.max(1, TILE * drawnEarly.scale);
+    this.worldRenderer.stepFarSheet(world, drawnEarly.x, drawnEarly.y, 4);
+    if (this.skinId !== 'trailbound48') {
+      this.worldRenderer.stepClassicBlocks(world, drawnEarly, cssW, cssH, 4);
+    }
     if (!this.detailDone && this.skinId === 'trailbound48') {
       const done = this.worldRenderer.stepOverview(world, 8);
       if (done) {
@@ -115,7 +124,7 @@ export class MapRenderer {
       this.waterStamp = frame;
       this.worldRenderer.waterFrame = frame;
     }
-    const drawn = crispCamera(camera);
+    const drawn = drawnEarly;
     this.fillRegions(world, drawn, cssW, cssH);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.worldRenderer.draw(ctx, world, drawn, player, cssW, cssH, {
@@ -131,7 +140,17 @@ export class MapRenderer {
       spriteBuildings: true,
       cloudAmt: 0,
     });
+    const paintMs = performance.now() - paintStarted;
+    this.drawMs = this.drawMs === 0 ? paintMs : this.drawMs * 0.8 + paintMs * 0.2;
     this.bakeMs = this.worldRenderer.bakeMs;
+  }
+
+  get lodBytes(): number {
+    return this.worldRenderer.lodBytes;
+  }
+
+  get farReady(): boolean {
+    return this.worldRenderer.farReady;
   }
 
   syncChunks(chunks: Iterable<ChunkData>, world: WorldData): void {
@@ -170,51 +189,59 @@ export class MapRenderer {
     const tiles = this.trailbound;
     if (!tiles || this.skinId !== 'trailbound48') return;
     const tilePx = TILE * camera.scale;
-    if (tilePx < 6) return;
-    const span = 24;
-    const stamp = 48;
+    if (tilePx < 3) return;
+    const stamp = tilePx >= 36 ? 48 : tilePx >= 12 ? 24 : 8;
+    const span = stamp >= 48 ? 24 : stamp >= 24 ? 32 : 48;
     const halfW = viewW / (2 * camera.scale) / TILE;
     const halfH = viewH / (2 * camera.scale) / TILE;
     const xStart = Math.floor((camera.x - halfW) / span) * span;
     const yStart = Math.floor((camera.y - halfH) / span) * span;
     const xEnd = camera.x + halfW;
     const yEnd = camera.y + halfH;
-    const regions: typeof this.worldRenderer.regions = [];
-    const started = performance.now();
+    const wanted: Array<{ x: number; y: number; d: number }> = [];
     for (let y = yStart; y < yEnd + span; y += span) {
-      if (y >= world.height) break;
+      if (y >= world.height || y + span <= 0) continue;
       for (let x = xStart; x < xEnd + span; x += span) {
-        if (y < 0) continue;
-        const key = `${x}:${y}`;
-        let entry = this.regionCache.get(key);
-        if (!entry) {
-          entry = tiles.beginRegion(x, y, span, stamp);
-          this.regionCache.set(key, entry);
-        }
-        if (entry.row < span && performance.now() - started < 10) {
-          tiles.stepRegion(world, entry, 6);
-        }
-        if (entry.row > 0) {
-          regions.push({
-            canvas: entry.canvas,
-            x,
-            y,
-            span,
-            shores: entry.shores,
-            waters: entry.waters,
-            curves: entry.curves,
-          });
-        }
+        if (x >= world.width || x + span <= 0) continue;
+        const dx = x + span * 0.5 - camera.x;
+        const dy = y + span * 0.5 - camera.y;
+        wanted.push({ x, y, d: dx * dx + dy * dy });
       }
     }
-    if (this.regionCache.size > 72) {
-      const drop = this.regionCache.size - 48;
-      let removed = 0;
-      for (const key of this.regionCache.keys()) {
-        this.regionCache.delete(key);
-        removed += 1;
-        if (removed >= drop) break;
+    wanted.sort((a, b) => a.d - b.d);
+    const keep = new Set<string>();
+    const regions: typeof this.worldRenderer.regions = [];
+    const started = performance.now();
+    const byteCap = 32 * 1024 * 1024;
+    let bytes = 0;
+    for (const block of wanted) {
+      const key = `${block.x}:${block.y}:${stamp}`;
+      let entry = this.regionCache.get(key);
+      const est = span * stamp * span * stamp * 4;
+      if (!entry && bytes + est > byteCap) continue;
+      if (!entry) {
+        entry = tiles.beginRegion(block.x, block.y, span, stamp);
+        this.regionCache.set(key, entry);
       }
+      keep.add(key);
+      bytes += est;
+      if (entry.row < span && performance.now() - started < 6) {
+        tiles.stepRegion(world, entry, 4);
+      }
+      if (entry.row >= span) {
+        regions.push({
+          canvas: entry.canvas,
+          x: block.x,
+          y: block.y,
+          span,
+          shores: entry.shores,
+          waters: entry.waters,
+          curves: entry.curves,
+        });
+      }
+    }
+    for (const key of this.regionCache.keys()) {
+      if (!keep.has(key)) this.regionCache.delete(key);
     }
     this.worldRenderer.regions = regions;
   }
@@ -223,6 +250,7 @@ export class MapRenderer {
     this.worldRenderer.terrain = this.skinId === 'trailbound48' ? this.trailbound : null;
     this.overviewStarted = performance.now();
     this.detailDone = this.skinId !== 'trailbound48';
+    this.regionCache.clear();
     this.worldRenderer.bakeWorld(world);
     this.bakedFor = world;
     this.bakeMs = this.worldRenderer.bakeMs;

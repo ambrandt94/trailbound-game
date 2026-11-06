@@ -66,6 +66,16 @@ import {
   type ContourPaths,
 } from './height-view';
 import type { OverviewJob, TrailboundTiles } from './trailbound-bake';
+import {
+  CHUNK_SCREEN_PX,
+  FarSheet,
+  averageTileColor,
+  chunkDetailWanted,
+  mipFactorFor,
+  solidPalette,
+  type GroundPalette,
+} from './detail-lod';
+import { ImageLodCache, downsampleCanvas } from './lod-cache';
 
 const PIXEL_FONT = 'Tiny5, "Press Start 2P", ui-monospace, monospace';
 
@@ -374,6 +384,17 @@ function pathSeason(biome: Biome): number {
 /** Overworld bake budget: 384 cells × 16px ≈ 6k canvas (8-tile cells at 16×). */
 const WORLD_BAKE_MAX_CELLS = 384;
 
+type ChunkImage = CanvasImageSource & { width: number; height: number };
+
+interface ClassicBlock {
+  canvas: HTMLCanvasElement;
+  x: number;
+  y: number;
+  span: number;
+  stamp: number;
+  row: number;
+}
+
 function worldBakeStep(width: number, maxCells: number): number {
   const minStep = Math.max(1, Math.ceil(width / maxCells));
   for (let s = minStep; s <= width; s++) {
@@ -447,7 +468,21 @@ export class WorldRenderer {
   cloudBake: HTMLCanvasElement | null = null;
   /** When false, chunk bakes omit tile roofs so Town Tale sprites can stand in. */
   bakeRoofs = true;
-  private readonly chunkBakes = new Map<string, CanvasImageSource>();
+  /** Screen pixels per world tile from the last draw. Chunk mips match this. */
+  chunkDestPx = CHUNK_SCREEN_PX;
+  private readonly chunkCache = new ImageLodCache<ChunkImage>(48 * 1024 * 1024);
+  private readonly classicCache = new ImageLodCache<ClassicBlock>(32 * 1024 * 1024);
+  private readonly far = new FarSheet(
+    solidPalette(
+      BIOME_COUNT,
+      { r: 127, g: 175, b: 114 },
+      { r: 196, g: 164, b: 108 },
+      { r: 60, g: 128, b: 142 },
+    ),
+  );
+  private paletteWorld: WorldData | null = null;
+  private paletteKind = '';
+  private classicStamp = 0;
   private isoLayer: HTMLCanvasElement | null = null;
   private fogLayer: HTMLCanvasElement | null = null;
   private blurLayer: HTMLCanvasElement | null = null;
@@ -492,6 +527,10 @@ export class WorldRenderer {
 
   bakeWorld(world: WorldData): void {
     const started = performance.now();
+    this.far.clear();
+    this.classicCache.clear();
+    this.classicStamp = 0;
+    this.paletteWorld = null;
     if (this.terrain) {
       this.terrain.frame = this.waterFrame;
       const job = this.terrain.bakeFast(world);
@@ -721,7 +760,8 @@ export class WorldRenderer {
   bakeChunk(chunk: ChunkData, neighbors: Map<string, ChunkData>, world: WorldData): void {
     if (this.terrain) {
       this.terrain.frame = this.waterFrame;
-      this.chunkBakes.set(chunkKey(chunk.wx, chunk.wy), this.terrain.bakeChunk(chunk, world));
+      const baked = this.terrain.bakeChunk(chunk, world);
+      this.storeChunk(chunk.wx, chunk.wy, baked);
       return;
     }
     const canvas = document.createElement('canvas');
@@ -821,15 +861,244 @@ export class WorldRenderer {
     }
 
     if (this.bakeRoofs) paintChunkRoofs(ctx, chunk, neighbors);
-    this.chunkBakes.set(chunkKey(chunk.wx, chunk.wy), canvas);
+    this.storeChunk(chunk.wx, chunk.wy, canvas);
   }
 
   clearChunks(): void {
-    this.chunkBakes.clear();
+    this.chunkCache.clear();
+  }
+
+  get lodBytes(): number {
+    return this.far.bytes + this.chunkCache.bytes + this.classicCache.bytes;
+  }
+
+  get farReady(): boolean {
+    return this.far.ready;
+  }
+
+  /**
+   * One texel per world tile, from the active skin. The coarse bake shows
+   * through until each block is painted.
+   */
+  stepFarSheet(world: WorldData, focusX: number, focusY: number, budgetMs: number): boolean {
+    this.ensureFarPalette(world);
+    return this.far.step(world, focusX, focusY, budgetMs);
+  }
+
+  /** Classic skin, real tiles, for the visible window between far and street zoom. */
+  stepClassicBlocks(
+    world: WorldData,
+    camera: CameraState,
+    viewW: number,
+    viewH: number,
+    budgetMs: number,
+  ): void {
+    if (this.terrain || !this.assets.grasslands) return;
+    const px = camera.scale * TILE;
+    if (px < 3 || px >= CHUNK_SCREEN_PX * 2) return;
+    const stamp = px >= 12 ? 16 : 8;
+    const span = stamp >= 16 ? 24 : 48;
+    if (stamp !== this.classicStamp) {
+      this.classicCache.clear();
+      this.classicStamp = stamp;
+    }
+    const halfW = viewW / (2 * Math.max(camera.scale, 1e-6)) / TILE;
+    const halfH = viewH / (2 * Math.max(camera.scale, 1e-6)) / TILE;
+    const origins: Array<{ x: number; y: number; d: number }> = [];
+    const xStart = Math.floor((camera.x - halfW) / span) * span;
+    const yStart = Math.floor((camera.y - halfH) / span) * span;
+    for (let y = yStart; y < camera.y + halfH + span; y += span) {
+      if (y >= world.height || y + span <= 0) continue;
+      for (let x = xStart; x < camera.x + halfW + span; x += span) {
+        if (x >= world.width || x + span <= 0) continue;
+        const dx = x + span * 0.5 - camera.x;
+        const dy = y + span * 0.5 - camera.y;
+        origins.push({ x, y, d: dx * dx + dy * dy });
+      }
+    }
+    origins.sort((a, b) => a.d - b.d);
+    const started = performance.now();
+    for (const origin of origins) {
+      const key = `${origin.x}:${origin.y}:${stamp}`;
+      let block = this.classicCache.get(key);
+      if (!block) {
+        const canvas = document.createElement('canvas');
+        canvas.width = span * stamp;
+        canvas.height = span * stamp;
+        block = { canvas, x: origin.x, y: origin.y, span, stamp, row: 0 };
+        this.classicCache.set(key, block, canvas.width * canvas.height * 4, stamp);
+      }
+      if (block.row >= block.span) continue;
+      if (performance.now() - started >= budgetMs) break;
+      this.paintClassicRows(world, block, budgetMs - (performance.now() - started));
+    }
   }
 
   hasChunk(wx: number, wy: number): boolean {
-    return this.chunkBakes.has(chunkKey(wx, wy));
+    const level = this.chunkCache.levelOf(chunkKey(wx, wy));
+    if (level === undefined) return false;
+    const wanted = mipFactorFor(this.chunkFullPx(), Math.max(8, this.chunkDestPx));
+    return level <= wanted;
+  }
+
+  private chunkFullPx(): number {
+    return ZONE_SCALE * (this.terrain ? 48 : TILE);
+  }
+
+  private storeChunk(wx: number, wy: number, full: ChunkImage): void {
+    const factor = mipFactorFor(full.width, Math.max(8, this.chunkDestPx));
+    const image = factor <= 1 ? full : downsampleCanvas(full, factor);
+    this.chunkCache.set(chunkKey(wx, wy), image, image.width * image.height * 4, factor);
+  }
+
+  private ensureFarPalette(world: WorldData): void {
+    const kind = this.terrain ? 'trail' : 'classic';
+    if (this.paletteWorld === world && this.paletteKind === kind) return;
+    if (this.terrain) {
+      this.far.setPalette(this.terrain.groundPalette());
+    } else if (this.assets.grasslands) {
+      this.far.setPalette(this.classicGroundPalette());
+    } else {
+      return;
+    }
+    this.paletteWorld = world;
+    this.paletteKind = kind;
+  }
+
+  private classicGroundPalette(): GroundPalette {
+    const img = this.assets.grasslands;
+    const ground = new Uint8Array(BIOME_COUNT * 3);
+    for (let biome = 0; biome < BIOME_COUNT; biome++) {
+      const kind = biome as Biome;
+      const group = overlayGroup(kind);
+      const src = group !== null ? tileSrc(group, biomeSeason(kind), 1, 1) : grassSrc(kind);
+      const [r, g, b] = averageTileColor(img, src.sx, src.sy, TILE, TILE);
+      ground[biome * 3] = r;
+      ground[biome * 3 + 1] = g;
+      ground[biome * 3 + 2] = b;
+    }
+    const roadSrc = tileSrc(GROUPS.path, biomeSeason(Biome.Plains), 1, 1);
+    const [rr, rg, rb] = averageTileColor(img, roadSrc.sx, roadSrc.sy, TILE, TILE, [196, 164, 108]);
+    return { ground, road: { r: rr, g: rg, b: rb } };
+  }
+
+  private paintClassicRows(world: WorldData, block: ClassicBlock, budgetMs: number): void {
+    const ctx = block.canvas.getContext('2d');
+    if (!ctx) {
+      block.row = block.span;
+      return;
+    }
+    ctx.imageSmoothingEnabled = false;
+    const started = performance.now();
+    const budget = Math.max(0.5, budgetMs);
+    while (block.row < block.span && performance.now() - started < budget) {
+      const wy = block.y + block.row;
+      if (wy >= 0 && wy < world.height) {
+        for (let lx = 0; lx < block.span; lx++) {
+          const wx = block.x + lx;
+          if (wx < 0 || wx >= world.width) continue;
+          this.paintClassicTile(
+            ctx,
+            world,
+            wx,
+            wy,
+            lx * block.stamp,
+            block.row * block.stamp,
+            block.stamp,
+          );
+        }
+      }
+      block.row += 1;
+    }
+  }
+
+  private paintClassicTile(
+    ctx: CanvasRenderingContext2D,
+    world: WorldData,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+  ): void {
+    const g = this.assets.grasslands;
+    const biome = (world.biomes[x + y * world.width] ?? Biome.Plains) as Biome;
+    const grass = grassSrc(biome);
+    ctx.drawImage(g, grass.sx, grass.sy, TILE, TILE, dx, dy, stamp, stamp);
+    const group = overlayGroup(biome);
+    const same = (ox: number, oy: number): boolean => {
+      const nx = x + ox;
+      const ny = y + oy;
+      if (ny < 0 || ny >= world.height) return biome === Biome.Water;
+      const wx = ((nx % world.width) + world.width) % world.width;
+      return (world.biomes[wx + ny * world.width] ?? 0) === biome;
+    };
+    if (group !== null) {
+      const [lx, ly] = blobLocal(same(0, -1), same(1, 0), same(0, 1), same(-1, 0));
+      const src = tileSrc(group, biomeSeason(biome), lx, ly);
+      ctx.drawImage(g, src.sx, src.sy, TILE, TILE, dx, dy, stamp, stamp);
+    }
+    if ((world.paths[x + y * world.width] ?? 0) > 0 && biome !== Biome.Water) {
+      const path = (ox: number, oy: number): boolean => {
+        const nx = x + ox;
+        const ny = y + oy;
+        if (nx < 0 || ny < 0 || nx >= world.width || ny >= world.height) return false;
+        return (world.paths[nx + ny * world.width] ?? 0) > 0;
+      };
+      const [lx, ly] = blobLocal(path(0, -1), path(1, 0), path(0, 1), path(-1, 0));
+      const src = tileSrc(GROUPS.path, biomeSeason(biome), lx, ly);
+      ctx.drawImage(g, src.sx, src.sy, TILE, TILE, dx, dy, stamp, stamp);
+    }
+  }
+
+  private drawClassicBlocks(
+    ctx: CanvasRenderingContext2D,
+    world: WorldData,
+    camera: CameraState,
+    viewW: number,
+    viewH: number,
+  ): void {
+    if (camera.scale * TILE < 3) return;
+    const scale = Math.max(camera.scale, 1e-6);
+    const halfW = viewW / (2 * scale) / TILE + 1;
+    const halfH = viewH / (2 * scale) / TILE + 1;
+    const viewTilesX = viewW / (scale * TILE);
+    const shifts = [0];
+    if (viewTilesX < world.width * 0.92) {
+      if (camera.x - halfW < 0) shifts.push(-world.width);
+      if (camera.x + halfW > world.width) shifts.push(world.width);
+    }
+    ctx.imageSmoothingEnabled = false;
+    for (const shift of shifts) {
+      const x0 = camera.x - shift - halfW;
+      const x1 = camera.x - shift + halfW;
+      const y0 = camera.y - halfH;
+      const y1 = camera.y + halfH;
+      for (const key of this.classicCache.keys()) {
+        const block = this.classicCache.peek(key);
+        if (!block || block.row <= 0) continue;
+        if (
+          block.x + block.span <= x0 ||
+          block.x >= x1 ||
+          block.y + block.row <= y0 ||
+          block.y >= y1
+        ) {
+          continue;
+        }
+        this.classicCache.get(key);
+        ctx.drawImage(
+          block.canvas,
+          0,
+          0,
+          block.span * block.stamp,
+          block.row * block.stamp,
+          (block.x + shift) * TILE,
+          block.y * TILE,
+          block.span * TILE,
+          block.row * TILE,
+        );
+      }
+    }
   }
 
   draw(
@@ -872,6 +1141,7 @@ export class WorldRenderer {
       spriteBuildings?: boolean;
     },
   ): void {
+    this.chunkDestPx = Math.max(1, camera.scale * TILE);
     this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2.5, 0.5, 4.5);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#151b22';
@@ -916,6 +1186,8 @@ export class WorldRenderer {
         opts.detailNode,
         opts.outlineAmt ?? 0.7,
         true,
+        camera.x,
+        camera.y,
       );
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
@@ -963,6 +1235,9 @@ export class WorldRenderer {
         detailT,
         opts.detailNode,
         opts.outlineAmt ?? 0.7,
+        false,
+        camera.x,
+        camera.y,
       );
       this.drawEntities(
         lctx,
@@ -1025,11 +1300,14 @@ export class WorldRenderer {
         if (camera.x - halfW < 0) ctx.drawImage(this.worldBake, -wpx, 0, wpx, hpx);
         if (camera.x + halfW > world.width) ctx.drawImage(this.worldBake, wpx, 0, wpx, hpx);
       }
-      this.paintRegions(ctx);
     }
+    this.far.draw(ctx, world, camera, viewW, viewH);
+    if (this.terrain) this.paintRegions(ctx);
+    else this.drawClassicBlocks(ctx, world, camera, viewW, viewH);
 
     const featureAlpha = smoothstep(0.35, 1.35, camera.scale);
-    const detailT = smoothstep(DETAIL_START, DETAIL_END, camera.scale);
+    const showChunks = chunkDetailWanted(camera.scale);
+    const detailT = showChunks ? 1 : 0;
     const halfW = viewW / (2 * camera.scale) / TILE;
     const viewTilesX = viewW / (camera.scale * TILE);
     const wrapShifts = worldWrapShifts(camera.x, halfW, world.width, viewTilesX);
@@ -1044,16 +1322,16 @@ export class WorldRenderer {
       ctx.globalAlpha = 1;
     }
 
-    if (detailT > 0.02) this.drawVisibleChunks(ctx, camera, viewW, viewH, world, detailT);
+    if (showChunks) this.drawVisibleChunks(ctx, camera, viewW, viewH, world, 1);
     if (opts.showHeight) this.drawRelief(ctx, world, camera, viewW, viewH, !!opts.showContours);
-    if (detailT > 0.02) {
+    if (showChunks) {
       this.drawChunkSprites(
         ctx,
         camera,
         viewW,
         viewH,
         world,
-        detailT,
+        1,
         opts.chunks,
         undefined,
         opts.interior,
@@ -1074,6 +1352,9 @@ export class WorldRenderer {
         detailT,
         opts.detailNode,
         opts.outlineAmt ?? 0.7,
+        false,
+        camera.x,
+        camera.y,
       );
       ctx.restore();
     }
@@ -1429,11 +1710,11 @@ export class WorldRenderer {
   }
 
   forgetChunk(wx: number, wy: number): void {
-    this.chunkBakes.delete(chunkKey(wx, wy));
+    this.chunkCache.delete(chunkKey(wx, wy));
   }
 
   hasChunkBake(wx: number, wy: number): boolean {
-    return this.chunkBakes.has(chunkKey(wx, wy));
+    return this.chunkCache.has(chunkKey(wx, wy));
   }
 
   private drawVisibleChunks(
@@ -1456,7 +1737,7 @@ export class WorldRenderer {
     for (let wy = y0; wy <= y1; wy++) {
       for (let wx = x0; wx <= x1; wx++) {
         if (allowed && !allowed.has(chunkKey(wx, wy))) continue;
-        const bake = this.chunkBakes.get(chunkKey(wx, wy));
+        const bake = this.chunkCache.get(chunkKey(wx, wy));
         if (!bake) continue;
         ctx.save();
         ctx.translate(wx * TILE, wy * TILE);
@@ -1608,7 +1889,6 @@ export class WorldRenderer {
     const x1 = camera.x - shift + halfW + pad;
     const y0 = camera.y - halfH - pad;
     const y1 = camera.y + halfH + pad;
-    if (detailT > 0.38) return;
     this.ensureFeatureBuckets(world);
     const cell = 48;
     const i0 = Math.floor(x0 / cell);
@@ -1673,11 +1953,17 @@ export class WorldRenderer {
     detailNode: MapNode | null,
     amt: number,
     context = false,
+    camX = Number.NaN,
+    camY = Number.NaN,
   ): void {
     const overlay = clamp(amt, 0, 1);
     if (overlay < 0.01 && !hoveredId && detailT < 0.35 && !context) return;
     const political = smoothstep(0.28, 1, overlay);
     for (const node of nodes) {
+      if (Number.isFinite(camX) && Number.isFinite(camY)) {
+        const margin = 96 / Math.max(0.04, scale);
+        if (Math.hypot(node.cx - camX, node.cy - camY) > node.radius + margin) continue;
+      }
       const hovered = node.id === hoveredId;
       const isActive = detailNode?.id === node.id;
       const city = node.kind === 'city' || node.kind === 'town';
@@ -1718,13 +2004,16 @@ export class WorldRenderer {
         ctx.lineWidth = (1.05 + overlay * 1.4) / scale;
         ctx.stroke();
       }
+      const major = node.kind === 'city' || node.kind === 'town';
+      const village = major || node.kind === 'village';
       const showName =
         !node.poiKind &&
         (hovered ||
           isActive ||
-          (overlay > 0.38 && scale < 4.2) ||
-          (mapped && scale < 1.45) ||
-          (context && overlay > 0.2 && scale < 10));
+          (context && overlay > 0.2) ||
+          (overlay > 0.2 && scale < 0.08 && major) ||
+          (overlay > 0.2 && scale >= 0.08 && scale < 0.4 && village) ||
+          (overlay > 0.2 && scale >= 0.4));
       if (showName) {
         const b = nodeBounds(node);
         ctx.setLineDash([]);
@@ -1784,6 +2073,7 @@ export class WorldRenderer {
       const revealed = !!visibleIds?.has(poi.id);
       const instanced = world.nodes.some((n) => n.id === poi.id);
       if (!show && !revealed && !hovered && !isActive) continue;
+      if (!hovered && !isActive && scale < 0.09) continue;
       const px = poi.x * TILE;
       const py = poi.y * TILE;
       const color = poiColor(poi.kind);
@@ -1805,15 +2095,17 @@ export class WorldRenderer {
       ctx.strokeRect(-s / 2, -s / 2, s, s);
       ctx.restore();
       const pin = { x: px - s * 1.2, y: py - s * 1.2, w: s * 2.4, h: s * 2.4 };
-      const label =
-        hovered || isActive || scale >= 0.7 || instanced
-          ? `${poi.name} · ${POI_LABELS[poi.kind]}`
-          : poi.name;
-      drawNametag(ctx, label, px, py, scale, {
-        clearAbove: s * 1.35,
-        avoid: [pin],
-        screenPx: this.tagScreenPx,
-      });
+      if (hovered || isActive || scale >= 0.45) {
+        const label =
+          hovered || isActive || scale >= 0.7 || instanced
+            ? `${poi.name} · ${POI_LABELS[poi.kind]}`
+            : poi.name;
+        drawNametag(ctx, label, px, py, scale, {
+          clearAbove: s * 1.35,
+          avoid: [pin],
+          screenPx: this.tagScreenPx,
+        });
+      }
     }
   }
 
