@@ -185,8 +185,45 @@ input:focus-visible {
   inset: 0;
 }
 
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(12, 16, 18, 0.78) 100%);
+  opacity: 0;
+}
+
+.dive-cue {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  pointer-events: none;
+  color: #f6f1e6;
+  text-shadow: 0 1px 2px rgba(20, 16, 12, 0.65);
+}
+
+.dive-cue p {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.dive-ring {
+  width: 5.4rem;
+  height: 5.4rem;
+  border-radius: 50%;
+  -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%);
+  mask: radial-gradient(circle, transparent 58%, #000 60%);
+}
+
 .pill {
   position: absolute;
+  z-index: 1;
   top: 1rem;
   padding: 0.45rem 0.9rem;
   border: 1px solid #e4d8c4;
@@ -474,6 +511,7 @@ input:focus-visible {
 
 .place {
   position: absolute;
+  z-index: 1;
   left: 1rem;
   bottom: 1rem;
   width: min(18rem, calc(100% - 2rem));

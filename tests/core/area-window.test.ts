@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { buildAreaExport } from '../../src/core/area/build-area';
 import {
   AREA_WINDOW_TILES,
+  SETTLEMENT_STOP_SCALE,
   clampStepToSettlement,
   cutAreaWindow,
   resolveAreaAt,
@@ -12,7 +13,6 @@ import { metersToNormalized } from '../../src/core/world/terrain';
 import {
   Biome,
   DEFAULT_WORLD_SETTINGS,
-  DETAIL_START,
   type MapNode,
   type Vec2,
   type WorldData,
@@ -198,12 +198,12 @@ test('wilderness export matches the window and a settlement export keeps the tow
 test('detail zoom stops a stride on the first settlement tile it crosses', () => {
   const world = blankWorld(7741);
   dress(world);
-  const stopped = clampStepToSettlement(world, 8.5, 14.5, 8, 0, DETAIL_START);
+  const stopped = clampStepToSettlement(world, 8.5, 14.5, 8, 0, SETTLEMENT_STOP_SCALE);
   expect(stopped.holdId).toBe('ham');
   expect(stopped.dx).toBeCloseTo(14.5 - 8.5, 5);
   expect(stopped.dy).toBeCloseTo(0, 5);
 
-  const far = clampStepToSettlement(world, 8.5, 14.5, 8, 0, DETAIL_START - 0.1);
+  const far = clampStepToSettlement(world, 8.5, 14.5, 8, 0, SETTLEMENT_STOP_SCALE - 0.1);
   expect(far.holdId).toBeNull();
   expect(far.dx).toBe(8);
 

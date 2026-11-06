@@ -1,6 +1,17 @@
-import { clampStepToSettlement, describeMapStand } from '../../core/area/area-window';
 import {
-  DETAIL_START,
+  SETTLEMENT_STOP_SCALE,
+  clampStepToSettlement,
+  describeMapStand,
+} from '../../core/area/area-window';
+import {
+  diveCueAmount,
+  emptyDiveIntent,
+  stepDiveIntent,
+  zoomEasesToHero,
+  type DiveIntentState,
+} from '../../core/world/map-zoom';
+import {
+  MAP_ZOOM_CAP,
   METERS_PER_WORLD_TILE,
   TILE,
   chunkKey,
@@ -16,6 +27,8 @@ import { MapCamera } from '../../render/map/map-camera';
 import {
   canEnter,
   clockRate,
+  diveCue,
+  diveIntent,
   hint,
   nearTown,
   placeKind,
@@ -32,6 +45,11 @@ export class MapView implements Scene {
   private framed = false;
   /** Settlement id the walker just stepped onto. Held until the keys are released. */
   private settlementHold: string | null = null;
+  private dive: DiveIntentState = emptyDiveIntent();
+  /** Holds the full ring while the fade into 3D is starting. */
+  private diveShown = 0;
+  /** Set when this frame's zoom-in landed on the cap. Consumed in update. */
+  private zoomInAtCap = false;
 
   constructor(private readonly host: GameHost) {}
 
@@ -44,8 +62,7 @@ export class MapView implements Scene {
         this.camera.panPixels(dx, dy);
       },
       zoom: (sx, sy, factor) => {
-        const canvas = this.host.mapCanvas;
-        this.camera.zoomAt(sx, sy, factor, canvas.clientWidth, canvas.clientHeight);
+        this.applyZoom(sx, sy, factor);
       },
     });
   }
@@ -60,7 +77,7 @@ export class MapView implements Scene {
       this.host.keyboard.isDown('ShiftLeft') || this.host.keyboard.isDown('ShiftRight');
     const move = this.host.keyboard.mapAxis();
     const rate = mapClockHoursPerRealSec(this.camera.scale);
-    if (this.camera.scale < DETAIL_START) this.settlementHold = null;
+    if (this.camera.scale < SETTLEMENT_STOP_SCALE) this.settlementHold = null;
     if ((move.x !== 0 || move.y !== 0) && world.data && !this.settlementHold) {
       this.camera.follow = true;
       const speed = travelSpeedTilesPerSec('overworld', sprint, this.camera.scale);
@@ -82,6 +99,11 @@ export class MapView implements Scene {
       if (move.x === 0 && move.y === 0) this.settlementHold = null;
       world.stepIdle(dt, rate);
     }
+    const zoomKey = this.host.keyboard.isDown('Equal') || this.host.keyboard.isDown('NumpadAdd');
+    if (zoomKey && this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3) {
+      this.zoomInAtCap = true;
+      this.camera.follow = true;
+    }
     if (this.host.keyboard.consumePress('Equal') || this.host.keyboard.consumePress('NumpadAdd')) {
       this.zoom(1.12);
     }
@@ -90,6 +112,19 @@ export class MapView implements Scene {
       this.host.keyboard.consumePress('NumpadSubtract')
     ) {
       this.zoom(1 / 1.12);
+    }
+    const canDive = world.data
+      ? describeMapStand(world.data, world.hero.x, world.hero.y).canEnter
+      : false;
+    const atCap = this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3;
+    const stepped = stepDiveIntent(this.dive, dt, this.zoomInAtCap, atCap, canDive);
+    this.zoomInAtCap = false;
+    this.dive = stepped.state;
+    if (stepped.dive) {
+      this.diveShown = 1;
+      this.host.enterArea();
+    } else if (this.dive.intent <= 0) {
+      this.diveShown = 0;
     }
     this.camera.update(dt, world.hero.x, world.hero.y);
     if (world.data && chunkDetailWanted(this.camera.scale)) {
@@ -121,6 +156,9 @@ export class MapView implements Scene {
       canEnter.value = false;
       placeName.value = '';
       clockRate.value = '';
+      diveIntent.value = 0;
+      diveCue.value = 0;
+      this.diveShown = 0;
     } else {
       const stand = describeMapStand(data, world.hero.x, world.hero.y);
       nearTown.value = stand.kind !== 'wilderness' && stand.kind !== 'water' && !!stand.tier;
@@ -129,12 +167,18 @@ export class MapView implements Scene {
       placeTier.value = stand.tier;
       placeKind.value = stand.kind;
       clockRate.value = formatMapClockRate(this.camera.scale);
+      const shown = stand.canEnter ? Math.max(this.dive.intent, this.diveShown) : 0;
+      diveIntent.value = shown;
+      diveCue.value = diveCueAmount(this.camera.scale, shown, stand.canEnter);
       hint.value = stand.blockedReason
         ? 'Open water. Walk ashore to enter.'
-        : stand.tier === 'Wilderness'
-          ? 'Enter walks this ground in 3D. Drag to look around. Scroll to zoom.'
-          : '';
+        : shown > 0.04
+          ? 'Keep zooming to step into 3D.'
+          : stand.tier === 'Wilderness'
+            ? 'Enter walks this ground in 3D. Scroll in at the closest zoom to step through.'
+            : '';
     }
+    this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(3);
     this.host.paintMap({
       seed: world.seed,
       heroX: world.hero.x,
@@ -162,12 +206,16 @@ export class MapView implements Scene {
 
   private zoom(factor: number): void {
     const canvas = this.host.mapCanvas;
-    this.camera.zoomAt(
-      canvas.clientWidth / 2,
-      canvas.clientHeight / 2,
-      factor,
-      canvas.clientWidth,
-      canvas.clientHeight,
-    );
+    this.applyZoom(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
+  }
+
+  private applyZoom(sx: number, sy: number, factor: number): void {
+    if (zoomEasesToHero(this.camera.targetScale, factor)) this.camera.follow = true;
+    const canvas = this.host.mapCanvas;
+    this.camera.zoomAt(sx, sy, factor, canvas.clientWidth, canvas.clientHeight);
+    if (factor > 1.001 && this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3) {
+      this.zoomInAtCap = true;
+      this.camera.follow = true;
+    }
   }
 }

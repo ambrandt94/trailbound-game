@@ -12,6 +12,10 @@ export const settings = signal<GameSettings>({ ...DEFAULT_SETTINGS });
 export const clockText = signal('Day 1  08:00');
 /** Empty at the full map clock. A short multiplier while zoom has slowed time. */
 export const clockRate = signal('');
+/** 0..1 ring while zoom-in at the cap is committing to 3D. */
+export const diveIntent = signal(0);
+/** 0..1 edge darkening near the zoom cap and during the dive. */
+export const diveCue = signal(0);
 export const hint = signal('');
 export const nearTown = signal(false);
 export const savedFlash = signal('');

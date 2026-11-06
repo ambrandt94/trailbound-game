@@ -8,7 +8,6 @@ import { tierForKind } from '../world/settlement-tiers';
 import {
   BIOME_LABELS,
   Biome,
-  DETAIL_START,
   biomeAt,
   boundsFromTiles,
   nodeContaining,
@@ -167,8 +166,14 @@ export interface SettlementStep {
 }
 
 /**
- * While the map is at detail zoom, end a step on the first settlement tile it
- * enters so a long stride cannot skip the town. Already standing in one, the
+ * Zoom at which a step that enters a settlement stops on that tile.
+ * Below the map's zoom cap, so the stop is active at the closest 2D view.
+ */
+export const SETTLEMENT_STOP_SCALE = 2.4;
+
+/**
+ * While the map is near its zoom cap, end a step on the first settlement tile
+ * it enters so a stride cannot skip the town. Already standing in one, the
  * step is unchanged.
  */
 export function clampStepToSettlement(
@@ -179,7 +184,7 @@ export function clampStepToSettlement(
   dy: number,
   scale: number,
 ): SettlementStep {
-  if (!(scale >= DETAIL_START)) return { dx, dy, holdId: null };
+  if (!(scale >= SETTLEMENT_STOP_SCALE)) return { dx, dy, holdId: null };
   if (settlementNodeAt(world, x0, y0)) return { dx, dy, holdId: null };
   const dist = Math.hypot(dx, dy);
   if (!(dist > 0)) return { dx, dy, holdId: null };

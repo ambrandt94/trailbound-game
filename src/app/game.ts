@@ -23,6 +23,7 @@ import {
   canContinue,
   clockRate,
   clockText,
+  diveCue,
   generating,
   hint,
   nearTown,
@@ -556,6 +557,7 @@ export class Game implements GameHost {
     const text = formatClock(this.world.clockHours);
     root.dataset.clock = text;
     root.dataset.clockRate = clockRate.value;
+    root.dataset.dive = diveCue.value.toFixed(3);
     root.dataset.bakeMs = this.mapRenderer.bakeMs.toFixed(1);
     root.dataset.detailMs = this.mapRenderer.detailMs.toFixed(1);
     root.dataset.drawMs = this.mapRenderer.drawMs.toFixed(2);

@@ -8,8 +8,17 @@ export const WORLD_BASE = 192;
 export const WORLD_SCALES = [1, 2, 4, 8, 16] as const;
 export type WorldScale = (typeof WORLD_SCALES)[number];
 export const ZONE_SCALE = 8;
-/** Close enough that a person sprite fills the view. */
+/** Close enough that a person sprite fills the view. The world-map tool's ceiling. */
 export const MAX_SCALE = 160;
+/**
+ * Furthest the playable 2D map zooms. Scale 3.6 draws a world tile at 58 px,
+ * so a 1400 px view shows about 24 tiles across: tree and building footprints
+ * are readable, and a town still sits in a district rather than filling the
+ * screen. The old street zoom (scale 10, 160 px per tile) is past the point
+ * where the 3D area shows more than a larger sprite. Zooming in at this cap
+ * dives into that area.
+ */
+export const MAP_ZOOM_CAP = 3.6;
 /** Adventure / Start adventure camera: Close band, not Person (160). */
 export const CLOSE_SCALE = 32;
 export const DIVE_SCALE = 16.4;
@@ -122,10 +131,11 @@ export const SPRINT_PACE_KMH = 10;
  */
 export const STREET_WALK_MPS = 2;
 /**
- * On-screen walk once zoomed past the full clock. 144 px is one world tile
- * at scale 9, so street zoom crosses about one tile per real second.
- * Farther out, the clock stays at 8 game hours per real minute and the
- * walker is slower on screen than this.
+ * On-screen walk once zoomed past the full clock. At `MAP_ZOOM_CAP` (3.6)
+ * this is about 2.5 world tiles per real second, so a town tile takes under
+ * half a second and the settlement stop can catch it. The map cannot zoom
+ * closer, so the clock never slows past that (about ×0.03). Farther out, the
+ * clock stays at 8 game hours per real minute.
  */
 export const MAP_WALK_SCREEN_PX = 144;
 
@@ -173,8 +183,7 @@ export function mapClockHoursPerRealSec(scale: number): number {
 export function formatMapClockRate(scale: number): string {
   const factor = mapClockScale(scale);
   if (factor > 0.995) return '';
-  const digits = factor >= 0.1 ? 2 : 3;
-  return `×${factor.toFixed(digits)}`;
+  return `×${factor.toFixed(2)}`;
 }
 
 /** Game hours for a walk: distance ÷ pace. Zero when either input is not positive. */
