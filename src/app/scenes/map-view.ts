@@ -1,8 +1,11 @@
-import { tierForKind } from '../../core/world/settlement-tiers';
+import { clampStepToSettlement, describeMapStand } from '../../core/area/area-window';
 import {
+  DETAIL_START,
   METERS_PER_WORLD_TILE,
   TILE,
   chunkKey,
+  formatMapClockRate,
+  mapClockHoursPerRealSec,
   travelChargePaceMps,
   travelSpeedTilesPerSec,
   type ChunkData,
@@ -10,7 +13,15 @@ import {
 import { chunkDetailWanted } from '../../render/map/detail-lod';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
-import { canEnter, hint, nearTown, placeKind, placeName, placeTier } from '../../ui/state';
+import {
+  canEnter,
+  clockRate,
+  hint,
+  nearTown,
+  placeKind,
+  placeName,
+  placeTier,
+} from '../../ui/state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
 
@@ -19,6 +30,8 @@ export class MapView implements Scene {
   private readonly camera = new MapCamera();
   private detachInput: (() => void) | null = null;
   private framed = false;
+  /** Settlement id the walker just stepped onto. Held until the keys are released. */
+  private settlementHold: string | null = null;
 
   constructor(private readonly host: GameHost) {}
 
@@ -46,15 +59,28 @@ export class MapView implements Scene {
     const sprint =
       this.host.keyboard.isDown('ShiftLeft') || this.host.keyboard.isDown('ShiftRight');
     const move = this.host.keyboard.mapAxis();
-    if ((move.x !== 0 || move.y !== 0) && world.data) {
+    const rate = mapClockHoursPerRealSec(this.camera.scale);
+    if (this.camera.scale < DETAIL_START) this.settlementHold = null;
+    if ((move.x !== 0 || move.y !== 0) && world.data && !this.settlementHold) {
       this.camera.follow = true;
-      const speed = travelSpeedTilesPerSec('overworld', sprint);
+      const speed = travelSpeedTilesPerSec('overworld', sprint, this.camera.scale);
       const dist = speed * dt;
       const len = Math.hypot(move.x, move.y);
-      world.moveHero((move.x / len) * dist, (move.y / len) * dist);
-      world.advanceTravel(dist * METERS_PER_WORLD_TILE, travelChargePaceMps(0, sprint));
+      const step = clampStepToSettlement(
+        world.data,
+        world.hero.x,
+        world.hero.y,
+        (move.x / len) * dist,
+        (move.y / len) * dist,
+        this.camera.scale,
+      );
+      world.moveHero(step.dx, step.dy);
+      const travelled = Math.hypot(step.dx, step.dy);
+      world.advanceTravel(travelled * METERS_PER_WORLD_TILE, travelChargePaceMps(0, sprint));
+      if (step.holdId) this.settlementHold = step.holdId;
     } else {
-      world.stepIdle(dt);
+      if (move.x === 0 && move.y === 0) this.settlementHold = null;
+      world.stepIdle(dt, rate);
     }
     if (this.host.keyboard.consumePress('Equal') || this.host.keyboard.consumePress('NumpadAdd')) {
       this.zoom(1.12);
@@ -84,20 +110,31 @@ export class MapView implements Scene {
       }
       this.host.syncChunks(visible);
     }
-    const here = world.settlementAt();
-    if (here && this.host.keyboard.consumePress('Enter')) this.host.enterSettlement();
+    if (this.host.keyboard.consumePress('Enter')) this.host.enterArea();
   }
 
   render(_alpha: number): void {
     const world = this.host.world;
-    const here = world.settlementAt();
-    const tier = here ? tierForKind(here.kind) : null;
-    nearTown.value = !!here;
-    canEnter.value = !!here;
-    placeName.value = here?.name ?? '';
-    placeTier.value = tier ?? '';
-    placeKind.value = here?.kind ?? '';
-    hint.value = here ? '' : 'Walk the road. Drag to look around. Scroll to zoom.';
+    const data = world.data;
+    if (this.host.view !== 'map' || !data) {
+      nearTown.value = false;
+      canEnter.value = false;
+      placeName.value = '';
+      clockRate.value = '';
+    } else {
+      const stand = describeMapStand(data, world.hero.x, world.hero.y);
+      nearTown.value = stand.kind !== 'wilderness' && stand.kind !== 'water' && !!stand.tier;
+      canEnter.value = stand.canEnter;
+      placeName.value = stand.name;
+      placeTier.value = stand.tier;
+      placeKind.value = stand.kind;
+      clockRate.value = formatMapClockRate(this.camera.scale);
+      hint.value = stand.blockedReason
+        ? 'Open water. Walk ashore to enter.'
+        : stand.tier === 'Wilderness'
+          ? 'Enter walks this ground in 3D. Drag to look around. Scroll to zoom.'
+          : '';
+    }
     this.host.paintMap({
       seed: world.seed,
       heroX: world.hero.x,

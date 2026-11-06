@@ -21,6 +21,7 @@ import { creatorBusy, creatorSerial, creatorSource, creatorView } from '../ui/cr
 import {
   bindCommands,
   canContinue,
+  clockRate,
   clockText,
   generating,
   hint,
@@ -183,10 +184,14 @@ export class Game implements GameHost {
     this.mapRenderer.syncChunks(chunks, this.world.data);
   }
 
-  enterSettlement(): void {
-    const node = this.world.settlementAt();
-    if (!node) return;
-    this.pendingArea = null;
+  enterArea(): void {
+    if (this.stack.current()?.id !== 'map') return;
+    const handoff = this.world.buildHandoffHere();
+    if (!handoff) {
+      hint.value = 'Open water. Walk ashore to enter.';
+      return;
+    }
+    this.pendingArea = handoff;
     void this.stack.push(new TransitionScene(this, 'to-area'));
   }
 
@@ -195,6 +200,14 @@ export class Game implements GameHost {
     const node = this.world.data?.nodes.find((item) => item.name === name || item.id === name);
     if (!node || !this.mapScene) return false;
     this.mapScene.lookAt(node.cx, node.cy, scale);
+    return true;
+  }
+
+  /** Move the hero and point the map camera. Used by the screenshot harness. */
+  frameAt(x: number, y: number, scale?: number): boolean {
+    if (!this.world.data || !this.mapScene) return false;
+    this.world.moveHero(x - this.world.hero.x, y - this.world.hero.y);
+    this.mapScene.lookAt(x, y, scale);
     return true;
   }
 
@@ -264,13 +277,15 @@ export class Game implements GameHost {
     if (this.areaScene) return;
     let view: AreaView | null = null;
     try {
-      const node = this.world.data ? this.world.settlementAt() : null;
-      if (node) this.pendingArea = this.world.buildHandoff(node);
+      if (!this.pendingArea && this.world.data) this.pendingArea = this.world.buildHandoffHere();
       const areaExport = this.pendingArea
         ? this.pendingArea.areaExport
-        : await loadTownFixture(
-            townFixtureId(this.townFixture ?? globalThis.location?.search ?? ''),
-          );
+        : !this.world.data || this.townFixture
+          ? await loadTownFixture(
+              townFixtureId(this.townFixture ?? globalThis.location?.search ?? ''),
+            )
+          : null;
+      if (!areaExport) throw new Error('Open water. Walk ashore to enter.');
       const renderer = new AreaRenderer(this.options.areaCanvas, {
         getActions: () => this.keyboard.areaActions(),
         onExit: (info) => {
@@ -322,7 +337,7 @@ export class Game implements GameHost {
         if (partial.mapSkin) void this.mapRenderer.setSkin(next.mapSkin, this.world.data);
       },
       enterPlace: () => {
-        this.enterSettlement();
+        this.enterArea();
       },
       save: () => {
         void this.save();
@@ -540,6 +555,7 @@ export class Game implements GameHost {
     root.dataset.buildSerial = String(creatorSerial.value);
     const text = formatClock(this.world.clockHours);
     root.dataset.clock = text;
+    root.dataset.clockRate = clockRate.value;
     root.dataset.bakeMs = this.mapRenderer.bakeMs.toFixed(1);
     root.dataset.detailMs = this.mapRenderer.detailMs.toFixed(1);
     root.dataset.drawMs = this.mapRenderer.drawMs.toFixed(2);

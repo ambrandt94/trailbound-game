@@ -1,4 +1,5 @@
 import { buildAreaExport, type AreaExport } from '../area/build-area';
+import { resolveAreaAt } from '../area/area-window';
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import type { CfPin, PackedWorld, PlayerSave } from '../save/types';
@@ -94,6 +95,7 @@ export class WorldState {
   footprint: PlaceFootprint | null = null;
   readonly chunks = new Map<string, ChunkData>();
   readonly visited = new Set<string>();
+  private readonly areaCache = new Map<string, AreaExport>();
   private simRng = new Rng(DEFAULT_WORLD_SEED);
   private explored = new Set<string>();
 
@@ -103,6 +105,7 @@ export class WorldState {
     options?: { keepHero?: boolean; settings?: WorldSettings },
   ): void {
     this.seed = seed;
+    this.areaCache.clear();
     const settings =
       options?.settings ?? clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
     this.data = generateWorld(seed, settings);
@@ -127,10 +130,15 @@ export class WorldState {
     this.syncPlayer();
   }
 
-  /** Idle frame: the map clock and travellers advance together. Residents stay simulated, not drawn. */
-  stepIdle(realSeconds: number): void {
-    this.advanceClock(realSeconds);
-    this.stepTravelers(realSeconds);
+  /**
+   * Idle frame: the map clock and travellers advance together.
+   * `hoursPerRealSec` is the zoomed map clock. Residents stay simulated, not drawn.
+   */
+  stepIdle(realSeconds: number, hoursPerRealSec = GAME_HOURS_PER_REAL_SECOND): void {
+    if (!(realSeconds > 0)) return;
+    const rate = hoursPerRealSec > 0 ? hoursPerRealSec : GAME_HOURS_PER_REAL_SECOND;
+    this.advanceClock(realSeconds, rate);
+    this.stepTravelers(realSeconds * (rate / GAME_HOURS_PER_REAL_SECOND));
   }
 
   /**
@@ -178,14 +186,21 @@ export class WorldState {
   buildHandoff(node: MapNode): AreaHandoff {
     const world = this.data;
     if (!world) throw new Error('world is not generated');
-    this.rememberTown(node, true);
-    this.visited.add(node.id);
-    this.explored = exploredTileKeys(world, this.visited);
-    const tier = tierForKind(node.kind);
-    return {
-      areaExport: buildAreaExport(world, node, { timeOfDayHours: this.clockHours }),
-      entry: { placeId: node.id, placeName: node.name, tier },
-    };
+    const key = tierForKind(node.kind) ? `settle:${node.id}` : `wild:${node.id}`;
+    return this.bakeArea(world, node, key);
+  }
+
+  /**
+   * Area for this world position. A settlement bakes the whole town.
+   * Any other land bakes the snapped window around it. Deep water returns null.
+   * Repeat calls for the same area reuse the cached export.
+   */
+  buildHandoffHere(x = this.hero.x, y = this.hero.y): AreaHandoff | null {
+    const world = this.data;
+    if (!world) return null;
+    const resolved = resolveAreaAt(world, x, y);
+    if (!resolved) return null;
+    return this.bakeArea(world, resolved.node, resolved.cacheKey);
   }
 
   isExplored(x: number, y: number): boolean {
@@ -211,9 +226,9 @@ export class WorldState {
     return made;
   }
 
-  advanceClock(realSeconds: number): void {
-    if (!(realSeconds > 0)) return;
-    this.addHours(realSeconds * GAME_HOURS_PER_REAL_SECOND);
+  advanceClock(realSeconds: number, hoursPerRealSec = GAME_HOURS_PER_REAL_SECOND): void {
+    if (!(realSeconds > 0) || !(hoursPerRealSec > 0)) return;
+    this.addHours(realSeconds * hoursPerRealSec);
   }
 
   /** Drop the hero just outside the town on the side they left the 3D area. */
@@ -350,6 +365,29 @@ export class WorldState {
       x: this.hero.x,
       y: this.hero.y,
       facing,
+    };
+  }
+
+  private bakeArea(world: WorldData, node: MapNode, cacheKey: string): AreaHandoff {
+    this.rememberTown(node, true);
+    if (world.nodes.some((item) => item.id === node.id) && tierForKind(node.kind)) {
+      this.visited.add(node.id);
+      this.explored = exploredTileKeys(world, this.visited);
+    }
+    let areaExport = this.areaCache.get(cacheKey);
+    if (!areaExport) {
+      areaExport = buildAreaExport(world, node, { timeOfDayHours: this.clockHours });
+      this.areaCache.set(cacheKey, areaExport);
+    } else {
+      areaExport.meta.timeOfDayHours = Math.round(this.clockHours * 1000) / 1000;
+    }
+    return {
+      areaExport,
+      entry: {
+        placeId: node.id,
+        placeName: node.name,
+        tier: tierForKind(node.kind),
+      },
     };
   }
 

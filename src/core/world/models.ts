@@ -104,9 +104,10 @@ export const TRAVEL_SIM_BUDGET_SEC = 0.5;
  * only and is not this scale.
  *
  * The walker always moves in world tiles, and one world tile is always 8 m.
- * Camera zoom does not change the step. World-map walk and sprint come from
- * the game clock (`clockTravelTilesPerSec`) so a kilometre costs the same
- * real time at kingdom zoom and at street zoom.
+ * Walk and sprint stay 5 and 10 km/h at every zoom. The map clock slows as the
+ * camera closes in (`mapClockScale`) so a kilometre takes more real time at
+ * street zoom, and the walker holds about `MAP_WALK_SCREEN_PX` pixels per
+ * real second instead of rushing past a town.
  */
 export const METERS_PER_INNER_TILE = 1;
 export const METERS_PER_WORLD_TILE = ZONE_SCALE * METERS_PER_INNER_TILE;
@@ -120,6 +121,13 @@ export const SPRINT_PACE_KMH = 10;
  * clock still charges `paceMps` (5 km/h) for the distance walked.
  */
 export const STREET_WALK_MPS = 2;
+/**
+ * On-screen walk once zoomed past the full clock. 144 px is one world tile
+ * at scale 9, so street zoom crosses about one tile per real second.
+ * Farther out, the clock stays at 8 game hours per real minute and the
+ * walker is slower on screen than this.
+ */
+export const MAP_WALK_SCREEN_PX = 144;
 
 export type TravelView = 'overworld' | 'street' | 'globe';
 
@@ -135,10 +143,38 @@ export function paceMps(sprint = false): number {
 
 /**
  * Pace charged for world-map travel time. Always 5 or 10 km/h.
- * `scale` is accepted so older call sites compile; zoom does not change the pace.
+ * Zoom changes how fast the clock runs, not this pace.
  */
 export function travelChargePaceMps(_scale = 1, sprint = false): number {
   return paceMps(sprint);
+}
+
+/**
+ * 1 at kingdom zoom and farther. Closer than the anchor, the fraction of the
+ * canonical 8 game hours per real minute that keeps the walker near
+ * `MAP_WALK_SCREEN_PX` per real second. Walk km/h does not change.
+ */
+export function mapClockScale(scale: number): number {
+  if (!Number.isFinite(scale) || scale <= 0) return 1;
+  const baseTiles = (paceMps(false) * GAME_SECONDS_PER_REAL_SEC) / METERS_PER_WORLD_TILE;
+  if (!(baseTiles > 0)) return 1;
+  const desiredTiles = MAP_WALK_SCREEN_PX / (scale * TILE);
+  const factor = desiredTiles / baseTiles;
+  if (!Number.isFinite(factor) || factor >= 1) return 1;
+  return factor;
+}
+
+/** Game hours advanced per real second on the map at this camera scale. */
+export function mapClockHoursPerRealSec(scale: number): number {
+  return GAME_HOURS_PER_REAL_SEC * mapClockScale(scale);
+}
+
+/** Empty at the full clock. A short multiplier once zoom has slowed time. */
+export function formatMapClockRate(scale: number): string {
+  const factor = mapClockScale(scale);
+  if (factor > 0.995) return '';
+  const digits = factor >= 0.1 ? 2 : 3;
+  return `×${factor.toFixed(digits)}`;
 }
 
 /** Game hours for a walk: distance ÷ pace. Zero when either input is not positive. */
@@ -148,26 +184,28 @@ export function travelGameHours(distanceMeters: number, paceMpsValue: number): n
 }
 
 /**
- * World tiles per real second from pace × game-seconds-per-real-second / metres per world tile.
- * Ignores Play/Fast/Fastest so pause does not freeze the walker and fast-forward does not fling them.
+ * World tiles per real second from pace × the map clock / metres per world tile.
+ * Omit `scale` for the canonical clock (8 game hours per real minute).
+ * A scale slows that clock via `mapClockScale` and does not change km/h.
  */
-export function clockTravelTilesPerSec(sprint = false): number {
-  return (paceMps(sprint) * GAME_SECONDS_PER_REAL_SEC) / METERS_PER_WORLD_TILE;
+export function clockTravelTilesPerSec(sprint = false, scale?: number): number {
+  const factor = scale === undefined ? 1 : mapClockScale(scale);
+  return (paceMps(sprint) * GAME_SECONDS_PER_REAL_SEC * factor) / METERS_PER_WORLD_TILE;
 }
 
 /**
  * World-map walker speed in tiles per real second.
- * Overworld and street are the same clock pace. Globe pan stays on
- * `WALK_SPEED_GLOBE` (Shift still sprints). `scale` does not affect the result.
+ * Overworld and street follow the zoomed map clock. Globe pan stays on
+ * `WALK_SPEED_GLOBE` (Shift still sprints) and ignores the clock.
  */
-export function travelSpeedTilesPerSec(view: TravelView, sprint = false, _scale = 1): number {
+export function travelSpeedTilesPerSec(view: TravelView, sprint = false, scale?: number): number {
   if (view === 'globe') return WALK_SPEED_GLOBE * (sprint ? sprintPaceRatio() : 1);
-  return clockTravelTilesPerSec(sprint);
+  return clockTravelTilesPerSec(sprint, scale);
 }
 
-/** World-map walk in tiles per real second. Zoom is ignored. */
-export function playerWalkSpeed(_scale: number, sprint = false): number {
-  return clockTravelTilesPerSec(sprint);
+/** World-map walk in tiles per real second at this camera scale. */
+export function playerWalkSpeed(scale: number, sprint = false): number {
+  return clockTravelTilesPerSec(sprint, scale);
 }
 
 export function formatPaceKmh(kmh: number): string {
