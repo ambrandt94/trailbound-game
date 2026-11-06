@@ -268,7 +268,9 @@ export class Game implements GameHost {
       if (node) this.pendingArea = this.world.buildHandoff(node);
       const areaExport = this.pendingArea
         ? this.pendingArea.areaExport
-        : await loadTownFixture(townFixtureId(this.townFixture ?? globalThis.location?.search ?? ''));
+        : await loadTownFixture(
+            townFixtureId(this.townFixture ?? globalThis.location?.search ?? ''),
+          );
       const renderer = new AreaRenderer(this.options.areaCanvas, {
         getActions: () => this.keyboard.areaActions(),
         onExit: (info) => {
