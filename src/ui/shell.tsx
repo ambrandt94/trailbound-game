@@ -5,6 +5,7 @@ import {
   bootMessage,
   canContinue,
   canEnter,
+  clockRate,
   clockText,
   commands,
   generating,
@@ -141,7 +142,14 @@ function SettingsPanel() {
 function Hud() {
   return (
     <div class="hud">
-      <div class="pill clock">{clockText.value}</div>
+      <div class="pill clock">
+        {clockText.value}
+        {clockRate.value ? (
+          <span class="rate" title="Game clock. Walk stays 5 km/h.">
+            {clockRate.value}
+          </span>
+        ) : null}
+      </div>
       <label class="pill skin">
         <span>Map</span>
         <select

@@ -1,10 +1,14 @@
 import { expect, test } from 'vitest';
 import {
   DETAIL_END,
-  DETAIL_START,
+  MAP_WALK_SCREEN_PX,
   METERS_PER_WORLD_TILE,
+  TILE,
   WALK_SPEED_GLOBE,
   clockTravelTilesPerSec,
+  formatMapClockRate,
+  mapClockHoursPerRealSec,
+  mapClockScale,
   paceMps,
   playerWalkSpeed,
   sprintPaceRatio,
@@ -14,23 +18,31 @@ import {
   travelSpeedTilesPerSec,
 } from '../../src/core/world/models';
 
-test('world-map walk speed is the clock pace at every zoom', () => {
+test('kingdom zoom keeps the full clock and street zoom slows it to a steady screen speed', () => {
   const clock = clockTravelTilesPerSec(false);
-  const scales = [0.016, 0.2, 1, DETAIL_START - 0.05, DETAIL_START, DETAIL_END, 32, 160];
-  for (const scale of scales) {
+  for (const scale of [0.016, 0.02, 0.05]) {
+    expect(mapClockScale(scale)).toBe(1);
     expect(playerWalkSpeed(scale, false)).toBeCloseTo(clock, 6);
     expect(travelSpeedTilesPerSec('overworld', false, scale)).toBeCloseTo(clock, 6);
-    expect(travelSpeedTilesPerSec('street', false, scale)).toBeCloseTo(clock, 6);
+    expect(formatMapClockRate(scale)).toBe('');
   }
-  expect(playerWalkSpeed(0.02, false)).toBe(playerWalkSpeed(80, false));
+  expect(playerWalkSpeed(0.02, false)).toBe(playerWalkSpeed(0.05, false));
+  for (const scale of [1, DETAIL_END, 9, 32, 160]) {
+    const tiles = playerWalkSpeed(scale, false);
+    expect(tiles).toBeLessThan(clock);
+    expect(tiles * scale * TILE).toBeCloseTo(MAP_WALK_SCREEN_PX, 4);
+    expect(travelSpeedTilesPerSec('street', false, scale)).toBeCloseTo(tiles, 6);
+    expect(mapClockHoursPerRealSec(scale)).toBeCloseTo((8 / 60) * mapClockScale(scale), 8);
+    expect(formatMapClockRate(scale).startsWith('×')).toBe(true);
+  }
 });
 
-test('sprint stays double the walk and still ignores zoom', () => {
-  const walk = playerWalkSpeed(0.2, false);
-  const sprint = playerWalkSpeed(9, true);
-  expect(sprint).toBeCloseTo(walk * sprintPaceRatio(), 6);
-  expect(playerWalkSpeed(0.02, true)).toBe(playerWalkSpeed(80, true));
+test('sprint stays double the walk at the same zoom', () => {
+  expect(playerWalkSpeed(9, true)).toBeCloseTo(playerWalkSpeed(9, false) * sprintPaceRatio(), 6);
+  expect(playerWalkSpeed(0.02, true)).toBeCloseTo(playerWalkSpeed(0.02, false) * 2, 6);
+  expect(playerWalkSpeed(0.02, true)).not.toBeCloseTo(playerWalkSpeed(80, true), 1);
   expect(clockTravelTilesPerSec(true)).toBeCloseTo(clockTravelTilesPerSec(false) * 2, 6);
+  expect(clockTravelTilesPerSec(true, 32)).toBeCloseTo(clockTravelTilesPerSec(false, 32) * 2, 6);
 });
 
 test('travel time charges 5 or 10 km/h no matter the camera scale', () => {

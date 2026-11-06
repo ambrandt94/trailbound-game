@@ -25,7 +25,7 @@ export interface GameHost {
   setFade(opacity: number): void;
   paintMap(state: MapDrawState): void;
   syncChunks(chunks: ChunkData[]): void;
-  enterSettlement(): void;
+  enterArea(): void;
   buildArea(): Promise<void>;
   enterTownNow(fixtureId: string): Promise<void>;
   leaveArea(exit?: AreaExit): void;

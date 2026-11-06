@@ -199,6 +199,12 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.clock .rate {
+  margin-left: 0.45rem;
+  color: #6d6458;
+  font-size: 0.85em;
+}
+
 .save {
   right: 1rem;
   pointer-events: auto;

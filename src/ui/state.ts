@@ -10,6 +10,8 @@ export const canContinue = signal(false);
 export const settingsOpen = signal(false);
 export const settings = signal<GameSettings>({ ...DEFAULT_SETTINGS });
 export const clockText = signal('Day 1  08:00');
+/** Empty at the full map clock. A short multiplier while zoom has slowed time. */
+export const clockRate = signal('');
 export const hint = signal('');
 export const nearTown = signal(false);
 export const savedFlash = signal('');
