@@ -7,7 +7,6 @@ import {
   diveCueAmount,
   emptyDiveIntent,
   stepDiveIntent,
-  zoomEasesToHero,
   type DiveIntentState,
 } from '../../core/world/map-zoom';
 import {
@@ -48,8 +47,8 @@ export class MapView implements Scene {
   private dive: DiveIntentState = emptyDiveIntent();
   /** Holds the full ring while the fade into 3D is starting. */
   private diveShown = 0;
-  /** Set when this frame's zoom-in landed on the cap. Consumed in update. */
-  private zoomInAtCap = false;
+  /** Zoom-in events that hit the cap this frame. Consumed in update. */
+  private zoomInNotches = 0;
 
   constructor(private readonly host: GameHost) {}
 
@@ -99,11 +98,6 @@ export class MapView implements Scene {
       if (move.x === 0 && move.y === 0) this.settlementHold = null;
       world.stepIdle(dt, rate);
     }
-    const zoomKey = this.host.keyboard.isDown('Equal') || this.host.keyboard.isDown('NumpadAdd');
-    if (zoomKey && this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3) {
-      this.zoomInAtCap = true;
-      this.camera.follow = true;
-    }
     if (this.host.keyboard.consumePress('Equal') || this.host.keyboard.consumePress('NumpadAdd')) {
       this.zoom(1.12);
     }
@@ -117,8 +111,8 @@ export class MapView implements Scene {
       ? describeMapStand(world.data, world.hero.x, world.hero.y).canEnter
       : false;
     const atCap = this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3;
-    const stepped = stepDiveIntent(this.dive, dt, this.zoomInAtCap, atCap, canDive);
-    this.zoomInAtCap = false;
+    const stepped = stepDiveIntent(this.dive, dt, this.zoomInNotches, atCap, canDive);
+    this.zoomInNotches = 0;
     this.dive = stepped.state;
     if (stepped.dive) {
       this.diveShown = 1;
@@ -210,12 +204,10 @@ export class MapView implements Scene {
   }
 
   private applyZoom(sx: number, sy: number, factor: number): void {
-    if (zoomEasesToHero(this.camera.targetScale, factor)) this.camera.follow = true;
     const canvas = this.host.mapCanvas;
     this.camera.zoomAt(sx, sy, factor, canvas.clientWidth, canvas.clientHeight);
     if (factor > 1.001 && this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3) {
-      this.zoomInAtCap = true;
-      this.camera.follow = true;
+      this.zoomInNotches += 1;
     }
   }
 }

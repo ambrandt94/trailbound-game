@@ -82,12 +82,17 @@ export function controllerExitToMap(info: ControllerExit, bounds?: EdgeBounds | 
   };
 }
 
-/** Esc leaves through the side the pawn is facing, at the middle of that edge. */
+/** Esc leaves the area and returns the traveller to the map tile they entered from. */
 export function exitFromCancel(yaw: number): AreaExit {
   const facingX = Math.sin(yaw);
   const facingZ = -Math.cos(yaw);
-  if (Math.abs(facingX) > Math.abs(facingZ)) {
-    return { side: facingX >= 0 ? 'east' : 'west', pos: 0.5, yaw };
-  }
-  return { side: facingZ >= 0 ? 'south' : 'north', pos: 0.5, yaw };
+  const side: AreaExit['side'] =
+    Math.abs(facingX) > Math.abs(facingZ)
+      ? facingX >= 0
+        ? 'east'
+        : 'west'
+      : facingZ >= 0
+        ? 'south'
+        : 'north';
+  return { side, pos: 0.5, yaw, cancel: true };
 }

@@ -14,6 +14,7 @@ import {
   GAME_HOURS_PER_REAL_SEC,
   TRAVEL_SIM_BUDGET_SEC,
   TRAVEL_SIM_STEP_SEC,
+  TILE,
   chunkKey,
   clamp,
   clampSettings,
@@ -38,6 +39,8 @@ export interface AreaExit {
   side: AreaSide;
   pos: number;
   yaw: number;
+  /** Escape. Put the traveller back on the tile they entered from. */
+  cancel?: boolean;
 }
 
 export interface TownRef {
@@ -95,6 +98,8 @@ export class WorldState {
   footprint: PlaceFootprint | null = null;
   readonly chunks = new Map<string, ChunkData>();
   readonly visited = new Set<string>();
+  /** Where the hero stood when the current area was entered. */
+  private entryPose: HeroPose | null = null;
   private readonly areaCache = new Map<string, AreaExport>();
   private simRng = new Rng(DEFAULT_WORLD_SEED);
   private explored = new Set<string>();
@@ -105,6 +110,7 @@ export class WorldState {
     options?: { keepHero?: boolean; settings?: WorldSettings },
   ): void {
     this.seed = seed;
+    this.entryPose = null;
     this.areaCache.clear();
     const settings =
       options?.settings ?? clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
@@ -231,70 +237,17 @@ export class WorldState {
     this.addHours(realSeconds * hoursPerRealSec);
   }
 
-  /** Drop the hero just outside the town on the side they left the 3D area. */
+  /** Drop the hero on the map tile that matches how they left the 3D area. */
   placeHeroOutside(exit: AreaExit): void {
-    const foot = this.footprint;
-    if (foot) {
-      const alongX = foot.minX + clamp01(exit.pos) * Math.max(0, foot.maxX - foot.minX);
-      const alongY = foot.minY + clamp01(exit.pos) * Math.max(0, foot.maxY - foot.minY);
-      const margin = 1.2;
-      let x = this.town.x;
-      let y = this.town.y;
-      switch (exit.side) {
-        case 'north':
-          x = alongX;
-          y = foot.minY - margin;
-          break;
-        case 'south':
-          x = alongX;
-          y = foot.maxY + margin;
-          break;
-        case 'west':
-          x = foot.minX - margin;
-          y = alongY;
-          break;
-        case 'east':
-          x = foot.maxX + margin;
-          y = alongY;
-          break;
-        default: {
-          const unknown: never = exit.side;
-          throw new Error(`unknown exit side ${String(unknown)}`);
-        }
-      }
-      this.hero = { x, y, yaw: exit.yaw };
-      this.syncPlayer();
-      this.record({ type: 'area-exit', rev: this.bump(), exit: { ...exit } });
-      return;
-    }
-    const along = (clamp01(exit.pos) - 0.5) * 1.4;
-    const tx = this.town.x;
-    const ty = this.town.y;
-    let x = tx;
-    let y = ty;
-    switch (exit.side) {
-      case 'north':
-        x = tx + along;
-        y = ty - HERO_OUTSIDE_TOWN;
-        break;
-      case 'south':
-        x = tx + along;
-        y = ty + HERO_OUTSIDE_TOWN;
-        break;
-      case 'west':
-        x = tx - HERO_OUTSIDE_TOWN;
-        y = ty + along;
-        break;
-      case 'east':
-        x = tx + HERO_OUTSIDE_TOWN;
-        y = ty + along;
-        break;
-      default: {
-        const unknown: never = exit.side;
-        throw new Error(`unknown exit side ${String(unknown)}`);
-      }
-    }
-    this.hero = { x, y, yaw: exit.yaw };
+    const world = this.data;
+    const landed = landAfterAreaExit(
+      exit,
+      this.footprint,
+      this.entryPose,
+      this.town,
+      world ? { width: world.width, height: world.height } : null,
+    );
+    this.hero = landed;
     this.syncPlayer();
     this.record({ type: 'area-exit', rev: this.bump(), exit: { ...exit } });
   }
@@ -369,6 +322,7 @@ export class WorldState {
   }
 
   private bakeArea(world: WorldData, node: MapNode, cacheKey: string): AreaHandoff {
+    this.entryPose = { x: this.hero.x, y: this.hero.y, yaw: this.hero.yaw };
     this.rememberTown(node, true);
     if (world.nodes.some((item) => item.id === node.id) && tierForKind(node.kind)) {
       this.visited.add(node.id);
@@ -433,6 +387,108 @@ export function createWorld(town: TownRef, seed = DEFAULT_WORLD_SEED): WorldStat
   world.hero = { x: town.x - 2.5, y: town.y, yaw: 0 };
   world.clockHours = START_HOUR;
   return world;
+}
+
+export interface MapBounds {
+  width: number;
+  height: number;
+}
+
+/**
+ * World tile under the drawn traveller. The map draws them at `hero * TILE`
+ * and zooms with a uniform scale, so the tile does not change with zoom.
+ */
+export function heroTileOnScreen(
+  heroX: number,
+  heroY: number,
+  cameraX: number,
+  cameraY: number,
+  scale: number,
+  viewW: number,
+  viewH: number,
+): { x: number; y: number } {
+  const safe = Math.max(scale, 1e-6);
+  const sx = viewW / 2 + (heroX - cameraX) * TILE * safe;
+  const sy = viewH / 2 + (heroY - cameraY) * TILE * safe;
+  const wx = cameraX + (sx - viewW / 2) / (safe * TILE);
+  const wy = cameraY + (sy - viewH / 2) / (safe * TILE);
+  return { x: Math.floor(wx + 1e-8), y: Math.floor(wy + 1e-8) };
+}
+
+/**
+ * Where a 3D exit stands on the map.
+ * Escape returns to the entry tile. Walking off an edge stands in the centre
+ * of the tile just outside that edge, lined up with where they crossed.
+ */
+export function landAfterAreaExit(
+  exit: AreaExit,
+  foot: PlaceFootprint | null,
+  entry: HeroPose | null,
+  town: { x: number; y: number },
+  bounds: MapBounds | null,
+): HeroPose {
+  if (exit.cancel && entry) return fitHero(entry.x, entry.y, entry.yaw, bounds);
+  if (foot) {
+    const pos = clamp01(exit.pos);
+    const spanX = Math.max(0, foot.maxX - foot.minX);
+    const spanY = Math.max(0, foot.maxY - foot.minY);
+    let x = foot.minX + 0.5 + pos * spanX;
+    let y = foot.minY + 0.5 + pos * spanY;
+    switch (exit.side) {
+      case 'north':
+        y = foot.minY - 0.5;
+        break;
+      case 'south':
+        y = foot.maxY + 1.5;
+        break;
+      case 'west':
+        x = foot.minX - 0.5;
+        break;
+      case 'east':
+        x = foot.maxX + 1.5;
+        break;
+      default: {
+        const unknown: never = exit.side;
+        throw new Error(`unknown exit side ${String(unknown)}`);
+      }
+    }
+    return fitHero(x, y, exit.yaw, bounds);
+  }
+  const along = (clamp01(exit.pos) - 0.5) * 1.4;
+  let x = town.x;
+  let y = town.y;
+  switch (exit.side) {
+    case 'north':
+      x = town.x + along;
+      y = town.y - HERO_OUTSIDE_TOWN;
+      break;
+    case 'south':
+      x = town.x + along;
+      y = town.y + HERO_OUTSIDE_TOWN;
+      break;
+    case 'west':
+      x = town.x - HERO_OUTSIDE_TOWN;
+      y = town.y + along;
+      break;
+    case 'east':
+      x = town.x + HERO_OUTSIDE_TOWN;
+      y = town.y + along;
+      break;
+    default: {
+      const unknown: never = exit.side;
+      throw new Error(`unknown exit side ${String(unknown)}`);
+    }
+  }
+  return fitHero(x, y, exit.yaw, bounds);
+}
+
+function fitHero(x: number, y: number, yaw: number, bounds: MapBounds | null): HeroPose {
+  if (!bounds || !(bounds.width > 0) || !(bounds.height > 0)) return { x, y, yaw };
+  return {
+    x: wrapX(x, bounds.width),
+    y: clamp(y, 0.5, Math.max(0.5, bounds.height - 0.5)),
+    yaw,
+  };
 }
 
 function copyAvatar(avatar: PlayerAvatar | undefined, name: string): PlayerAvatar {

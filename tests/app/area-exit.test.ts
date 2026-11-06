@@ -38,9 +38,10 @@ test('veldcross v05 is an AreaExport and the default town fixture', () => {
   expect(() => areaFromExport({ type: 'nope' })).toThrow(/AreaExport/);
 });
 
-test('cancel leaves through the facing side at mid-edge', () => {
-  expect(exitFromCancel(0)).toEqual({ side: 'north', pos: 0.5, yaw: 0 });
+test('cancel leaves through the facing side and asks to restore the entry tile', () => {
+  expect(exitFromCancel(0)).toEqual({ side: 'north', pos: 0.5, yaw: 0, cancel: true });
   expect(exitFromCancel(Math.PI / 2).side).toBe('east');
   expect(exitFromCancel(Math.PI).side).toBe('south');
   expect(exitFromCancel(-Math.PI / 2).side).toBe('west');
+  expect(exitFromCancel(Math.PI).cancel).toBe(true);
 });

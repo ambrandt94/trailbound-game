@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
 import {
+  MAP_DIVE_DECAY_SEC,
   MAP_DIVE_HOLD_SEC,
-  MAP_ZOOM_PULSE_SEC,
+  MAP_DIVE_NOTCH,
   diveCueAmount,
   emptyDiveIntent,
   stepDiveIntent,
-  zoomEasesToHero,
   type DiveIntentState,
 } from '../../src/core/world/map-zoom';
 import {
@@ -22,72 +22,54 @@ const FRAME = 1 / 60;
 function run(
   state: DiveIntentState,
   frames: number,
-  zoomingIn: boolean,
+  notches: number,
   atCap: boolean,
   canEnter: boolean,
 ): { state: DiveIntentState; dive: boolean } {
   let current = state;
   let dive = false;
   for (let i = 0; i < frames; i++) {
-    const next = stepDiveIntent(current, FRAME, zoomingIn, atCap, canEnter);
+    const next = stepDiveIntent(current, FRAME, notches, atCap, canEnter);
     current = next.state;
     if (next.dive) dive = true;
   }
   return { state: current, dive };
 }
 
-test('one zoom tick at the cap does not dive', () => {
-  const armed = stepDiveIntent(emptyDiveIntent(), FRAME, true, true, true);
-  expect(armed.dive).toBe(false);
-  const settled = run(armed.state, Math.ceil(1 / FRAME), false, true, true);
-  expect(settled.dive).toBe(false);
-  expect(settled.state.intent).toBe(0);
-  expect(armed.state.intent).toBeLessThan(0.5);
-  expect(armed.state.intent).toBeGreaterThan(0);
+test('one zoom notch does not dive, and the fill holds for about a second', () => {
+  const once = stepDiveIntent(emptyDiveIntent(), FRAME, 1, true, true);
+  expect(once.dive).toBe(false);
+  expect(once.state.intent).toBeCloseTo(MAP_DIVE_NOTCH, 5);
+  expect(once.state.intent).toBeLessThan(1);
+  const held = run(once.state, Math.floor(0.9 / FRAME), 0, true, true);
+  expect(held.dive).toBe(false);
+  expect(held.state.intent).toBeCloseTo(MAP_DIVE_NOTCH, 2);
+  const faded = run(
+    once.state,
+    Math.ceil((MAP_DIVE_HOLD_SEC + MAP_DIVE_DECAY_SEC) / FRAME),
+    0,
+    true,
+    true,
+  );
+  expect(faded.dive).toBe(false);
+  expect(faded.state.intent).toBeLessThan(0.05);
 });
 
-test('continued zoom-in at the cap dives, and a shorter hold does not', () => {
-  const early = run(
-    emptyDiveIntent(),
-    Math.floor((MAP_DIVE_HOLD_SEC * 0.7) / FRAME),
-    true,
-    true,
-    true,
-  );
-  expect(early.dive).toBe(false);
-  expect(early.state.intent).toBeGreaterThan(0.5);
-  const held = run(
-    emptyDiveIntent(),
-    Math.ceil((MAP_DIVE_HOLD_SEC + 0.08) / FRAME),
-    true,
-    true,
-    true,
-  );
-  expect(held.dive).toBe(true);
-  expect(MAP_ZOOM_PULSE_SEC).toBeLessThan(MAP_DIVE_HOLD_SEC);
+test('two notches, or one pinch that reports two steps, dives', () => {
+  const paired = stepDiveIntent(emptyDiveIntent(), FRAME, 2, true, true);
+  expect(paired.dive).toBe(true);
+  const first = stepDiveIntent(emptyDiveIntent(), FRAME, 1, true, true);
+  const second = stepDiveIntent(first.state, FRAME, 1, true, true);
+  expect(second.dive).toBe(true);
 });
 
 test('deep water and zoom below the cap never dive', () => {
-  const water = run(emptyDiveIntent(), 90, true, true, false);
+  const water = stepDiveIntent(emptyDiveIntent(), FRAME, 4, true, false);
   expect(water.dive).toBe(false);
   expect(water.state.intent).toBe(0);
-  const below = run(emptyDiveIntent(), 90, true, false, true);
+  const below = stepDiveIntent(emptyDiveIntent(), FRAME, 4, false, true);
   expect(below.dive).toBe(false);
   expect(below.state.intent).toBe(0);
-});
-
-test('letting go of zoom fades the cue', () => {
-  const halfway = run(
-    emptyDiveIntent(),
-    Math.floor((MAP_DIVE_HOLD_SEC * 0.5) / FRAME),
-    true,
-    true,
-    true,
-  );
-  expect(halfway.state.intent).toBeGreaterThan(0.3);
-  const released = run(halfway.state, Math.ceil(0.8 / FRAME), false, true, true);
-  expect(released.dive).toBe(false);
-  expect(released.state.intent).toBe(0);
 });
 
 test('the cue darkens near the cap on land and stays clear on water', () => {
@@ -95,9 +77,6 @@ test('the cue darkens near the cap on land and stays clear on water', () => {
   expect(diveCueAmount(MAP_ZOOM_CAP, 0, true)).toBeCloseTo(0.4, 5);
   expect(diveCueAmount(MAP_ZOOM_CAP, 0.8, true)).toBeCloseTo(0.8, 5);
   expect(diveCueAmount(MAP_ZOOM_CAP, 1, false)).toBe(0);
-  expect(zoomEasesToHero(MAP_ZOOM_CAP, 1.12)).toBe(true);
-  expect(zoomEasesToHero(MAP_ZOOM_CAP * 0.5, 1.12)).toBe(false);
-  expect(zoomEasesToHero(MAP_ZOOM_CAP, 0.9)).toBe(false);
 });
 
 test('at the zoom cap the clock is slow enough to stop and not the old street extreme', () => {

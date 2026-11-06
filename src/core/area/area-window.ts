@@ -195,15 +195,32 @@ export function clampStepToSettlement(
     const y = Math.min(world.height - 0.5, Math.max(0.5, y0 + dy * t));
     const node = settlementNodeAt(world, x, y);
     if (!node) continue;
-    const tx = Math.floor(x) + 0.5;
-    const ty = Math.floor(y) + 0.5;
+    const prev = (i - 1) / steps;
+    const inside = justInsideTile(x0 + dx * prev, y0 + dy * prev, x0 + dx * t, y0 + dy * t);
     return {
-      dx: wrapDeltaX(x0, tx, world.width),
-      dy: ty - y0,
+      dx: wrapDeltaX(x0, wrapX(inside.x, world.width), world.width),
+      dy: inside.y - y0,
       holdId: node.id,
     };
   }
   return { dx, dy, holdId: null };
+}
+
+/** First point of the segment that sits inside the tile the segment enters. */
+function justInsideTile(x0: number, y0: number, x1: number, y1: number): { x: number; y: number } {
+  const tx = Math.floor(x1);
+  const ty = Math.floor(y1);
+  let lo = 0;
+  let hi = 1;
+  for (let k = 0; k < 16; k++) {
+    const mid = (lo + hi) / 2;
+    const x = x0 + (x1 - x0) * mid;
+    const y = y0 + (y1 - y0) * mid;
+    if (Math.floor(x) === tx && Math.floor(y) === ty) hi = mid;
+    else lo = mid;
+  }
+  const inset = Math.min(1, hi + 1e-3);
+  return { x: x0 + (x1 - x0) * inset, y: y0 + (y1 - y0) * inset };
 }
 
 function landStand(
