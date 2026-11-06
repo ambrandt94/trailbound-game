@@ -1,7 +1,8 @@
 import type { ChunkData, WorldData } from '../../core/world/models';
-import { Biome } from '../../core/world/models';
+import { BIOME_COUNT, Biome } from '../../core/world/models';
 import { hash2 } from '../../core/world/noise';
 import { BIOME_GROUND, DIRT_EDGE_BASE, EDGE_INDEX, SANDSTONE_ROAD } from './biome-table';
+import { averageTileColor, type GroundPalette } from './detail-lod';
 import { cellCorners, foamRuns, pickCell, waterBand, type FoamRun } from './terrain-pick';
 import {
   FIELD_REACH,
@@ -247,6 +248,7 @@ export class TrailboundTiles {
 
   /** Paint tiles until the budget runs out. Returns true when the region is finished. */
   stepRegion(world: WorldData, job: RegionBake, budgetMs: number): boolean {
+    if (job.stamp < 48) return this.stepFlatRegion(world, job, budgetMs);
     const ctx = job.canvas.getContext('2d');
     const rowImage = job.rowImage;
     if (!ctx || !rowImage || job.row >= job.span) return true;
@@ -301,6 +303,43 @@ export class TrailboundTiles {
     }
     this.regionPixels = null;
     if (job.row >= job.span) job.rowImage = null;
+    return job.row >= job.span;
+  }
+
+  /**
+   * Same 48 px skin, one blit per world tile. Used below street zoom, where the
+   * curved coast field costs more than the tiles can show.
+   */
+  private stepFlatRegion(world: WorldData, job: RegionBake, budgetMs: number): boolean {
+    const ctx = job.canvas.getContext('2d');
+    if (!ctx || job.row >= job.span) return true;
+    ctx.imageSmoothingEnabled = false;
+    const started = performance.now();
+    let painted = 0;
+    while (job.row < job.span && painted < 24 && performance.now() - started < budgetMs) {
+      const wy = job.y0 + job.row;
+      while (job.col < job.span && painted < 24 && performance.now() - started < budgetMs) {
+        const wx = job.x0 + job.col;
+        if (wy >= 0 && wy < world.height && wx >= 0 && wx < world.width) {
+          this.paintFlat(
+            ctx,
+            world,
+            wx,
+            wy,
+            this.biomeAt(world, wx, wy),
+            job.col * job.stamp,
+            job.row * job.stamp,
+            job.stamp,
+          );
+        }
+        job.col += 1;
+        painted += 1;
+      }
+      if (job.col >= job.span) {
+        job.col = 0;
+        job.row += 1;
+      }
+    }
     return job.row >= job.span;
   }
 
@@ -453,6 +492,26 @@ export class TrailboundTiles {
   private pathAt(world: WorldData, x: number, y: number): boolean {
     if (x < 0 || y < 0 || x >= world.width || y >= world.height) return false;
     return world.paths[x + y * world.width] === 1;
+  }
+
+  /** One average colour per biome, plus the road tile. Used by the far-zoom sheet. */
+  groundPalette(): GroundPalette {
+    const ground = new Uint8Array(BIOME_COUNT * 3);
+    for (let biome = 0; biome < BIOME_COUNT; biome++) {
+      const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
+      const tile = this.tiles[id] ?? this.tiles[0];
+      const [r, g, b] = tile
+        ? averageTileColor(tile, 0, 0, tile.width, tile.height)
+        : averageTileColor(this.scratch, 0, 0, 1, 1);
+      ground[biome * 3] = r;
+      ground[biome * 3 + 1] = g;
+      ground[biome * 3 + 2] = b;
+    }
+    const roadTile = this.tiles[SANDSTONE_ROAD] ?? this.tiles[0];
+    const [rr, rg, rb] = roadTile
+      ? averageTileColor(roadTile, 0, 0, roadTile.width, roadTile.height, [196, 164, 108])
+      : [196, 164, 108];
+    return { ground, road: { r: rr, g: rg, b: rb } };
   }
 
   private flatColors(): string[] {

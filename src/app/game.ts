@@ -542,6 +542,9 @@ export class Game implements GameHost {
     root.dataset.clock = text;
     root.dataset.bakeMs = this.mapRenderer.bakeMs.toFixed(1);
     root.dataset.detailMs = this.mapRenderer.detailMs.toFixed(1);
+    root.dataset.drawMs = this.mapRenderer.drawMs.toFixed(2);
+    root.dataset.lodBytes = String(this.mapRenderer.lodBytes);
+    root.dataset.farReady = this.mapRenderer.farReady ? 'true' : 'false';
     root.dataset.fps = this.mapRenderer.fps.toFixed(1);
     root.dataset.skin = settings.value.mapSkin;
     root.dataset.place = this.world.town.name;

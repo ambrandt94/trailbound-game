@@ -1,6 +1,5 @@
 import { tierForKind } from '../../core/world/settlement-tiers';
 import {
-  DETAIL_START,
   METERS_PER_WORLD_TILE,
   TILE,
   chunkKey,
@@ -8,6 +7,7 @@ import {
   travelSpeedTilesPerSec,
   type ChunkData,
 } from '../../core/world/models';
+import { chunkDetailWanted } from '../../render/map/detail-lod';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
 import { canEnter, hint, nearTown, placeKind, placeName, placeTier } from '../../ui/state';
@@ -48,14 +48,11 @@ export class MapView implements Scene {
     const move = this.host.keyboard.mapAxis();
     if ((move.x !== 0 || move.y !== 0) && world.data) {
       this.camera.follow = true;
-      const speed = travelSpeedTilesPerSec('overworld', sprint, this.camera.scale);
+      const speed = travelSpeedTilesPerSec('overworld', sprint);
       const dist = speed * dt;
       const len = Math.hypot(move.x, move.y);
       world.moveHero((move.x / len) * dist, (move.y / len) * dist);
-      world.advanceTravel(
-        dist * METERS_PER_WORLD_TILE,
-        travelChargePaceMps(this.camera.scale, sprint),
-      );
+      world.advanceTravel(dist * METERS_PER_WORLD_TILE, travelChargePaceMps(0, sprint));
     } else {
       world.stepIdle(dt);
     }
@@ -69,7 +66,7 @@ export class MapView implements Scene {
       this.zoom(1 / 1.12);
     }
     this.camera.update(dt, world.hero.x, world.hero.y);
-    if (world.data && this.camera.scale >= DETAIL_START * 0.85) {
+    if (world.data && chunkDetailWanted(this.camera.scale)) {
       const canvas = this.host.mapCanvas;
       const halfW = canvas.clientWidth / (2 * this.camera.scale) / TILE;
       const halfH = canvas.clientHeight / (2 * this.camera.scale) / TILE;
