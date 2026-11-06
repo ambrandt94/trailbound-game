@@ -252,6 +252,73 @@ input:focus-visible {
   pointer-events: auto;
 }
 
+.look {
+  top: 4.2rem;
+  left: 1rem;
+  pointer-events: auto;
+}
+
+.settings-dock {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  z-index: 4;
+  width: min(24rem, calc(100% - 1.2rem));
+  pointer-events: none;
+}
+
+.settings-card {
+  max-height: min(88vh, 100%);
+  overflow: auto;
+  pointer-events: auto;
+}
+
+.settings-dock .settings-card {
+  height: 100%;
+  max-height: none;
+  padding: 1rem 1rem 1.4rem;
+  background: rgba(246, 241, 230, 0.94);
+  border: 1px solid #e4d8c4;
+  border-radius: 1rem;
+}
+
+.look-group {
+  margin: 0.35rem 0 0.6rem;
+}
+
+.look-group summary {
+  cursor: pointer;
+  color: #1f6a56;
+  font-weight: 600;
+}
+
+.look-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.45rem 0;
+}
+
+.look-view {
+  margin: 0;
+  flex: 1 1 8rem;
+}
+
+.lede.tight {
+  margin: 0.4rem 0 0.8rem;
+  font-size: 0.95rem;
+}
+
+.settings-card .slider {
+  grid-template-columns: minmax(7.5rem, 9.5rem) 1fr auto;
+}
+
+.settings-card .value {
+  min-width: 4.2rem;
+}
+
 .creator-view {
   position: absolute;
   left: 0;

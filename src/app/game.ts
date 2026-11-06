@@ -1,6 +1,7 @@
 import { migrate } from '../core/save/migrations';
 import type { SaveBackend } from '../core/save/types';
-import { normalizeSettings } from '../core/state/settings';
+import { areaLooksEqual, normalizeAreaLook, type AreaLook } from '../core/state/area-look';
+import { normalizeSettings, type GameSettings } from '../core/state/settings';
 import {
   createWorld,
   type AreaExit,
@@ -292,6 +293,10 @@ export class Game implements GameHost {
         onExit: (info) => {
           view?.leaveFromController(info);
         },
+        getLook: () => settings.value.look,
+        onLook: (patch) => {
+          this.applyLook(patch);
+        },
       });
       await renderer.start(areaExport);
       view = new AreaView(this, renderer, this.pendingArea);
@@ -317,6 +322,20 @@ export class Game implements GameHost {
     this.jobs.push(job);
   }
 
+  private writeSettings(partial: Partial<GameSettings>): void {
+    const next = normalizeSettings({ ...settings.value, ...partial });
+    if (partial.look) next.look = normalizeAreaLook({ ...settings.value.look, ...partial.look });
+    settings.value = next;
+    this.options.settings.save(next);
+    if (partial.mapSkin) void this.mapRenderer.setSkin(next.mapSkin, this.world.data);
+  }
+
+  private applyLook(patch: unknown): void {
+    const look = normalizeAreaLook({ ...settings.value.look, ...(patch as Partial<AreaLook>) });
+    if (areaLooksEqual(look, settings.value.look)) return;
+    this.writeSettings({ look });
+  }
+
   private bindUi(): void {
     bindCommands({
       newGame: () => {
@@ -332,10 +351,7 @@ export class Game implements GameHost {
         settingsOpen.value = false;
       },
       changeSettings: (partial) => {
-        const next = normalizeSettings({ ...settings.value, ...partial });
-        settings.value = next;
-        this.options.settings.save(next);
-        if (partial.mapSkin) void this.mapRenderer.setSkin(next.mapSkin, this.world.data);
+        this.writeSettings(partial);
       },
       enterPlace: () => {
         this.enterArea();

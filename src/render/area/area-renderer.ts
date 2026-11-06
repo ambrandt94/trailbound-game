@@ -33,6 +33,9 @@ export interface AreaActionSnapshot {
 export interface AreaHooks {
   getActions(): AreaActionSnapshot;
   onExit(info: TownExitInfo): void;
+  /** Persisted 3D look. Absent in harnesses that only want the town defaults. */
+  getLook?(): unknown;
+  onLook?(patch: unknown): void;
 }
 
 export class AreaRenderer {
@@ -90,6 +93,8 @@ export class AreaRenderer {
     const session = await createTownSession(this.canvas, {
       getActions: () => this.hooks.getActions(),
       onExit: (info) => this.hooks.onExit(info),
+      getLook: () => this.hooks.getLook?.(),
+      onLook: (patch: unknown) => this.hooks.onLook?.(patch),
     });
     if (this.disposed) {
       session.dispose();

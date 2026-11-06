@@ -153,12 +153,22 @@ export interface EditSnapshot {
   dye: Record<string, Record<string, number[]>>;
 }
 
+export interface AvatarPose {
+  clip: 'Idle' | 'Walk';
+  /** Mixer rate. Walk uses speed / 1.4 so the feet stay with the body. */
+  timeScale: number;
+  /** Crossfade in seconds. 0 restarts the clip only when the name changes. */
+  fade: number;
+}
+
 export interface AvatarBody {
   object3D: THREE.Object3D;
   source: 'forge' | 'placeholder';
   recipeHash: string;
   clip: 'Idle' | 'Walk';
   play(name: 'Idle' | 'Walk'): void;
+  /** Area locomotion. Blends when the clip changes and sets the mixer rate. */
+  present(pose: AvatarPose): void;
   update(dt: number): void;
   dispose(): void;
 }
@@ -180,6 +190,7 @@ interface InitOptions {
 interface CfBody {
   object3D: THREE.Group;
   mixer: THREE.AnimationMixer;
+  clips?: Record<string, THREE.AnimationClip>;
   play(name: 'Idle' | 'Walk', phase?: number): void;
   dispose(): void;
   info?: { ms?: number; hash?: string; clipMap?: Record<string, string> };
@@ -397,7 +408,12 @@ export function placeholderAvatar(seed: number): AvatarBody {
   bob.add(cloth, head);
   group.add(bob);
 
-  const state = { clip: 'Idle' as 'Idle' | 'Walk', time: 0, disposed: false };
+  const state = {
+    clip: 'Idle' as 'Idle' | 'Walk',
+    time: 0,
+    rate: 1,
+    disposed: false,
+  };
   const body: AvatarBody = {
     object3D: group,
     source: 'placeholder',
@@ -405,12 +421,21 @@ export function placeholderAvatar(seed: number): AvatarBody {
     clip: 'Idle',
     play(name) {
       state.clip = name;
+      state.rate = 1;
       body.clip = name;
+    },
+    present(pose) {
+      state.clip = pose.clip;
+      state.rate = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
+      body.clip = pose.clip;
     },
     update(dt) {
       if (state.disposed) return;
-      state.time += dt;
-      bob.position.y = state.clip === 'Walk' ? Math.sin(state.time * 8) * 0.05 : 0;
+      state.time += dt * state.rate;
+      const moving = state.clip === 'Walk';
+      bob.position.y = moving
+        ? Math.sin(state.time * 8) * 0.05
+        : Math.sin(state.time * 2.4) * 0.012;
     },
     dispose() {
       if (state.disposed) return;
@@ -482,6 +507,12 @@ async function runInit(options: InitOptions): Promise<ForgeStatus> {
   }
 }
 
+function actionFor(built: CfBody, name: 'Idle' | 'Walk'): THREE.AnimationAction | null {
+  const clip = built.clips?.[name];
+  if (!clip) return null;
+  return built.mixer.clipAction(clip);
+}
+
 function wrapForge(built: CfBody, hash: string): AvatarBody {
   const state = { clip: 'Idle' as 'Idle' | 'Walk', disposed: false };
   built.object3D.name = 'CF_avatar';
@@ -494,7 +525,26 @@ function wrapForge(built: CfBody, hash: string): AvatarBody {
     play(name) {
       state.clip = name;
       body.clip = name;
+      built.mixer.timeScale = 1;
       built.play(name);
+    },
+    present(pose) {
+      const fade = Math.max(0, pose.fade);
+      if (pose.clip !== state.clip) {
+        const next = actionFor(built, pose.clip);
+        const prev = actionFor(built, state.clip);
+        if (next && prev && next !== prev) {
+          next.enabled = true;
+          next.setEffectiveWeight(1);
+          next.reset().fadeIn(fade).play();
+          prev.fadeOut(fade);
+        } else {
+          built.play(pose.clip);
+        }
+        state.clip = pose.clip;
+        body.clip = pose.clip;
+      }
+      built.mixer.timeScale = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
     },
     update(dt) {
       if (!state.disposed) built.mixer.update(dt);
