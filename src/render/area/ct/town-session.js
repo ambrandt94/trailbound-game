@@ -2,6 +2,7 @@
    Default camera is the furthest overhead view (Top-down vista).
    Keyboard and gamepad arrive as an action snapshot; this file does not bind touch.
 */
+import { aimForgeSun, getPlayerBody, tickPlayerBody } from '../../characters/forge.ts';
 import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
@@ -299,6 +300,42 @@ export async function createTownSession(canvas, hooks) {
   const RIGS = [createBlockRig(scene, M), createBlockRig(scene, M2)];
   RIGS[1].root.visible = false;
   RIGS[1].sh.visible = false;
+  /* Confirmed Character Forge look. Null keeps the block rig (CF off, ?cf=0, or still loading). */
+  let forgePawn = null;
+
+  function syncForgePawn() {
+    const body = getPlayerBody();
+    if (!body || body.source !== 'forge' || !body.object3D) {
+      if (forgePawn && forgePawn.object3D) forgePawn.object3D.visible = false;
+      forgePawn = null;
+      RIGS[0].root.visible = true;
+      return;
+    }
+    if (forgePawn !== body) {
+      if (forgePawn && forgePawn.object3D) forgePawn.object3D.visible = false;
+      forgePawn = body;
+      scene.add(body.object3D);
+      body.object3D.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = true;
+        o.receiveShadow = true;
+        o.frustumCulled = false;
+      });
+    }
+    body.object3D.visible = true;
+    RIGS[0].root.visible = false;
+  }
+
+  function poseForge(p) {
+    if (!forgePawn || p.n !== 0) return;
+    const obj = forgePawn.object3D;
+    obj.position.set(p.x, p.y, p.z);
+    obj.rotation.y = p.yaw;
+    obj.scale.setScalar(P.scale);
+    const moving = p.g && Math.hypot(p.vx, p.vz) > 0.35;
+    const clip = moving ? 'Walk' : 'Idle';
+    if (forgePawn.clip !== clip) forgePawn.play(clip);
+  }
 
   function goView(i) {
     vi = ((i % VIEWS.length) + VIEWS.length) % VIEWS.length;
@@ -760,6 +797,7 @@ export async function createTownSession(canvas, hooks) {
     root.position.set(p.x, p.y, p.z);
     root.rotation.y = p.yaw;
     root.scale.setScalar(P.scale);
+    poseForge(p);
     const ground = gAt(p.x, p.z, p.y);
     sh.position.set(p.x, ground + 0.05, p.z);
     sh.scale.setScalar(clamp(1 - (p.y - ground) * 0.2, 0.3, 1));
@@ -776,15 +814,17 @@ export async function createTownSession(canvas, hooks) {
   const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
   maskMat.toneMapped = false;
   maskMat.onBeforeCompile = (sh) => {
-    const skin = sh.vertexShader.indexOf('skinning_vertex') >= 0;
+    /* r187 already builds objectNormal for skinned meshes. Adding the chunks
+       again redefines them; unskinned meshes still need the declaration. */
+    const skinned = sh.skinning === true;
     sh.uniforms.mFogN = maskU.mFogN;
     sh.uniforms.mFogF = maskU.mFogF;
+    const normalSetup = skinned ? '' : '#include <beginnormal_vertex>\n';
     sh.vertexShader =
       'varying vec3 vMaskN;\nvarying float vMaskD;\n' +
       sh.vertexShader.replace(
         '#include <project_vertex>',
-        '#include <beginnormal_vertex>\n' +
-          (skin ? '#include <skinnormal_vertex>\n' : '') +
+        normalSetup +
           'vMaskN=normalize(normalMatrix*objectNormal);\n#include <project_vertex>\nvMaskD=-mvPosition.z;',
       );
     const out =
@@ -868,17 +908,20 @@ export async function createTownSession(canvas, hooks) {
     renderer.setClearColor(0x000000, 0);
     renderer.setRenderTarget(rt);
     renderer.clear(true, true, true);
-    renderer.render(scene, camera);
-    scene.background = bg;
-    scene.fog = fog;
-    renderer.shadowMap.enabled = sh;
-    renderer.setClearColor(cc, ca);
-    for (let i = saved.length - 1; i >= 0; i--) {
-      const o = saved[i];
-      if (o.userData._pm) {
-        o.material = o.userData._pm;
-        o.userData._pm = null;
-      } else o.visible = true;
+    try {
+      renderer.render(scene, camera);
+    } finally {
+      scene.background = bg;
+      scene.fog = fog;
+      renderer.shadowMap.enabled = sh;
+      renderer.setClearColor(cc, ca);
+      for (let i = saved.length - 1; i >= 0; i--) {
+        const o = saved[i];
+        if (o.userData._pm) {
+          o.material = o.userData._pm;
+          o.userData._pm = null;
+        } else o.visible = true;
+      }
     }
   }
 
@@ -1072,6 +1115,7 @@ export async function createTownSession(canvas, hooks) {
     U.fb.value = 0;
     renderer.info.autoReset = false;
     renderer.info.reset();
+    aimForgeSun(cam);
     renderer.setRenderTarget(rtA);
     renderer.render(scene, cam);
     colorCalls = renderer.info.render.calls;
@@ -1121,8 +1165,11 @@ export async function createTownSession(canvas, hooks) {
         dragY = 0;
         vi = -1;
       }
+      syncForgePawn();
       for (let i = 0; i < NP; i++) animateOne(fdt, RIGS[i], PLS[i]);
       RIGS[1].root.visible = RIGS[1].sh.visible = NP > 1;
+      if (forgePawn) RIGS[0].root.visible = false;
+      tickPlayerBody(fdt);
       if (window.TBTiles && TBTiles.tick) TBTiles.tick(fdt);
       if (window.TBLive && TBLive.update) TBLive.update(fdt);
       if (window.TBNpcs && TBNpcs.update) TBNpcs.update(fdt);
@@ -1227,6 +1274,7 @@ export async function createTownSession(canvas, hooks) {
       ready: true,
       session,
       setView: goView,
+      pawn: () => (forgePawn ? 'forge' : 'block'),
       player: () => ({
         x: PLS[0].x,
         y: PLS[0].y,

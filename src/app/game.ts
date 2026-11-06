@@ -251,6 +251,7 @@ export class Game implements GameHost {
       y: this.place.map.y,
     });
     settingsOpen.value = false;
+    this.warmAvatar();
     const map = new MapView(this);
     this.mapScene = map;
     await this.stack.replace(map);
@@ -424,13 +425,17 @@ export class Game implements GameHost {
   private warmAvatar(): void {
     const token = this.avatarToken;
     const avatar = this.world.avatar;
-    void this.buildSaved(avatar).then((body) => {
-      if (token !== this.avatarToken) {
-        body.dispose();
-        return;
-      }
-      adoptPlayerBody(body);
-    });
+    void this.buildSaved(avatar)
+      .then((body) => {
+        if (token !== this.avatarToken) {
+          body.dispose();
+          return;
+        }
+        adoptPlayerBody(body);
+      })
+      .catch((error: unknown) => {
+        console.warn('avatar warmup', error);
+      });
   }
 
   private async buildSaved(avatar: PlayerAvatar) {
