@@ -987,6 +987,8 @@ export async function createTownSession(canvas, hooks) {
   let fpsN = 0;
   let calls = 0;
   let triangles = 0;
+  let colorCalls = 0;
+  let colorTriangles = 0;
   let lastFrame = performance.now();
   let sunOff = { x: -27, y: 28, z: 27 };
 
@@ -1072,6 +1074,8 @@ export async function createTownSession(canvas, hooks) {
     renderer.info.reset();
     renderer.setRenderTarget(rtA);
     renderer.render(scene, cam);
+    colorCalls = renderer.info.render.calls;
+    colorTriangles = renderer.info.render.triangles;
     if (ink) paintMask(rtM, cam);
     renderer.setRenderTarget(null);
     renderer.render(quad, quadCam);
@@ -1159,6 +1163,8 @@ export async function createTownSession(canvas, hooks) {
         fps: Math.round(fps),
         calls,
         triangles,
+        colorCalls,
+        colorTriangles,
         view: vi < 0 ? 'custom' : VIEWS[vi].n,
         name: window.TBArea && TBArea.name ? TBArea.name() : '',
         camDist: P.camDist,
@@ -1235,6 +1241,7 @@ export async function createTownSession(canvas, hooks) {
         PLS[0].z = z;
         if (yaw != null) PLS[0].yaw = yaw;
         PLS[0].y = gAt(x, z, 2);
+        PLS[0].vx = PLS[0].vy = PLS[0].vz = 0;
         PLS[0].snap = true;
       },
       doors() {
@@ -1275,6 +1282,21 @@ export async function createTownSession(canvas, hooks) {
         p.vx = 2.2;
         p.vz = 0;
         p.snap = true;
+      },
+      counts() {
+        let meshes = 0;
+        let instanced = 0;
+        let visibleMeshes = 0;
+        scene.traverse((o) => {
+          if (o.isInstancedMesh) {
+            instanced += 1;
+            if (o.visible) visibleMeshes += 1;
+          } else if (o.isMesh) {
+            meshes += 1;
+            if (o.visible) visibleMeshes += 1;
+          }
+        });
+        return { meshes, instanced, visibleMeshes };
       },
       stats: () => session.stats(),
     };

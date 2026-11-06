@@ -121,6 +121,18 @@ m.color.set(hex);
 m.map=bandTex(hex,3,24);
 m.toneMapped=false;m.userData.tbKeep=1;matCache[key]=m;return m;
 }
+function stoneUV(geo,scale){
+const p=geo.attributes.position,n=geo.attributes.normal;
+const uv=new Float32Array(p.count*2),s=scale||10/32;
+for(let i=0;i<p.count;i++){
+const ax=Math.abs(n.getX(i)),ay=Math.abs(n.getY(i)),az=Math.abs(n.getZ(i));
+if(ay>=ax&&ay>=az){uv[i*2]=p.getX(i)*s;uv[i*2+1]=p.getZ(i)*s;}
+else if(ax>=az){uv[i*2]=p.getZ(i)*s;uv[i*2+1]=p.getY(i)*s;}
+else{uv[i*2]=p.getX(i)*s;uv[i*2+1]=p.getY(i)*s;}
+}
+geo.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));
+return geo;
+}
 function bandUV(geo,height,den){
 const p=geo.attributes.position,uv=new Float32Array(p.count*2),h=Math.max(0.125,height);
 for(let i=0;i<p.count;i++){
@@ -253,16 +265,27 @@ if(shape==="decal"||shape==="fx"||shape==="pad")return false;
 if(spec.category==="plant"&&spec.h<0.7&&/flower|grass_|lilypad|reeds_|beach_grass/.test(spec.name||""))return false;
 return true;
 }
+function stoneMat(){
+const base=window.TBTiles&&TBTiles.MAT&&TBTiles.MAT.stone;
+if(!base)return bandMat(STONE,1,16);
+if(stoneMat.m)return stoneMat.m;
+const m=base.clone();
+m.userData.tbKeep=1;
+if(m.map){m.map.wrapS=m.map.wrapT=THREE.RepeatWrapping;}
+stoneMat.m=m;return m;
+}
 function part(geo,hex,spec,solid){
 const den=density(spec);
 let g=geo;
 if(g.index)g=g.toNonIndexed();
 if(g.clearGroups)g.clearGroups();
 if(!g.attributes.normal)g.computeVertexNormals();
-bandUV(g,Math.max(0.25,spec.h||1),den);
+if(hex===STONE)stoneUV(g,10/32);
+else bandUV(g,Math.max(0.25,spec.h||1),den);
 g.computeBoundingSphere();
 g.userData.tbKeep=1;
-return {geo:g,mat:bandMat(hex,Math.max(0.25,spec.h||1),den),solid:solid};
+const mat=hex===STONE?stoneMat():bandMat(hex,Math.max(0.25,spec.h||1),den);
+return {geo:g,mat:mat,solid:solid};
 }
 function treeParts(spec){
 const w=spec.w,h=spec.h,style=treeStyle(spec.name||""),r=Math.min(w,spec.d)*0.5;

@@ -1896,6 +1896,77 @@ const bushGeo=new THREE.IcosahedronGeometry(0.42,0);bushGeo.translate(0,0.38,0);
 place(bushes,[{geo:bushGeo,mat:bush,y:0,s:1}]);
 return g;
 }
+/* Static boxes (walls, roofs, stalls, fences) share a handful of materials.
+   One mesh per material drops the draw-call cost of the colour pass and the
+   outline pass together. Wind, crowd, ground and instancing stay as they are. */
+function weldStatic(root){
+if(!root||typeof THREE==="undefined"||!THREE.BufferGeometryUtils)return;
+const merge=THREE.BufferGeometryUtils.mergeGeometries;
+if(!merge)return;
+root.updateMatrixWorld(true);
+const inv=new THREE.Matrix4().copy(root.matrixWorld).invert();
+function blocked(o){
+let n=o;
+while(n){
+const u=n.userData;
+if(u&&(u.tbKeep||u._wind||u.tbInterior||u.tbPerson||u.tbFade))return true;
+n=n.parent;
+}
+return false;
+}
+const meshes=[];
+root.traverse(function(o){
+if(!o.isMesh||o.isInstancedMesh||o.isSkinnedMesh)return;
+if(!o.geometry||!o.material||Array.isArray(o.material))return;
+const u=o.userData||{};
+if(u.tbOwnMat||u.surface||u.tbKeep||u._wind)return;
+if(blocked(o))return;
+meshes.push(o);
+});
+const refs=new Map();
+root.traverse(function(o){
+if(o.geometry)refs.set(o.geometry,(refs.get(o.geometry)||0)+1);
+});
+const bins={};
+meshes.forEach(function(m){
+const names=Object.keys(m.geometry.attributes).sort().join(",");
+const key=m.material.uuid+"|"+(m.castShadow?1:0)+"|"+(m.receiveShadow?1:0)+"|"+names;
+(bins[key]||(bins[key]=[])).push(m);
+});
+let removed=0,batches=0;
+Object.keys(bins).forEach(function(key){
+const list=bins[key];
+if(list.length<2)return;
+const geos=[];
+for(let i=0;i<list.length;i++){
+const src=list[i].geometry;
+let g=src.index?src.toNonIndexed():src.clone();
+g.applyMatrix4(list[i].matrixWorld);
+g.applyMatrix4(inv);
+geos.push(g);
+}
+const merged=merge(geos,false);
+geos.forEach(function(g){g.dispose();});
+if(!merged)return;
+const mesh=new THREE.Mesh(merged,list[0].material);
+mesh.name="tb-weld";
+mesh.castShadow=list[0].castShadow;
+mesh.receiveShadow=list[0].receiveShadow;
+mesh.frustumCulled=false;
+mesh.userData.tbWeld=list.length;
+root.add(mesh);
+list.forEach(function(m){
+if(m.parent)m.parent.remove(m);
+const left=(refs.get(m.geometry)||1)-1;
+refs.set(m.geometry,left);
+if(left<=0&&m.geometry.dispose)m.geometry.dispose();
+});
+removed+=list.length;
+batches++;
+});
+root.userData.tbWeld={candidates:meshes.length,removed:removed,batches:batches};
+if(typeof console!=="undefined")console.info("tb weld",root.userData.tbWeld);
+}
 function disposeGroup(){
 if(!group)return;
 group.traverse(function(o){
@@ -2011,6 +2082,7 @@ if(window.TBBuildings&&p.buildings&&p.buildings.length){
 TBBuildings.place(group,groundY,p.buildings,p.area.innerOrigin,meters,ctx.BX);
 }
 if(window.TBProps)TBProps.place(group,groundY,p,meters);
+weldStatic(group);
 widenShadows();
 if(window.__tbEntry)window.__tbEntry.sceneMs=(typeof performance!=="undefined"?performance.now():Date.now())-window.__tbEntry.t0;
 resetEdge();

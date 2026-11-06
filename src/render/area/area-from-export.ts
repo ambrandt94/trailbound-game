@@ -47,7 +47,7 @@ export function areaFromExport(value: unknown): AreaExport {
   return value as unknown as AreaExport;
 }
 
-/** `veldcross` is the default town. Hollowmere on disk is the v04 Shadowglen fixture. */
+/** `veldcross` is Ironmarch. Place id `hollowmere` exports as the grove Shadowglen. */
 export function townFixtureId(hint: string): FixtureId {
   const query = hint.includes('=') ? hint.replace(/^\?/, '') : '';
   const name = (query ? (new URLSearchParams(query).get('town') ?? '') : hint).toLowerCase();
@@ -58,7 +58,7 @@ export function townFixtureId(hint: string): FixtureId {
 
 const FIXTURE_URL = {
   veldcross: new URL('../../../tests/fixtures/area-veldcross-v05.json', import.meta.url),
-  hollowmere: new URL('../../../tests/fixtures/area-hollowmere-v04.json', import.meta.url),
+  hollowmere: new URL('../../../tests/fixtures/area-hollowmere.json', import.meta.url),
   jadewild: new URL('../../../tests/fixtures/area-jadewild.json', import.meta.url),
 } as const;
 

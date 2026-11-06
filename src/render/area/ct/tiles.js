@@ -81,7 +81,14 @@ function loadTex(url,hex){
 const c=document.createElement("canvas");c.width=c.height=2;
 const g=c.getContext("2d");g.fillStyle=hex||"#8a8a8a";g.fillRect(0,0,2,2);
 const t=new THREE.CanvasTexture(c);crisp(t);
-const img=new Image();img.onload=function(){t.image=img;t.needsUpdate=true;kickBake();};img.src=url;return t;
+const img=new Image();img.onload=function(){
+/* r187 allocates texStorage2D on the first upload. A 2×2 stand-in cannot
+   grow into the real tile, so drop that GPU texture and upload at full size. */
+t.dispose();
+t.image=img;
+t.needsUpdate=true;
+kickBake();
+};img.src=url;return t;
 }
 function plain(map){
 const m=new THREE.MeshLambertMaterial({map:map||null,color:0xffffff});
@@ -201,7 +208,7 @@ const CEL=[
 "for(int _i=1;_i<8;_i++){if(float(_i)>=_steps)break;_band+=tbEdge(_nl,float(_i)/_steps,_bay,_w);}",
 "}",
 "}",
-"float _mask=1.0;",
+"float _mask=tbShadowMask();",
 "float _drop=max(_band-1.0,0.0);",
 "float _keep=1.0;",
 "if(_w<0.0001){_keep=_mask>=0.5?1.0:0.0;}",
@@ -219,11 +226,29 @@ const CEL=[
 "reflectedLight.indirectDiffuse=vec3(0.0);",
 "reflectedLight.directDiffuse=_col;"
 ].join("\n");
-const SHADE_DECL="uniform float uDithOn;\nuniform float uPat;\nuniform float uEdge;\nuniform float uStrength;\nuniform float uShHue;\nuniform float uPix;\nuniform float uLit;\nuniform float uSunI;\nuniform float uHemi;\nuniform vec3 uSunCol;\n";
+const SHADE_DECL="uniform float uDithOn;\nuniform float uPat;\nuniform float uEdge;\nuniform float uStrength;\nuniform float uShHue;\nuniform float uPix;\nuniform float uLit;\nuniform float uSunI;\nuniform float uHemi;\nuniform float uTexel;\nuniform vec3 uSunCol;\n";
 /* N·L bands and the cast-shadow edge. Fog and water depth already dither in the
    last fifth of a wide band, so this pass leaves #include <fog_fragment> alone. */
+const SHADOW_FN=[
+"#include <shadowmap_pars_fragment>",
+"float tbShadowMask(){",
+"float shadow=1.0;",
+"#if defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )",
+"DirectionalLightShadow tbLit=directionalLightShadows[0];",
+"shadow=receiveShadow?getShadow(directionalShadowMap[0],tbLit.shadowMapSize,tbLit.shadowIntensity,tbLit.shadowBias,tbLit.shadowRadius,vDirectionalShadowCoord[0]):1.0;",
+"#endif",
+"return shadow;",
+"}"
+].join("\n");
 function patchLighting(fs){
-if(fs.indexOf("uniform float uDithOn;")<0)fs=SHADE_DECL+fs;
+if(fs.indexOf("#include <shadowmap_pars_fragment>")>=0&&fs.indexOf("tbShadowMask")<0){
+fs=fs.replace("#include <shadowmap_pars_fragment>",SHADOW_FN);
+}
+if(fs.indexOf("uniform float uDithOn;")<0){
+let decl=SHADE_DECL;
+if(fs.indexOf("uniform float uTexel;")>=0)decl=decl.replace("uniform float uTexel;\n","");
+fs=decl+fs;
+}
 if(fs.indexOf("float tbM2")<0)fs=fs.replace("void main()","\n"+BAYER_LIB+"\n"+BAND_LIB+"\nvoid main()");
 const mul=/reflectedLight\.directDiffuse\s*\*=\s*BRDF_Diffuse_Lambert\(\s*diffuseColor\.rgb\s*\)\s*\*\s*getShadowMask\(\)\s*;/;
 if(mul.test(fs))fs=fs.replace(mul,CEL);
@@ -255,7 +280,7 @@ m.onBeforeCompile=function(sh){
 if(prev)prev(sh);
 bindShade(sh);
 let fs=sh.fragmentShader;
-if(fs.indexOf("uniform float uSteps;")<0)fs="uniform float uSteps;\nuniform float uCool;\nuniform float uTexel;\n"+fs;
+if(fs.indexOf("uniform float uSteps;")<0)fs="uniform float uSteps;\nuniform float uCool;\n"+fs;
 sh.fragmentShader=patchLighting(fs.replace("#include <map_fragment>",MAP_UV));
 };
 m.needsUpdate=true;
@@ -434,7 +459,7 @@ return t;
 function loadImageTex(url,srgb){
 const img=new Image();
 const t=nearestTex(img,srgb);
-img.onload=function(){t.needsUpdate=true;kickBake();};
+img.onload=function(){t.dispose();t.needsUpdate=true;kickBake();};
 img.src=url;return t;
 }
 function solidTex(w,h,fill){
@@ -1847,7 +1872,7 @@ t.generateMipmaps=true;t.anisotropy=1;
 t.wrapS=t.wrapT=repeat?THREE.RepeatWrapping:THREE.ClampToEdgeWrapping;
 t.colorSpace=THREE.SRGBColorSpace;
 const img=new Image();
-img.onload=function(){t.image=img;t.needsUpdate=true;};
+img.onload=function(){t.dispose();t.image=img;t.needsUpdate=true;};
 img.src=url;
 return t;
 }
