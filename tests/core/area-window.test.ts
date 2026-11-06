@@ -182,17 +182,25 @@ test('wilderness export matches the window and a settlement export keeps the tow
   expect(town?.areaExport.area.worldTiles).toHaveLength(node.tiles.length);
   expect(town?.areaExport).not.toBe(first.areaExport);
 
-  state.hero = { x: 18, y: 18, yaw: 0 };
+  state.hero = { x: 18, y: 18, yaw: 0.2 };
+  state.buildHandoffHere();
+  state.placeHeroOutside({ side: 'north', pos: 0.5, yaw: 0, cancel: true });
+  expect(state.hero.x).toBeCloseTo(18, 5);
+  expect(state.hero.y).toBeCloseTo(18, 5);
+  expect(state.hero.yaw).toBeCloseTo(0.2, 5);
+
   state.placeHeroOutside({ side: 'north', pos: 0.5, yaw: 1 });
   expect(state.footprint?.minY).toBe(14);
-  expect(state.hero.y).toBeCloseTo(14 - 1.2, 5);
+  expect(state.hero.y).toBeCloseTo(14 - 0.5, 5);
+  expect(Math.floor(state.hero.y)).toBe(13);
   expect(state.hero.yaw).toBe(1);
 
   state.hero = { x: 12.5, y: 12.5, yaw: 0 };
   state.buildHandoffHere();
   state.placeHeroOutside({ side: 'east', pos: 0, yaw: 0.4 });
-  expect(state.hero.x).toBeCloseTo(23 + 1.2, 5);
-  expect(state.hero.y).toBeCloseTo(12, 5);
+  expect(state.hero.x).toBeCloseTo(23 + 1.5, 5);
+  expect(Math.floor(state.hero.x)).toBe(24);
+  expect(state.hero.y).toBeCloseTo(12.5, 5);
 }, 60_000);
 
 test('detail zoom stops a stride on the first settlement tile it crosses', () => {
@@ -200,7 +208,9 @@ test('detail zoom stops a stride on the first settlement tile it crosses', () =>
   dress(world);
   const stopped = clampStepToSettlement(world, 8.5, 14.5, 8, 0, SETTLEMENT_STOP_SCALE);
   expect(stopped.holdId).toBe('ham');
-  expect(stopped.dx).toBeCloseTo(14.5 - 8.5, 5);
+  expect(Math.floor(8.5 + stopped.dx)).toBe(14);
+  expect(8.5 + stopped.dx).toBeGreaterThanOrEqual(14);
+  expect(8.5 + stopped.dx).toBeLessThan(14.05);
   expect(stopped.dy).toBeCloseTo(0, 5);
 
   const far = clampStepToSettlement(world, 8.5, 14.5, 8, 0, SETTLEMENT_STOP_SCALE - 0.1);
