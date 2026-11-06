@@ -1,0 +1,3265 @@
+{
+ "source_biome_enum": "trailbound-world-map src/app/models/world.models.ts (enum Biome, BIOME_COUNT=15)",
+ "atlas": {
+  "file": "atlas_terrain_768x288.png",
+  "cols": 16,
+  "rows": 6,
+  "tile_px": 48,
+  "size": [
+   768,
+   288
+  ],
+  "filter": "nearest",
+  "mips": "none (atlas: mips bleed across cells)",
+  "cell_uv": [
+   0.0625,
+   0.166667
+  ],
+  "half_texel_uv": [
+   0.000651,
+   0.0017361
+  ],
+  "id_to_cell": "col = id % 16, row = floor(id / 16); pixel origin top-left",
+  "tiles": [
+   "terrain_grass_v0_48",
+   "terrain_grass_v1_48",
+   "terrain_grass_v2_48",
+   "terrain_grass_v3_48",
+   "terrain_grass_v4_48",
+   "terrain_grass_f0_48",
+   "terrain_grass_f1_48",
+   "terrain_dirt_path_48",
+   "terrain_edge_N_48",
+   "terrain_edge_S_48",
+   "terrain_edge_W_48",
+   "terrain_edge_E_48",
+   "terrain_edge_inner_NW_48",
+   "terrain_edge_inner_NE_48",
+   "terrain_edge_inner_SE_48",
+   "terrain_edge_inner_SW_48",
+   "terrain_edge_outer_NW_48",
+   "terrain_edge_outer_NE_48",
+   "terrain_edge_outer_SE_48",
+   "terrain_edge_outer_SW_48",
+   "terrain_road_sandstone_48",
+   "terrain_sand_wet_48",
+   "terrain_sand_beach_v0_48",
+   "terrain_sand_beach_v1_48",
+   "terrain_sand_beach_v2_48",
+   "terrain_meadow_v0_48",
+   "terrain_meadow_v1_48",
+   "terrain_forest_v0_48",
+   "terrain_forest_v1_48",
+   "terrain_forest_v2_48",
+   "terrain_darkforest_v0_48",
+   "terrain_darkforest_v1_48",
+   "terrain_hills_v0_48",
+   "terrain_hills_v1_48",
+   "terrain_badlands_v0_48",
+   "terrain_badlands_v1_48",
+   "terrain_badlands_v2_48",
+   "terrain_marsh_v0_48",
+   "terrain_marsh_v1_48",
+   "terrain_marsh_v2_48",
+   "terrain_marsh_v3_48",
+   "terrain_rock_ground_v0_48",
+   "terrain_rock_ground_v1_48",
+   "terrain_rock_ground_v2_48",
+   "terrain_snow_v0_48",
+   "terrain_snow_v1_48",
+   "terrain_snow_v2_48",
+   "terrain_taiga_v0_48",
+   "terrain_taiga_v1_48",
+   "terrain_sand_desert_v0_48",
+   "terrain_sand_desert_v1_48",
+   "terrain_sand_desert_v2_48",
+   "terrain_jungle_v0_48",
+   "terrain_jungle_v1_48",
+   "terrain_ash_v0_48",
+   "terrain_ash_v1_48",
+   "terrain_ash_v2_48",
+   "terrain_ice_48",
+   "terrain_marsh_grass_v0_48",
+   "terrain_marsh_grass_v1_48",
+   "terrain_edge_grass_sand_N_48",
+   "terrain_edge_grass_sand_S_48",
+   "terrain_edge_grass_sand_W_48",
+   "terrain_edge_grass_sand_E_48",
+   "terrain_edge_grass_sand_inner_NW_48",
+   "terrain_edge_grass_sand_inner_NE_48",
+   "terrain_edge_grass_sand_inner_SE_48",
+   "terrain_edge_grass_sand_inner_SW_48",
+   "terrain_edge_grass_sand_outer_NW_48",
+   "terrain_edge_grass_sand_outer_NE_48",
+   "terrain_edge_grass_sand_outer_SE_48",
+   "terrain_edge_grass_sand_outer_SW_48",
+   "terrain_edge_grass_marsh_N_48",
+   "terrain_edge_grass_marsh_S_48",
+   "terrain_edge_grass_marsh_W_48",
+   "terrain_edge_grass_marsh_E_48",
+   "terrain_edge_grass_marsh_inner_NW_48",
+   "terrain_edge_grass_marsh_inner_NE_48",
+   "terrain_edge_grass_marsh_inner_SE_48",
+   "terrain_edge_grass_marsh_inner_SW_48",
+   "terrain_edge_grass_marsh_outer_NW_48",
+   "terrain_edge_grass_marsh_outer_NE_48",
+   "terrain_edge_grass_marsh_outer_SE_48",
+   "terrain_edge_grass_marsh_outer_SW_48",
+   "terrain_edge_snow_rock_N_48",
+   "terrain_edge_snow_rock_S_48",
+   "terrain_edge_snow_rock_W_48",
+   "terrain_edge_snow_rock_E_48",
+   "terrain_edge_snow_rock_inner_NW_48",
+   "terrain_edge_snow_rock_inner_NE_48",
+   "terrain_edge_snow_rock_inner_SE_48",
+   "terrain_edge_snow_rock_inner_SW_48",
+   "terrain_edge_snow_rock_outer_NW_48",
+   "terrain_edge_snow_rock_outer_NE_48",
+   "terrain_edge_snow_rock_outer_SE_48",
+   "terrain_edge_snow_rock_outer_SW_48"
+  ],
+  "cells": [
+   {
+    "id": 0,
+    "tile": "terrain_grass_v0_48",
+    "col": 0,
+    "row": 0,
+    "px": [
+     0,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0.0,
+     0.0625,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.0,
+     0.833333,
+     0.0625,
+     1.0
+    ]
+   },
+   {
+    "id": 1,
+    "tile": "terrain_grass_v1_48",
+    "col": 1,
+    "row": 0,
+    "px": [
+     48,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0625,
+     0.0,
+     0.125,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.0625,
+     0.833333,
+     0.125,
+     1.0
+    ]
+   },
+   {
+    "id": 2,
+    "tile": "terrain_grass_v2_48",
+    "col": 2,
+    "row": 0,
+    "px": [
+     96,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.125,
+     0.0,
+     0.1875,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.125,
+     0.833333,
+     0.1875,
+     1.0
+    ]
+   },
+   {
+    "id": 3,
+    "tile": "terrain_grass_v3_48",
+    "col": 3,
+    "row": 0,
+    "px": [
+     144,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.1875,
+     0.0,
+     0.25,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.1875,
+     0.833333,
+     0.25,
+     1.0
+    ]
+   },
+   {
+    "id": 4,
+    "tile": "terrain_grass_v4_48",
+    "col": 4,
+    "row": 0,
+    "px": [
+     192,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0.0,
+     0.3125,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.25,
+     0.833333,
+     0.3125,
+     1.0
+    ]
+   },
+   {
+    "id": 5,
+    "tile": "terrain_grass_f0_48",
+    "col": 5,
+    "row": 0,
+    "px": [
+     240,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.3125,
+     0.0,
+     0.375,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.3125,
+     0.833333,
+     0.375,
+     1.0
+    ]
+   },
+   {
+    "id": 6,
+    "tile": "terrain_grass_f1_48",
+    "col": 6,
+    "row": 0,
+    "px": [
+     288,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.375,
+     0.0,
+     0.4375,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.375,
+     0.833333,
+     0.4375,
+     1.0
+    ]
+   },
+   {
+    "id": 7,
+    "tile": "terrain_dirt_path_48",
+    "col": 7,
+    "row": 0,
+    "px": [
+     336,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.4375,
+     0.0,
+     0.5,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.4375,
+     0.833333,
+     0.5,
+     1.0
+    ]
+   },
+   {
+    "id": 8,
+    "tile": "terrain_edge_N_48",
+    "col": 8,
+    "row": 0,
+    "px": [
+     384,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0.0,
+     0.5625,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.5,
+     0.833333,
+     0.5625,
+     1.0
+    ]
+   },
+   {
+    "id": 9,
+    "tile": "terrain_edge_S_48",
+    "col": 9,
+    "row": 0,
+    "px": [
+     432,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5625,
+     0.0,
+     0.625,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.5625,
+     0.833333,
+     0.625,
+     1.0
+    ]
+   },
+   {
+    "id": 10,
+    "tile": "terrain_edge_W_48",
+    "col": 10,
+    "row": 0,
+    "px": [
+     480,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.625,
+     0.0,
+     0.6875,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.625,
+     0.833333,
+     0.6875,
+     1.0
+    ]
+   },
+   {
+    "id": 11,
+    "tile": "terrain_edge_E_48",
+    "col": 11,
+    "row": 0,
+    "px": [
+     528,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.6875,
+     0.0,
+     0.75,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.6875,
+     0.833333,
+     0.75,
+     1.0
+    ]
+   },
+   {
+    "id": 12,
+    "tile": "terrain_edge_inner_NW_48",
+    "col": 12,
+    "row": 0,
+    "px": [
+     576,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0.0,
+     0.8125,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.75,
+     0.833333,
+     0.8125,
+     1.0
+    ]
+   },
+   {
+    "id": 13,
+    "tile": "terrain_edge_inner_NE_48",
+    "col": 13,
+    "row": 0,
+    "px": [
+     624,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.8125,
+     0.0,
+     0.875,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.8125,
+     0.833333,
+     0.875,
+     1.0
+    ]
+   },
+   {
+    "id": 14,
+    "tile": "terrain_edge_inner_SE_48",
+    "col": 14,
+    "row": 0,
+    "px": [
+     672,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.875,
+     0.0,
+     0.9375,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.875,
+     0.833333,
+     0.9375,
+     1.0
+    ]
+   },
+   {
+    "id": 15,
+    "tile": "terrain_edge_inner_SW_48",
+    "col": 15,
+    "row": 0,
+    "px": [
+     720,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.9375,
+     0.0,
+     1.0,
+     0.166667
+    ],
+    "uv_gl_flipY": [
+     0.9375,
+     0.833333,
+     1.0,
+     1.0
+    ]
+   },
+   {
+    "id": 16,
+    "tile": "terrain_edge_outer_NW_48",
+    "col": 0,
+    "row": 1,
+    "px": [
+     0,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0.166667,
+     0.0625,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.0,
+     0.666667,
+     0.0625,
+     0.833333
+    ]
+   },
+   {
+    "id": 17,
+    "tile": "terrain_edge_outer_NE_48",
+    "col": 1,
+    "row": 1,
+    "px": [
+     48,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0625,
+     0.166667,
+     0.125,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.0625,
+     0.666667,
+     0.125,
+     0.833333
+    ]
+   },
+   {
+    "id": 18,
+    "tile": "terrain_edge_outer_SE_48",
+    "col": 2,
+    "row": 1,
+    "px": [
+     96,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.125,
+     0.166667,
+     0.1875,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.125,
+     0.666667,
+     0.1875,
+     0.833333
+    ]
+   },
+   {
+    "id": 19,
+    "tile": "terrain_edge_outer_SW_48",
+    "col": 3,
+    "row": 1,
+    "px": [
+     144,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.1875,
+     0.166667,
+     0.25,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.1875,
+     0.666667,
+     0.25,
+     0.833333
+    ]
+   },
+   {
+    "id": 20,
+    "tile": "terrain_road_sandstone_48",
+    "col": 4,
+    "row": 1,
+    "px": [
+     192,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0.166667,
+     0.3125,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.25,
+     0.666667,
+     0.3125,
+     0.833333
+    ]
+   },
+   {
+    "id": 21,
+    "tile": "terrain_sand_wet_48",
+    "col": 5,
+    "row": 1,
+    "px": [
+     240,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.3125,
+     0.166667,
+     0.375,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.3125,
+     0.666667,
+     0.375,
+     0.833333
+    ]
+   },
+   {
+    "id": 22,
+    "tile": "terrain_sand_beach_v0_48",
+    "col": 6,
+    "row": 1,
+    "px": [
+     288,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.375,
+     0.166667,
+     0.4375,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.375,
+     0.666667,
+     0.4375,
+     0.833333
+    ]
+   },
+   {
+    "id": 23,
+    "tile": "terrain_sand_beach_v1_48",
+    "col": 7,
+    "row": 1,
+    "px": [
+     336,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.4375,
+     0.166667,
+     0.5,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.4375,
+     0.666667,
+     0.5,
+     0.833333
+    ]
+   },
+   {
+    "id": 24,
+    "tile": "terrain_sand_beach_v2_48",
+    "col": 8,
+    "row": 1,
+    "px": [
+     384,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0.166667,
+     0.5625,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.5,
+     0.666667,
+     0.5625,
+     0.833333
+    ]
+   },
+   {
+    "id": 25,
+    "tile": "terrain_meadow_v0_48",
+    "col": 9,
+    "row": 1,
+    "px": [
+     432,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5625,
+     0.166667,
+     0.625,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.5625,
+     0.666667,
+     0.625,
+     0.833333
+    ]
+   },
+   {
+    "id": 26,
+    "tile": "terrain_meadow_v1_48",
+    "col": 10,
+    "row": 1,
+    "px": [
+     480,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.625,
+     0.166667,
+     0.6875,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.625,
+     0.666667,
+     0.6875,
+     0.833333
+    ]
+   },
+   {
+    "id": 27,
+    "tile": "terrain_forest_v0_48",
+    "col": 11,
+    "row": 1,
+    "px": [
+     528,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.6875,
+     0.166667,
+     0.75,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.6875,
+     0.666667,
+     0.75,
+     0.833333
+    ]
+   },
+   {
+    "id": 28,
+    "tile": "terrain_forest_v1_48",
+    "col": 12,
+    "row": 1,
+    "px": [
+     576,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0.166667,
+     0.8125,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.75,
+     0.666667,
+     0.8125,
+     0.833333
+    ]
+   },
+   {
+    "id": 29,
+    "tile": "terrain_forest_v2_48",
+    "col": 13,
+    "row": 1,
+    "px": [
+     624,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.8125,
+     0.166667,
+     0.875,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.8125,
+     0.666667,
+     0.875,
+     0.833333
+    ]
+   },
+   {
+    "id": 30,
+    "tile": "terrain_darkforest_v0_48",
+    "col": 14,
+    "row": 1,
+    "px": [
+     672,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.875,
+     0.166667,
+     0.9375,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.875,
+     0.666667,
+     0.9375,
+     0.833333
+    ]
+   },
+   {
+    "id": 31,
+    "tile": "terrain_darkforest_v1_48",
+    "col": 15,
+    "row": 1,
+    "px": [
+     720,
+     48,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.9375,
+     0.166667,
+     1.0,
+     0.333333
+    ],
+    "uv_gl_flipY": [
+     0.9375,
+     0.666667,
+     1.0,
+     0.833333
+    ]
+   },
+   {
+    "id": 32,
+    "tile": "terrain_hills_v0_48",
+    "col": 0,
+    "row": 2,
+    "px": [
+     0,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0.333333,
+     0.0625,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.0,
+     0.5,
+     0.0625,
+     0.666667
+    ]
+   },
+   {
+    "id": 33,
+    "tile": "terrain_hills_v1_48",
+    "col": 1,
+    "row": 2,
+    "px": [
+     48,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0625,
+     0.333333,
+     0.125,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.0625,
+     0.5,
+     0.125,
+     0.666667
+    ]
+   },
+   {
+    "id": 34,
+    "tile": "terrain_badlands_v0_48",
+    "col": 2,
+    "row": 2,
+    "px": [
+     96,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.125,
+     0.333333,
+     0.1875,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.125,
+     0.5,
+     0.1875,
+     0.666667
+    ]
+   },
+   {
+    "id": 35,
+    "tile": "terrain_badlands_v1_48",
+    "col": 3,
+    "row": 2,
+    "px": [
+     144,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.1875,
+     0.333333,
+     0.25,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.1875,
+     0.5,
+     0.25,
+     0.666667
+    ]
+   },
+   {
+    "id": 36,
+    "tile": "terrain_badlands_v2_48",
+    "col": 4,
+    "row": 2,
+    "px": [
+     192,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0.333333,
+     0.3125,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.25,
+     0.5,
+     0.3125,
+     0.666667
+    ]
+   },
+   {
+    "id": 37,
+    "tile": "terrain_marsh_v0_48",
+    "col": 5,
+    "row": 2,
+    "px": [
+     240,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.3125,
+     0.333333,
+     0.375,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.3125,
+     0.5,
+     0.375,
+     0.666667
+    ]
+   },
+   {
+    "id": 38,
+    "tile": "terrain_marsh_v1_48",
+    "col": 6,
+    "row": 2,
+    "px": [
+     288,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.375,
+     0.333333,
+     0.4375,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.375,
+     0.5,
+     0.4375,
+     0.666667
+    ]
+   },
+   {
+    "id": 39,
+    "tile": "terrain_marsh_v2_48",
+    "col": 7,
+    "row": 2,
+    "px": [
+     336,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.4375,
+     0.333333,
+     0.5,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.4375,
+     0.5,
+     0.5,
+     0.666667
+    ]
+   },
+   {
+    "id": 40,
+    "tile": "terrain_marsh_v3_48",
+    "col": 8,
+    "row": 2,
+    "px": [
+     384,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0.333333,
+     0.5625,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.5,
+     0.5,
+     0.5625,
+     0.666667
+    ]
+   },
+   {
+    "id": 41,
+    "tile": "terrain_rock_ground_v0_48",
+    "col": 9,
+    "row": 2,
+    "px": [
+     432,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5625,
+     0.333333,
+     0.625,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.5625,
+     0.5,
+     0.625,
+     0.666667
+    ]
+   },
+   {
+    "id": 42,
+    "tile": "terrain_rock_ground_v1_48",
+    "col": 10,
+    "row": 2,
+    "px": [
+     480,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.625,
+     0.333333,
+     0.6875,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.625,
+     0.5,
+     0.6875,
+     0.666667
+    ]
+   },
+   {
+    "id": 43,
+    "tile": "terrain_rock_ground_v2_48",
+    "col": 11,
+    "row": 2,
+    "px": [
+     528,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.6875,
+     0.333333,
+     0.75,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.6875,
+     0.5,
+     0.75,
+     0.666667
+    ]
+   },
+   {
+    "id": 44,
+    "tile": "terrain_snow_v0_48",
+    "col": 12,
+    "row": 2,
+    "px": [
+     576,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0.333333,
+     0.8125,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.75,
+     0.5,
+     0.8125,
+     0.666667
+    ]
+   },
+   {
+    "id": 45,
+    "tile": "terrain_snow_v1_48",
+    "col": 13,
+    "row": 2,
+    "px": [
+     624,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.8125,
+     0.333333,
+     0.875,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.8125,
+     0.5,
+     0.875,
+     0.666667
+    ]
+   },
+   {
+    "id": 46,
+    "tile": "terrain_snow_v2_48",
+    "col": 14,
+    "row": 2,
+    "px": [
+     672,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.875,
+     0.333333,
+     0.9375,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.875,
+     0.5,
+     0.9375,
+     0.666667
+    ]
+   },
+   {
+    "id": 47,
+    "tile": "terrain_taiga_v0_48",
+    "col": 15,
+    "row": 2,
+    "px": [
+     720,
+     96,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.9375,
+     0.333333,
+     1.0,
+     0.5
+    ],
+    "uv_gl_flipY": [
+     0.9375,
+     0.5,
+     1.0,
+     0.666667
+    ]
+   },
+   {
+    "id": 48,
+    "tile": "terrain_taiga_v1_48",
+    "col": 0,
+    "row": 3,
+    "px": [
+     0,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0.5,
+     0.0625,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.0,
+     0.333333,
+     0.0625,
+     0.5
+    ]
+   },
+   {
+    "id": 49,
+    "tile": "terrain_sand_desert_v0_48",
+    "col": 1,
+    "row": 3,
+    "px": [
+     48,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0625,
+     0.5,
+     0.125,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.0625,
+     0.333333,
+     0.125,
+     0.5
+    ]
+   },
+   {
+    "id": 50,
+    "tile": "terrain_sand_desert_v1_48",
+    "col": 2,
+    "row": 3,
+    "px": [
+     96,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.125,
+     0.5,
+     0.1875,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.125,
+     0.333333,
+     0.1875,
+     0.5
+    ]
+   },
+   {
+    "id": 51,
+    "tile": "terrain_sand_desert_v2_48",
+    "col": 3,
+    "row": 3,
+    "px": [
+     144,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.1875,
+     0.5,
+     0.25,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.1875,
+     0.333333,
+     0.25,
+     0.5
+    ]
+   },
+   {
+    "id": 52,
+    "tile": "terrain_jungle_v0_48",
+    "col": 4,
+    "row": 3,
+    "px": [
+     192,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0.5,
+     0.3125,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.25,
+     0.333333,
+     0.3125,
+     0.5
+    ]
+   },
+   {
+    "id": 53,
+    "tile": "terrain_jungle_v1_48",
+    "col": 5,
+    "row": 3,
+    "px": [
+     240,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.3125,
+     0.5,
+     0.375,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.3125,
+     0.333333,
+     0.375,
+     0.5
+    ]
+   },
+   {
+    "id": 54,
+    "tile": "terrain_ash_v0_48",
+    "col": 6,
+    "row": 3,
+    "px": [
+     288,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.375,
+     0.5,
+     0.4375,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.375,
+     0.333333,
+     0.4375,
+     0.5
+    ]
+   },
+   {
+    "id": 55,
+    "tile": "terrain_ash_v1_48",
+    "col": 7,
+    "row": 3,
+    "px": [
+     336,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.4375,
+     0.5,
+     0.5,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.4375,
+     0.333333,
+     0.5,
+     0.5
+    ]
+   },
+   {
+    "id": 56,
+    "tile": "terrain_ash_v2_48",
+    "col": 8,
+    "row": 3,
+    "px": [
+     384,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0.5,
+     0.5625,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.5,
+     0.333333,
+     0.5625,
+     0.5
+    ]
+   },
+   {
+    "id": 57,
+    "tile": "terrain_ice_48",
+    "col": 9,
+    "row": 3,
+    "px": [
+     432,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5625,
+     0.5,
+     0.625,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.5625,
+     0.333333,
+     0.625,
+     0.5
+    ]
+   },
+   {
+    "id": 58,
+    "tile": "terrain_marsh_grass_v0_48",
+    "col": 10,
+    "row": 3,
+    "px": [
+     480,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.625,
+     0.5,
+     0.6875,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.625,
+     0.333333,
+     0.6875,
+     0.5
+    ]
+   },
+   {
+    "id": 59,
+    "tile": "terrain_marsh_grass_v1_48",
+    "col": 11,
+    "row": 3,
+    "px": [
+     528,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.6875,
+     0.5,
+     0.75,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.6875,
+     0.333333,
+     0.75,
+     0.5
+    ]
+   },
+   {
+    "id": 60,
+    "tile": "terrain_edge_grass_sand_N_48",
+    "col": 12,
+    "row": 3,
+    "px": [
+     576,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0.5,
+     0.8125,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.75,
+     0.333333,
+     0.8125,
+     0.5
+    ]
+   },
+   {
+    "id": 61,
+    "tile": "terrain_edge_grass_sand_S_48",
+    "col": 13,
+    "row": 3,
+    "px": [
+     624,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.8125,
+     0.5,
+     0.875,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.8125,
+     0.333333,
+     0.875,
+     0.5
+    ]
+   },
+   {
+    "id": 62,
+    "tile": "terrain_edge_grass_sand_W_48",
+    "col": 14,
+    "row": 3,
+    "px": [
+     672,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.875,
+     0.5,
+     0.9375,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.875,
+     0.333333,
+     0.9375,
+     0.5
+    ]
+   },
+   {
+    "id": 63,
+    "tile": "terrain_edge_grass_sand_E_48",
+    "col": 15,
+    "row": 3,
+    "px": [
+     720,
+     144,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.9375,
+     0.5,
+     1.0,
+     0.666667
+    ],
+    "uv_gl_flipY": [
+     0.9375,
+     0.333333,
+     1.0,
+     0.5
+    ]
+   },
+   {
+    "id": 64,
+    "tile": "terrain_edge_grass_sand_inner_NW_48",
+    "col": 0,
+    "row": 4,
+    "px": [
+     0,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0.666667,
+     0.0625,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.0,
+     0.166667,
+     0.0625,
+     0.333333
+    ]
+   },
+   {
+    "id": 65,
+    "tile": "terrain_edge_grass_sand_inner_NE_48",
+    "col": 1,
+    "row": 4,
+    "px": [
+     48,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0625,
+     0.666667,
+     0.125,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.0625,
+     0.166667,
+     0.125,
+     0.333333
+    ]
+   },
+   {
+    "id": 66,
+    "tile": "terrain_edge_grass_sand_inner_SE_48",
+    "col": 2,
+    "row": 4,
+    "px": [
+     96,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.125,
+     0.666667,
+     0.1875,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.125,
+     0.166667,
+     0.1875,
+     0.333333
+    ]
+   },
+   {
+    "id": 67,
+    "tile": "terrain_edge_grass_sand_inner_SW_48",
+    "col": 3,
+    "row": 4,
+    "px": [
+     144,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.1875,
+     0.666667,
+     0.25,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.1875,
+     0.166667,
+     0.25,
+     0.333333
+    ]
+   },
+   {
+    "id": 68,
+    "tile": "terrain_edge_grass_sand_outer_NW_48",
+    "col": 4,
+    "row": 4,
+    "px": [
+     192,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0.666667,
+     0.3125,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.25,
+     0.166667,
+     0.3125,
+     0.333333
+    ]
+   },
+   {
+    "id": 69,
+    "tile": "terrain_edge_grass_sand_outer_NE_48",
+    "col": 5,
+    "row": 4,
+    "px": [
+     240,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.3125,
+     0.666667,
+     0.375,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.3125,
+     0.166667,
+     0.375,
+     0.333333
+    ]
+   },
+   {
+    "id": 70,
+    "tile": "terrain_edge_grass_sand_outer_SE_48",
+    "col": 6,
+    "row": 4,
+    "px": [
+     288,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.375,
+     0.666667,
+     0.4375,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.375,
+     0.166667,
+     0.4375,
+     0.333333
+    ]
+   },
+   {
+    "id": 71,
+    "tile": "terrain_edge_grass_sand_outer_SW_48",
+    "col": 7,
+    "row": 4,
+    "px": [
+     336,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.4375,
+     0.666667,
+     0.5,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.4375,
+     0.166667,
+     0.5,
+     0.333333
+    ]
+   },
+   {
+    "id": 72,
+    "tile": "terrain_edge_grass_marsh_N_48",
+    "col": 8,
+    "row": 4,
+    "px": [
+     384,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0.666667,
+     0.5625,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.5,
+     0.166667,
+     0.5625,
+     0.333333
+    ]
+   },
+   {
+    "id": 73,
+    "tile": "terrain_edge_grass_marsh_S_48",
+    "col": 9,
+    "row": 4,
+    "px": [
+     432,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5625,
+     0.666667,
+     0.625,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.5625,
+     0.166667,
+     0.625,
+     0.333333
+    ]
+   },
+   {
+    "id": 74,
+    "tile": "terrain_edge_grass_marsh_W_48",
+    "col": 10,
+    "row": 4,
+    "px": [
+     480,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.625,
+     0.666667,
+     0.6875,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.625,
+     0.166667,
+     0.6875,
+     0.333333
+    ]
+   },
+   {
+    "id": 75,
+    "tile": "terrain_edge_grass_marsh_E_48",
+    "col": 11,
+    "row": 4,
+    "px": [
+     528,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.6875,
+     0.666667,
+     0.75,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.6875,
+     0.166667,
+     0.75,
+     0.333333
+    ]
+   },
+   {
+    "id": 76,
+    "tile": "terrain_edge_grass_marsh_inner_NW_48",
+    "col": 12,
+    "row": 4,
+    "px": [
+     576,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0.666667,
+     0.8125,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.75,
+     0.166667,
+     0.8125,
+     0.333333
+    ]
+   },
+   {
+    "id": 77,
+    "tile": "terrain_edge_grass_marsh_inner_NE_48",
+    "col": 13,
+    "row": 4,
+    "px": [
+     624,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.8125,
+     0.666667,
+     0.875,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.8125,
+     0.166667,
+     0.875,
+     0.333333
+    ]
+   },
+   {
+    "id": 78,
+    "tile": "terrain_edge_grass_marsh_inner_SE_48",
+    "col": 14,
+    "row": 4,
+    "px": [
+     672,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.875,
+     0.666667,
+     0.9375,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.875,
+     0.166667,
+     0.9375,
+     0.333333
+    ]
+   },
+   {
+    "id": 79,
+    "tile": "terrain_edge_grass_marsh_inner_SW_48",
+    "col": 15,
+    "row": 4,
+    "px": [
+     720,
+     192,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.9375,
+     0.666667,
+     1.0,
+     0.833333
+    ],
+    "uv_gl_flipY": [
+     0.9375,
+     0.166667,
+     1.0,
+     0.333333
+    ]
+   },
+   {
+    "id": 80,
+    "tile": "terrain_edge_grass_marsh_outer_NW_48",
+    "col": 0,
+    "row": 5,
+    "px": [
+     0,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0.833333,
+     0.0625,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.0,
+     0.0,
+     0.0625,
+     0.166667
+    ]
+   },
+   {
+    "id": 81,
+    "tile": "terrain_edge_grass_marsh_outer_NE_48",
+    "col": 1,
+    "row": 5,
+    "px": [
+     48,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0625,
+     0.833333,
+     0.125,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.0625,
+     0.0,
+     0.125,
+     0.166667
+    ]
+   },
+   {
+    "id": 82,
+    "tile": "terrain_edge_grass_marsh_outer_SE_48",
+    "col": 2,
+    "row": 5,
+    "px": [
+     96,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.125,
+     0.833333,
+     0.1875,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.125,
+     0.0,
+     0.1875,
+     0.166667
+    ]
+   },
+   {
+    "id": 83,
+    "tile": "terrain_edge_grass_marsh_outer_SW_48",
+    "col": 3,
+    "row": 5,
+    "px": [
+     144,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.1875,
+     0.833333,
+     0.25,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.1875,
+     0.0,
+     0.25,
+     0.166667
+    ]
+   },
+   {
+    "id": 84,
+    "tile": "terrain_edge_snow_rock_N_48",
+    "col": 4,
+    "row": 5,
+    "px": [
+     192,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0.833333,
+     0.3125,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.25,
+     0.0,
+     0.3125,
+     0.166667
+    ]
+   },
+   {
+    "id": 85,
+    "tile": "terrain_edge_snow_rock_S_48",
+    "col": 5,
+    "row": 5,
+    "px": [
+     240,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.3125,
+     0.833333,
+     0.375,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.3125,
+     0.0,
+     0.375,
+     0.166667
+    ]
+   },
+   {
+    "id": 86,
+    "tile": "terrain_edge_snow_rock_W_48",
+    "col": 6,
+    "row": 5,
+    "px": [
+     288,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.375,
+     0.833333,
+     0.4375,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.375,
+     0.0,
+     0.4375,
+     0.166667
+    ]
+   },
+   {
+    "id": 87,
+    "tile": "terrain_edge_snow_rock_E_48",
+    "col": 7,
+    "row": 5,
+    "px": [
+     336,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.4375,
+     0.833333,
+     0.5,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.4375,
+     0.0,
+     0.5,
+     0.166667
+    ]
+   },
+   {
+    "id": 88,
+    "tile": "terrain_edge_snow_rock_inner_NW_48",
+    "col": 8,
+    "row": 5,
+    "px": [
+     384,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0.833333,
+     0.5625,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.5,
+     0.0,
+     0.5625,
+     0.166667
+    ]
+   },
+   {
+    "id": 89,
+    "tile": "terrain_edge_snow_rock_inner_NE_48",
+    "col": 9,
+    "row": 5,
+    "px": [
+     432,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5625,
+     0.833333,
+     0.625,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.5625,
+     0.0,
+     0.625,
+     0.166667
+    ]
+   },
+   {
+    "id": 90,
+    "tile": "terrain_edge_snow_rock_inner_SE_48",
+    "col": 10,
+    "row": 5,
+    "px": [
+     480,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.625,
+     0.833333,
+     0.6875,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.625,
+     0.0,
+     0.6875,
+     0.166667
+    ]
+   },
+   {
+    "id": 91,
+    "tile": "terrain_edge_snow_rock_inner_SW_48",
+    "col": 11,
+    "row": 5,
+    "px": [
+     528,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.6875,
+     0.833333,
+     0.75,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.6875,
+     0.0,
+     0.75,
+     0.166667
+    ]
+   },
+   {
+    "id": 92,
+    "tile": "terrain_edge_snow_rock_outer_NW_48",
+    "col": 12,
+    "row": 5,
+    "px": [
+     576,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0.833333,
+     0.8125,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.75,
+     0.0,
+     0.8125,
+     0.166667
+    ]
+   },
+   {
+    "id": 93,
+    "tile": "terrain_edge_snow_rock_outer_NE_48",
+    "col": 13,
+    "row": 5,
+    "px": [
+     624,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.8125,
+     0.833333,
+     0.875,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.8125,
+     0.0,
+     0.875,
+     0.166667
+    ]
+   },
+   {
+    "id": 94,
+    "tile": "terrain_edge_snow_rock_outer_SE_48",
+    "col": 14,
+    "row": 5,
+    "px": [
+     672,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.875,
+     0.833333,
+     0.9375,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.875,
+     0.0,
+     0.9375,
+     0.166667
+    ]
+   },
+   {
+    "id": 95,
+    "tile": "terrain_edge_snow_rock_outer_SW_48",
+    "col": 15,
+    "row": 5,
+    "px": [
+     720,
+     240,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.9375,
+     0.833333,
+     1.0,
+     1.0
+    ],
+    "uv_gl_flipY": [
+     0.9375,
+     0.0,
+     1.0,
+     0.166667
+    ]
+   }
+  ]
+ },
+ "mask_atlas": {
+  "file": "atlas_edgemask_576x48.png",
+  "cols": 12,
+  "rows": 1,
+  "tile_px": 48,
+  "size": [
+   576,
+   48
+  ],
+  "channel": "R",
+  "tiles": [
+   "terrain_edgemask_N_48",
+   "terrain_edgemask_S_48",
+   "terrain_edgemask_W_48",
+   "terrain_edgemask_E_48",
+   "terrain_edgemask_inner_NW_48",
+   "terrain_edgemask_inner_NE_48",
+   "terrain_edgemask_inner_SE_48",
+   "terrain_edgemask_inner_SW_48",
+   "terrain_edgemask_outer_NW_48",
+   "terrain_edgemask_outer_NE_48",
+   "terrain_edgemask_outer_SE_48",
+   "terrain_edgemask_outer_SW_48"
+  ],
+  "cells": [
+   {
+    "id": 0,
+    "tile": "terrain_edgemask_N_48",
+    "px": [
+     0,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.0,
+     0,
+     0.083333,
+     1
+    ]
+   },
+   {
+    "id": 1,
+    "tile": "terrain_edgemask_S_48",
+    "px": [
+     48,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.083333,
+     0,
+     0.166667,
+     1
+    ]
+   },
+   {
+    "id": 2,
+    "tile": "terrain_edgemask_W_48",
+    "px": [
+     96,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.166667,
+     0,
+     0.25,
+     1
+    ]
+   },
+   {
+    "id": 3,
+    "tile": "terrain_edgemask_E_48",
+    "px": [
+     144,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.25,
+     0,
+     0.333333,
+     1
+    ]
+   },
+   {
+    "id": 4,
+    "tile": "terrain_edgemask_inner_NW_48",
+    "px": [
+     192,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.333333,
+     0,
+     0.416667,
+     1
+    ]
+   },
+   {
+    "id": 5,
+    "tile": "terrain_edgemask_inner_NE_48",
+    "px": [
+     240,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.416667,
+     0,
+     0.5,
+     1
+    ]
+   },
+   {
+    "id": 6,
+    "tile": "terrain_edgemask_inner_SE_48",
+    "px": [
+     288,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.5,
+     0,
+     0.583333,
+     1
+    ]
+   },
+   {
+    "id": 7,
+    "tile": "terrain_edgemask_inner_SW_48",
+    "px": [
+     336,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.583333,
+     0,
+     0.666667,
+     1
+    ]
+   },
+   {
+    "id": 8,
+    "tile": "terrain_edgemask_outer_NW_48",
+    "px": [
+     384,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.666667,
+     0,
+     0.75,
+     1
+    ]
+   },
+   {
+    "id": 9,
+    "tile": "terrain_edgemask_outer_NE_48",
+    "px": [
+     432,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.75,
+     0,
+     0.833333,
+     1
+    ]
+   },
+   {
+    "id": 10,
+    "tile": "terrain_edgemask_outer_SE_48",
+    "px": [
+     480,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.833333,
+     0,
+     0.916667,
+     1
+    ]
+   },
+   {
+    "id": 11,
+    "tile": "terrain_edgemask_outer_SW_48",
+    "px": [
+     528,
+     0,
+     48,
+     48
+    ],
+    "uv_top_left": [
+     0.916667,
+     0,
+     1.0,
+     1
+    ]
+   }
+  ],
+  "values": {
+   "255": "fg",
+   "192": "fg lit rim",
+   "128": "fg shaded rim",
+   "64": "bg contact shadow",
+   "0": "bg"
+  }
+ },
+ "edge_bits": {
+  "12": "N",
+  "3": "S",
+  "9": "W",
+  "6": "E",
+  "8": "inner_NW",
+  "4": "inner_NE",
+  "2": "inner_SE",
+  "1": "inner_SW",
+  "7": "outer_NW",
+  "11": "outer_NE",
+  "13": "outer_SE",
+  "14": "outer_SW"
+ },
+ "biomes": [
+  {
+   "id": 0,
+   "enum": "Water",
+   "label": "Open sea",
+   "priority": 0,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_sand_wet_48",
+     "atlas_id": 21,
+     "weight": 1.0
+    }
+   ],
+   "rim": {
+    "lit": "#EDDCAF",
+    "shaded": "#C4A478",
+    "shadow_received": "#C4A478"
+   }
+  },
+  {
+   "id": 1,
+   "enum": "Sand",
+   "label": "Coast",
+   "priority": 1,
+   "dry": true,
+   "ground": [
+    {
+     "tile": "terrain_sand_beach_v0_48",
+     "atlas_id": 22,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_sand_beach_v1_48",
+     "atlas_id": 23,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_sand_beach_v2_48",
+     "atlas_id": 24,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#FCEBBE",
+    "shaded": "#E4B470",
+    "shadow_received": "#E4B470"
+   }
+  },
+  {
+   "id": 2,
+   "enum": "Plains",
+   "label": "Grassland",
+   "priority": 7,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_grass_v0_48",
+     "atlas_id": 0,
+     "weight": 0.18
+    },
+    {
+     "tile": "terrain_grass_v1_48",
+     "atlas_id": 1,
+     "weight": 0.18
+    },
+    {
+     "tile": "terrain_grass_v2_48",
+     "atlas_id": 2,
+     "weight": 0.16
+    },
+    {
+     "tile": "terrain_grass_v3_48",
+     "atlas_id": 3,
+     "weight": 0.14
+    },
+    {
+     "tile": "terrain_grass_v4_48",
+     "atlas_id": 4,
+     "weight": 0.14
+    },
+    {
+     "tile": "terrain_grass_f0_48",
+     "atlas_id": 5,
+     "weight": 0.1
+    },
+    {
+     "tile": "terrain_grass_f1_48",
+     "atlas_id": 6,
+     "weight": 0.1
+    }
+   ],
+   "rim": {
+    "lit": "#86C23E",
+    "shaded": "#3A7A3E",
+    "shadow_received": "#3A7A3E"
+   }
+  },
+  {
+   "id": 3,
+   "enum": "Meadow",
+   "label": "Wildflower meadow",
+   "priority": 8,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_meadow_v0_48",
+     "atlas_id": 25,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_meadow_v1_48",
+     "atlas_id": 26,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_grass_f0_48",
+     "atlas_id": 5,
+     "weight": 0.15
+    },
+    {
+     "tile": "terrain_grass_f1_48",
+     "atlas_id": 6,
+     "weight": 0.15
+    }
+   ],
+   "rim": {
+    "lit": "#86C23E",
+    "shaded": "#3A7A3E",
+    "shadow_received": "#3A7A3E"
+   }
+  },
+  {
+   "id": 4,
+   "enum": "Forest",
+   "label": "Woodland",
+   "priority": 10,
+   "dry": false,
+   "ringDress": [{"kit":"tree_oak_l","w":3},{"kit":"tree_beech_l","w":1},{"kit":"tree_birch_m","w":1},{"kit":"tree_pine_m","w":1},{"kit":"bush_fern_m","w":2},{"kit":"log_fallen_m","w":1},{"kit":"stump_s","w":1},{"kit":"mushroom_cluster_red","w":1},{"kit":"rock_mossy_cool_m","w":1}],
+   "ground": [
+    {
+     "tile": "terrain_forest_v0_48",
+     "atlas_id": 27,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_forest_v1_48",
+     "atlas_id": 28,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_forest_v2_48",
+     "atlas_id": 29,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#72AE4A",
+    "shaded": "#38744A",
+    "shadow_received": "#38744A"
+   }
+  },
+  {
+   "id": 5,
+   "enum": "DarkForest",
+   "label": "Shadowwood",
+   "priority": 12,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_darkforest_v0_48",
+     "atlas_id": 30,
+     "weight": 0.55
+    },
+    {
+     "tile": "terrain_darkforest_v1_48",
+     "atlas_id": 31,
+     "weight": 0.45
+    }
+   ],
+   "rim": {
+    "lit": "#5A9454",
+    "shaded": "#305E52",
+    "shadow_received": "#305E52"
+   }
+  },
+  {
+   "id": 6,
+   "enum": "Hills",
+   "label": "Rolling hills",
+   "priority": 9,
+   "dry": true,
+   "ground": [
+    {
+     "tile": "terrain_hills_v0_48",
+     "atlas_id": 32,
+     "weight": 0.55
+    },
+    {
+     "tile": "terrain_hills_v1_48",
+     "atlas_id": 33,
+     "weight": 0.45
+    }
+   ],
+   "rim": {
+    "lit": "#A2BC4C",
+    "shaded": "#58803E",
+    "shadow_received": "#58803E"
+   }
+  },
+  {
+   "id": 7,
+   "enum": "Heath",
+   "label": "Badlands",
+   "priority": 5,
+   "dry": true,
+   "aliases": ["Badlands"],
+   "ground": [
+    {
+     "tile": "terrain_badlands_v0_48",
+     "atlas_id": 34,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_badlands_v1_48",
+     "atlas_id": 35,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_badlands_v2_48",
+     "atlas_id": 36,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#DA985E",
+    "shaded": "#A2523E",
+    "shadow_received": "#A2523E"
+   }
+  },
+  {
+   "id": 8,
+   "enum": "Marsh",
+   "label": "Mire",
+   "priority": 2,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_marsh_v0_48",
+     "atlas_id": 37,
+     "weight": 0.3
+    },
+    {
+     "tile": "terrain_marsh_v1_48",
+     "atlas_id": 38,
+     "weight": 0.25
+    },
+    {
+     "tile": "terrain_marsh_v2_48",
+     "atlas_id": 39,
+     "weight": 0.25
+    },
+    {
+     "tile": "terrain_marsh_v3_48",
+     "atlas_id": 40,
+     "weight": 0.2
+    }
+   ],
+   "rim": {
+    "lit": "#B08A56",
+    "shaded": "#76583E",
+    "shadow_received": "#76583E"
+   }
+  },
+  {
+   "id": 9,
+   "enum": "Mountain",
+   "label": "High peaks",
+   "priority": 6,
+   "dry": true,
+   "ringDress": [{"kit":"tree_pine_m","w":3},{"kit":"tree_juniper_s","w":1},{"kit":"rock_outcrop_cool_l","w":2},{"kit":"rock_scree_s","w":2},{"kit":"rock_boulder_cool_l","w":1},{"kit":"prop_cairn","w":1},{"kit":"bush_alpine_s","w":2}],
+   "ground": [
+    {
+     "tile": "terrain_rock_ground_v0_48",
+     "atlas_id": 41,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_rock_ground_v1_48",
+     "atlas_id": 42,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_rock_ground_v2_48",
+     "atlas_id": 43,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#ACA89E",
+    "shaded": "#5D5A66",
+    "shadow_received": "#5D5A66"
+   }
+  },
+  {
+   "id": 10,
+   "enum": "Snow",
+   "label": "Frostfell",
+   "priority": 13,
+   "dry": true,
+   "ground": [
+    {
+     "tile": "terrain_snow_v0_48",
+     "atlas_id": 44,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_snow_v1_48",
+     "atlas_id": 45,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_snow_v2_48",
+     "atlas_id": 46,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#F8FBF8",
+    "shaded": "#B4C6E6",
+    "shadow_received": "#B4C6E6"
+   }
+  },
+  {
+   "id": 11,
+   "enum": "Taiga",
+   "label": "Boreal forest",
+   "priority": 11,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_taiga_v0_48",
+     "atlas_id": 47,
+     "weight": 0.55
+    },
+    {
+     "tile": "terrain_taiga_v1_48",
+     "atlas_id": 48,
+     "weight": 0.45
+    }
+   ],
+   "rim": {
+    "lit": "#8CB06A",
+    "shaded": "#4C765A",
+    "shadow_received": "#4C765A"
+   }
+  },
+  {
+   "id": 12,
+   "enum": "Desert",
+   "label": "Desert",
+   "priority": 3,
+   "dry": true,
+   "ground": [
+    {
+     "tile": "terrain_sand_desert_v0_48",
+     "atlas_id": 49,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_sand_desert_v1_48",
+     "atlas_id": 50,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_sand_desert_v2_48",
+     "atlas_id": 51,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#F9D896",
+    "shaded": "#DE9254",
+    "shadow_received": "#DE9254"
+   }
+  },
+  {
+   "id": 13,
+   "enum": "Jungle",
+   "label": "Jungle",
+   "priority": 12,
+   "dry": false,
+   "ground": [
+    {
+     "tile": "terrain_jungle_v0_48",
+     "atlas_id": 52,
+     "weight": 0.55
+    },
+    {
+     "tile": "terrain_jungle_v1_48",
+     "atlas_id": 53,
+     "weight": 0.45
+    }
+   ],
+   "rim": {
+    "lit": "#56BA48",
+    "shaded": "#22764C",
+    "shadow_received": "#22764C"
+   }
+  },
+  {
+   "id": 14,
+   "enum": "Ashlands",
+   "label": "Ashlands",
+   "priority": 4,
+   "dry": true,
+   "ground": [
+    {
+     "tile": "terrain_ash_v0_48",
+     "atlas_id": 54,
+     "weight": 0.4
+    },
+    {
+     "tile": "terrain_ash_v1_48",
+     "atlas_id": 55,
+     "weight": 0.35
+    },
+    {
+     "tile": "terrain_ash_v2_48",
+     "atlas_id": 56,
+     "weight": 0.25
+    }
+   ],
+   "rim": {
+    "lit": "#8E8488",
+    "shaded": "#544A58",
+    "shadow_received": "#544A58"
+   }
+  }
+ ],
+ "pair_sets": [
+  {
+   "fg": "Plains",
+   "bg": "Sand",
+   "prefix": "grass_sand",
+   "first_atlas_id": 60
+  },
+  {
+   "fg": "Meadow",
+   "bg": "Sand",
+   "prefix": "grass_sand",
+   "first_atlas_id": 60
+  },
+  {
+   "fg": "Plains",
+   "bg": "Marsh",
+   "prefix": "grass_marsh",
+   "first_atlas_id": 72
+  },
+  {
+   "fg": "Meadow",
+   "bg": "Marsh",
+   "prefix": "grass_marsh",
+   "first_atlas_id": 72
+  },
+  {
+   "fg": "Hills",
+   "bg": "Marsh",
+   "prefix": "grass_marsh",
+   "first_atlas_id": 72
+  },
+  {
+   "fg": "Snow",
+   "bg": "Mountain",
+   "prefix": "snow_rock",
+   "first_atlas_id": 84
+  }
+ ],
+ "optional_tiles": {
+  "terrain_marsh_grass_v0_48": "wet meadow / marsh fringe",
+  "terrain_marsh_grass_v1_48": "wet meadow / marsh fringe",
+  "terrain_ice_48": "frozen lake under Snow (single tile, wraps)"
+ },
+ "ramps": {
+  "sand_beach": [
+   "#9A6A52",
+   "#C8925E",
+   "#E4B470",
+   "#F2D08C",
+   "#FCEBBE"
+  ],
+  "sand_wet": [
+   "#8F6E63",
+   "#AD8C6F",
+   "#C4A478",
+   "#D6BA85",
+   "#EDDCAF"
+  ],
+  "sand_desert": [
+   "#9A4E3E",
+   "#C26E44",
+   "#DE9254",
+   "#EEB46A",
+   "#F9D896"
+  ],
+  "snow": [
+   "#6E78A8",
+   "#8E9ECC",
+   "#B4C6E6",
+   "#D8E6F4",
+   "#F8FBF8"
+  ],
+  "ice": [
+   "#3C6A9C",
+   "#5690BE",
+   "#80BAD8",
+   "#B0DEEC",
+   "#E4F8F6"
+  ],
+  "marsh_mud": [
+   "#5A443E",
+   "#76583E",
+   "#946E46",
+   "#B08A56",
+   "#CCAA74"
+  ],
+  "marsh_grass": [
+   "#2E5C4C",
+   "#3E7C50",
+   "#5A9A52",
+   "#80B65A",
+   "#B6D680"
+  ],
+  "marsh_water": [
+   "#2E5E72",
+   "#3C808E",
+   "#58A2A8",
+   "#88C6C0",
+   "#C4E6DC"
+  ],
+  "grass_forest": [
+   "#2C5644",
+   "#38744A",
+   "#4E924A",
+   "#72AE4A",
+   "#A6CC64"
+  ],
+  "moss_shadow": [
+   "#2C4A4C",
+   "#305E52",
+   "#3E7854",
+   "#5A9454",
+   "#8AB664"
+  ],
+  "grass_taiga": [
+   "#3C5A54",
+   "#4C765A",
+   "#66925E",
+   "#8CB06A",
+   "#BED494"
+  ],
+  "grass_jungle": [
+   "#1E5646",
+   "#22764C",
+   "#2E984C",
+   "#56BA48",
+   "#9ADC5A"
+  ],
+  "grass_hills": [
+   "#3E5E3C",
+   "#58803E",
+   "#7AA040",
+   "#A2BC4C",
+   "#D2D87E"
+  ],
+  "clay_badlands": [
+   "#7A3C3C",
+   "#A2523E",
+   "#C27248",
+   "#DA985E",
+   "#EEC288"
+  ],
+  "ash": [
+   "#544A58",
+   "#6E6470",
+   "#8E8488",
+   "#AEA6A2",
+   "#D0C8BE"
+  ]
+ },
+ "texel_density": {
+  "texels_per_m": 16,
+  "tile_px": 48,
+  "cell_m": 3.0,
+  "uv_per_m": 0.333333,
+  "note": "world planar UV = worldXZ / 3.0 (one tile per 3 m cell); atlas cell = 1/16 x 1/6 of the atlas"
+ }
+}

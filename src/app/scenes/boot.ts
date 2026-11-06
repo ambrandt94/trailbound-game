@@ -29,6 +29,11 @@ export class BootScene implements Scene {
       });
       const slots = await this.host.saves.listSlots();
       canContinue.value = slots.some((slot) => slot.manifest.schema > 0);
+      const town = new URLSearchParams(globalThis.location?.search ?? '').get('town');
+      if (town) {
+        await this.host.enterTownNow(town);
+        return;
+      }
       await this.host.stack.replace(new TitleScene(this.host));
     } catch (error) {
       bootError.value = error instanceof Error ? error.message : 'Failed to boot';

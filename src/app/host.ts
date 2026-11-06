@@ -26,7 +26,8 @@ export interface GameHost {
   paintMap(state: MapDrawState): void;
   syncChunks(chunks: ChunkData[]): void;
   enterSettlement(): void;
-  buildArea(): void;
+  buildArea(): Promise<void>;
+  enterTownNow(fixtureId: string): Promise<void>;
   leaveArea(exit?: AreaExit): void;
   enqueue(job: () => void): void;
 }

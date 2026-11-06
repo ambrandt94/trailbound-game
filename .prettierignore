@@ -3,3 +3,8 @@ node_modules
 coverage
 package-lock.json
 public/vendor
+# Controller port: dense original sources, kept behaviour-faithful rather than restyled.
+src/render/area/ct
+# Golden AreaExports and the tile biome table. Data, not source style.
+tests/fixtures/*.json
+public/assets/**/*.json

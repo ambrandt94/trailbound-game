@@ -1,64 +1,101 @@
-import * as THREE from 'three';
-import { AREA_SKY_COLOR, createAreaContent, type AreaContent } from './area-content';
+import { areaFromExport, type AreaEntry, type AreaExport } from './area-from-export';
+import { createTownSession, type TownExitInfo, type TownSession } from './ct/town-session.js';
 
 export interface AreaPose {
   x: number;
   z: number;
   yaw: number;
-  spin: number;
+}
+
+/** Action snapshot. The app fills this from the keyboard and gamepad map. */
+export interface AreaActionPad {
+  x: number;
+  z: number;
+  jump: boolean;
+  sprint: boolean;
+  sneak: boolean;
+  roll: boolean;
+  use: boolean;
+  emote: boolean;
+}
+
+export interface AreaActionSnapshot {
+  p1: AreaActionPad;
+  p2: AreaActionPad;
+  camLeft: boolean;
+  camRight: boolean;
+  camUp: boolean;
+  camDown: boolean;
+  view: boolean;
+  mode: boolean;
+}
+
+export interface AreaHooks {
+  getActions(): AreaActionSnapshot;
+  onExit(info: TownExitInfo): void;
 }
 
 export class AreaRenderer {
-  private readonly renderer: THREE.WebGLRenderer;
-  private readonly content: AreaContent;
+  private session: TownSession | null = null;
+  private booting: Promise<void> | null = null;
   private disposed = false;
 
-  constructor(private readonly canvas: HTMLCanvasElement) {
-    this.content = createAreaContent();
-    try {
-      this.renderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: true,
-        alpha: false,
-        failIfMajorPerformanceCaveat: false,
-      });
-    } catch (error) {
-      this.content.dispose();
-      const message = error instanceof Error ? error.message : 'WebGL renderer failed';
-      throw new Error(message);
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    private readonly hooks: AreaHooks,
+  ) {}
+
+  /** Build the controller town from an AreaExport. Safe to call once. */
+  start(areaExport: unknown, entry?: AreaEntry): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (!this.booting) {
+      const exp = areaFromExport(areaExport);
+      this.booting = this.boot(exp, entry);
     }
-    this.renderer.setClearColor(AREA_SKY_COLOR);
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    return this.booting;
   }
 
-  draw(pose: AreaPose): void {
-    if (this.disposed) return;
-    this.fit();
-    this.content.cube.rotation.y = pose.spin;
-    this.content.pawn.position.set(pose.x, 0.67, pose.z);
-    this.content.pawn.rotation.y = pose.yaw;
-    const facingX = Math.sin(pose.yaw);
-    const facingZ = -Math.cos(pose.yaw);
-    this.content.camera.position.set(pose.x - facingX * 6.4, 4.3, pose.z - facingZ * 6.4);
-    this.content.camera.lookAt(pose.x + facingX * 0.5, 0.8, pose.z + facingZ * 0.5);
-    this.renderer.render(this.content.scene, this.content.camera);
+  step(dt: number): void {
+    this.session?.step(dt);
+  }
+
+  frame(): void {
+    this.session?.frame();
+  }
+
+  prompt(): string {
+    return this.session?.prompt() ?? '';
+  }
+
+  indoors(): boolean {
+    return this.session?.indoors() ?? false;
+  }
+
+  bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
+    return this.session?.bounds() ?? null;
+  }
+
+  stats(): { fps: number; calls: number; triangles: number; view: string; name: string } | null {
+    return this.session?.stats() ?? null;
   }
 
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.content.dispose();
-    this.renderer.dispose();
+    this.session?.dispose();
+    this.session = null;
   }
 
-  private fit(): void {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
-    if (width < 2 || height < 2) return;
-    const pixelRatio = Math.min(globalThis.devicePixelRatio || 1, 2);
-    this.renderer.setPixelRatio(pixelRatio);
-    this.renderer.setSize(width, height, false);
-    this.content.camera.aspect = width / Math.max(1, height);
-    this.content.camera.updateProjectionMatrix();
+  private async boot(exp: AreaExport, entry?: AreaEntry): Promise<void> {
+    const session = await createTownSession(this.canvas, {
+      getActions: () => this.hooks.getActions(),
+      onExit: (info) => this.hooks.onExit(info),
+    });
+    if (this.disposed) {
+      session.dispose();
+      return;
+    }
+    this.session = session;
+    await session.start(exp, entry);
   }
 }

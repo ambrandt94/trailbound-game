@@ -11,6 +11,7 @@ export class TransitionScene implements Scene {
   private phase: 'out' | 'hold' | 'in' = 'out';
   private elapsed = 0;
   private held = false;
+  private ready = false;
   private finished = false;
 
   constructor(
@@ -35,12 +36,19 @@ export class TransitionScene implements Scene {
     if (this.phase === 'hold') {
       if (!this.held) {
         this.held = true;
-        if (this.direction === 'to-area') this.host.buildArea();
-        else this.host.leaveArea(this.exitPayload);
+        if (this.direction === 'to-area') {
+          void this.host.buildArea().finally(() => {
+            this.ready = true;
+          });
+        } else {
+          this.host.leaveArea(this.exitPayload);
+          this.ready = true;
+        }
       }
+      this.host.setFade(1);
+      if (!this.ready) return;
       this.phase = 'in';
       this.elapsed = 0;
-      this.host.setFade(1);
       return;
     }
     this.elapsed += dt;

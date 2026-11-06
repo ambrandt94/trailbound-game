@@ -1,3 +1,7 @@
+/**
+ * Character Forge lives in `forge.ts`. The town falls back to the block rig
+ * in `pawns.ts` when no forge body has been adopted.
+ */
 export {
   adoptPlayerBody,
   aimForgeSun,
@@ -39,3 +43,4 @@ export {
   type WornPiece,
 } from './forge';
 export { AvatarPreview } from './preview';
+export { createBlockRig, type BlockRig, type BlockRigMaterials } from './pawns';

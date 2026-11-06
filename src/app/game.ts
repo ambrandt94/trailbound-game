@@ -13,6 +13,7 @@ import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { Keyboard } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
+import { loadTownFixture, townFixtureId } from '../render/area/area-from-export';
 import { AreaRenderer } from '../render/area/area-renderer';
 import { MapRenderer, type MapDrawState } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
@@ -86,6 +87,7 @@ export class Game implements GameHost {
   private saved = false;
   private creatorOpen = false;
   private avatarToken = 0;
+  private townFixture: string | null = null;
   private detachTouch: (() => void) | null = null;
   private readonly jobs: Array<() => void> = [];
 
@@ -238,13 +240,45 @@ export class Game implements GameHost {
     return true;
   }
 
-  buildArea(): void {
+  async enterTownNow(fixtureId: string): Promise<void> {
+    if (!this.place) return;
+    this.townFixture = fixtureId;
+    this.pendingArea = null;
+    this.world = createWorld({
+      id: this.place.id,
+      name: this.place.name,
+      x: this.place.map.x,
+      y: this.place.map.y,
+    });
+    settingsOpen.value = false;
+    this.warmAvatar();
+    const map = new MapView(this);
+    this.mapScene = map;
+    await this.stack.replace(map);
+    this.setMode('map');
+    this.setView('map');
+    await this.stack.push(new TransitionScene(this, 'to-area'));
+  }
+
+  async buildArea(): Promise<void> {
     if (this.areaScene) return;
+    let view: AreaView | null = null;
     try {
-      const node = this.world.settlementAt();
+      const node = this.world.data ? this.world.settlementAt() : null;
       if (node) this.pendingArea = this.world.buildHandoff(node);
-      const renderer = new AreaRenderer(this.options.areaCanvas);
-      const view = new AreaView(this, renderer, this.pendingArea);
+      const areaExport = this.pendingArea
+        ? this.pendingArea.areaExport
+        : await loadTownFixture(
+            townFixtureId(this.townFixture ?? globalThis.location?.search ?? ''),
+          );
+      const renderer = new AreaRenderer(this.options.areaCanvas, {
+        getActions: () => this.keyboard.areaActions(),
+        onExit: (info) => {
+          view?.leaveFromController(info);
+        },
+      });
+      await renderer.start(areaExport);
+      view = new AreaView(this, renderer, this.pendingArea);
       this.areaScene = view;
       this.stack.insertUnderTop(view);
       this.setView('area');
@@ -393,13 +427,17 @@ export class Game implements GameHost {
   private warmAvatar(): void {
     const token = this.avatarToken;
     const avatar = this.world.avatar;
-    void this.buildSaved(avatar).then((body) => {
-      if (token !== this.avatarToken) {
-        body.dispose();
-        return;
-      }
-      adoptPlayerBody(body);
-    });
+    void this.buildSaved(avatar)
+      .then((body) => {
+        if (token !== this.avatarToken) {
+          body.dispose();
+          return;
+        }
+        adoptPlayerBody(body);
+      })
+      .catch((error: unknown) => {
+        console.warn('avatar warmup', error);
+      });
   }
 
   private async buildSaved(avatar: PlayerAvatar) {

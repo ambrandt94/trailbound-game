@@ -38,6 +38,7 @@ export default tseslint.config(
       'test-results/**',
       'playwright-report/**',
       'public/vendor/**',
+      'src/render/area/ct/**',
     ],
   },
   ...tseslint.configs.recommended,
