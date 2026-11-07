@@ -483,11 +483,16 @@ export function landAfterAreaExit(
 }
 
 function fitHero(x: number, y: number, yaw: number, bounds: MapBounds | null): HeroPose {
-  if (!bounds || !(bounds.width > 0) || !(bounds.height > 0)) return { x, y, yaw };
+  const safeX = Number.isFinite(x) ? x : 0;
+  const safeY = Number.isFinite(y) ? y : 0.5;
+  const safeYaw = Number.isFinite(yaw) ? yaw : 0;
+  if (!bounds || !(bounds.width > 0) || !(bounds.height > 0)) {
+    return { x: safeX, y: safeY, yaw: safeYaw };
+  }
   return {
-    x: wrapX(x, bounds.width),
-    y: clamp(y, 0.5, Math.max(0.5, bounds.height - 0.5)),
-    yaw,
+    x: wrapX(safeX, bounds.width),
+    y: clamp(safeY, 0.5, Math.max(0.5, bounds.height - 0.5)),
+    yaw: safeYaw,
   };
 }
 
@@ -515,6 +520,7 @@ function facingFromYaw(yaw: number): 0 | 1 | 2 | 3 {
 }
 
 function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0.5;
   if (value < 0) return 0;
   if (value > 1) return 1;
   return value;

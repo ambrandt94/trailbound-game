@@ -34,6 +34,7 @@ export class TransitionScene implements Scene {
       return;
     }
     if (this.phase === 'hold') {
+      this.host.setFade(1);
       if (!this.held) {
         this.held = true;
         if (this.direction === 'to-area') {
@@ -45,7 +46,6 @@ export class TransitionScene implements Scene {
           this.ready = true;
         }
       }
-      this.host.setFade(1);
       if (!this.ready) return;
       this.phase = 'in';
       this.elapsed = 0;

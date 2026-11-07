@@ -3,6 +3,12 @@
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
 import { THREE } from './three-runtime.js';
+import {
+  WALK_CLAMP_MARGIN,
+  freshEdgeLeave,
+  stepEdgeLeave,
+  clampClearance,
+} from '../../../core/area/edge-leave.ts';
 /* AreaExport v0.1–v0.4 → a smooth heightmapped level.
    Schema: world-map src/app/engine/area-export.ts (types win over the field guide).
    Loaded by ?area=, a dropped JSON file, or postMessage {type:'tb-area', payload}.
@@ -2288,14 +2294,14 @@ const side=Math.abs(ox)>Math.abs(oz)?(ox>0?"E":"W"):(oz>0?"S":"N");
 return {dist:dist,ox:ox,oz:oz,side:side,inside:inside};
 }
 function walkClamp(x,z){
-const mrg=0.35;
+const mrg=WALK_CLAMP_MARGIN;
 const minX=gridOffX+mrg,maxX=gridOffX+Math.max(0,gw)*meters-mrg;
 const minZ=gridOffZ+mrg,maxZ=gridOffZ+Math.max(0,gh)*meters-mrg;
 if(!(gw>0)||!(gh>0))return {x:x,z:z};
 return {x:Math.max(minX,Math.min(maxX,x)),z:Math.max(minZ,Math.min(maxZ,z))};
 }
-let edgeHoldT=0,edgeLeaving=false,edgeCss=false,fadeGen=0;
-function resetEdge(){fadeGen++;edgeHoldT=0;edgeLeaving=false;setLeaveWarn(false);setLeaveVig(0);setLeaveFade(0);}
+let edgeLeave=freshEdgeLeave(),leaveBegun=false,edgeCss=false,fadeGen=0;
+function resetEdge(){fadeGen++;edgeLeave=freshEdgeLeave();leaveBegun=false;setLeaveWarn(false);setLeaveVig(0);setLeaveFade(0);}
 function ensureEdgeCss(){
 if(edgeCss||typeof document==="undefined"||!document.createElement)return;
 edgeCss=true;
@@ -2315,8 +2321,9 @@ ensureEdgeCss();
 el=document.createElement("div");
 if(!el)return null;
 el.id=id;
+const canvas=document.getElementById("area")||document.getElementById("c");
 const wrap=document.querySelector&&document.querySelector(".wrap");
-const parent=wrap||document.body;
+const parent=(canvas&&canvas.parentElement)||wrap||document.body;
 if(!parent||!parent.appendChild)return null;
 parent.appendChild(el);
 return el;
@@ -2338,8 +2345,9 @@ if(!el||!el.style)return;
 el.style.opacity=String(Math.max(0,Math.min(1,amount)));
 }
 function startLeave(hit){
-if(edgeLeaving)return;
-edgeLeaving=true;
+if(leaveBegun)return;
+leaveBegun=true;
+edgeLeave={hold:edgeLeave.hold,fired:true};
 const gen=++fadeGen;
 const t0=typeof performance!=="undefined"?performance.now():Date.now();
 function step(now){
@@ -2356,7 +2364,8 @@ if(typeof requestAnimationFrame==="function")requestAnimationFrame(step);
 else step();
 }
 function edgeFrame(dt){
-if(!active||!placeMask||!ctx||!ctx.players){if(!edgeLeaving){setLeaveWarn(false);setLeaveVig(0);}return;}
+if(edgeLeave.fired)return;
+if(!active||!placeMask||!ctx||!ctx.players){setLeaveWarn(false);setLeaveVig(0);return;}
 const ps=ctx.players;
 let worst=null;
 for(let i=0;i<ps.length;i++){
@@ -2365,21 +2374,18 @@ if(!p||!isFinite(p.x)||!isFinite(p.z))continue;
 if(window.TBInteriors&&TBInteriors.contains&&TBInteriors.contains(p.x,p.z))continue;
 const info=edgeProbe(p.x-gridOffX,p.z-gridOffZ,placeMask,gw,gh,meters);
 const outward=(p.vx||0)*info.ox+(p.vz||0)*info.oz;
-if(!worst||info.dist<worst.info.dist)worst={p:p,info:info,outward:outward};
+const room=clampClearance(p.x,p.z,gridOffX,gridOffZ,Math.max(0,gw)*meters,Math.max(0,gh)*meters);
+const dist=Math.min(info.dist,room);
+if(!worst||dist<worst.dist)worst={p:p,info:info,outward:outward,dist:dist};
 }
-if(edgeLeaving){
-if(!worst||worst.info.dist>0.4||worst.outward<=0.25){fadeGen++;edgeLeaving=false;edgeHoldT=0;setLeaveFade(0);}
-else return;
-}
-if(!worst){edgeHoldT=0;setLeaveWarn(false);setLeaveVig(0);return;}
-const dist=worst.info.dist;
-setLeaveWarn(dist<7.5,areaName);
-const vig=dist>=8?0:dist<=0?0.82:(8-dist)/8*0.7;
+const step=stepEdgeLeave(edgeLeave,worst?worst.dist:99,worst?worst.outward:0,dt||0);
+edgeLeave=step.state;
+if(!worst){setLeaveWarn(false);setLeaveVig(0);return;}
+setLeaveWarn(step.warn,areaName);
+const dist=worst.dist;
+const vig=dist>=8?0:dist<=0?0.82:Math.max(0,(8-dist)/8*0.7);
 setLeaveVig(vig);
-if(dist<0&&worst.outward>0.25){
-edgeHoldT+=dt>0?dt:0;
-if(edgeHoldT>=1.5)startLeave(worst);
-}else edgeHoldT=0;
+if(step.startFade)startLeave(worst);
 }
 function spawn(){return {x:spawnPos.x,z:spawnPos.z,y:spawnPos.y,yaw:spawnPos.yaw};}
 function readyMessage(){
