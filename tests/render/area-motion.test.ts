@@ -1,11 +1,7 @@
 import { expect, test } from 'vitest';
 import { DEFAULT_AREA_LOOK } from '../../src/core/state/area-look';
-import {
-  forgeClip,
-  locomotionSample,
-  LOCO_FADE_SEC,
-  WALK_REF_MPS,
-} from '../../src/render/area/locomotion';
+import { AREA_PACE, clipTimeScale, FORGE_WALK_STRIDE_M } from '../../src/core/state/area-pace';
+import { forgeClip, locomotionSample, LOCO_FADE_SEC } from '../../src/render/area/locomotion';
 import {
   motorParamsFromLook,
   restBody,
@@ -54,15 +50,18 @@ function hold(
   return body;
 }
 
-test('run speed settles on the controller default and sprint and sneak scale it', () => {
-  const running = hold(restBody(), flat(), 0.6, { ix: 1 });
-  expect(Math.hypot(running.vx, running.vz)).toBeCloseTo(DEFAULT_AREA_LOOK.maxSpeed, 1);
-  expect(running.st).toBe('run');
-  const sprint = hold(restBody(), flat(), 0.6, { ix: 1, sprint: true });
-  expect(Math.hypot(sprint.vx, sprint.vz)).toBeCloseTo(DEFAULT_AREA_LOOK.maxSpeed * 1.6, 1);
+test('walk, jog, and sprint settle on the human gait speeds', () => {
+  const walking = hold(restBody(), flat(), 0.6, { ix: 1 });
+  expect(Math.hypot(walking.vx, walking.vz)).toBeCloseTo(AREA_PACE.walk, 1);
+  expect(walking.st).toBe('walk');
+  const jogging = hold(restBody(), flat(), 0.3, { ix: 1, sprint: true });
+  expect(Math.hypot(jogging.vx, jogging.vz)).toBeCloseTo(AREA_PACE.run, 1);
+  expect(jogging.st).toBe('run');
+  const sprint = hold(restBody(), flat(), 0.8, { ix: 1, sprint: true });
+  expect(Math.hypot(sprint.vx, sprint.vz)).toBeCloseTo(AREA_PACE.sprint, 1);
   expect(sprint.st).toBe('sprint');
   const sneak = hold(restBody(), flat(), 0.6, { ix: 1, sneak: true });
-  expect(Math.hypot(sneak.vx, sneak.vz)).toBeCloseTo(DEFAULT_AREA_LOOK.maxSpeed * 0.45, 1);
+  expect(Math.hypot(sneak.vx, sneak.vz)).toBeCloseTo(AREA_PACE.sneak, 1);
   expect(sneak.st).toBe('sneak');
 });
 
@@ -182,10 +181,38 @@ test('locomotion crossfades and locks the feet to speed', () => {
   const idle = locomotionSample({ state: 'idle', speed: 0, scale: 1, clips: ['Idle', 'Walk'] });
   expect(idle.clip).toBe('Idle');
   expect(idle.fade).toBe(LOCO_FADE_SEC);
-  const walk = locomotionSample({ state: 'run', speed: 1.4, scale: 1, clips: ['Idle', 'Walk'] });
+  const walk = locomotionSample({
+    state: 'walk',
+    speed: AREA_PACE.walk,
+    scale: 1,
+    clips: ['Idle', 'Walk'],
+    durations: { Walk: AREA_PACE.forgeWalkDuration },
+    strides: { Walk: FORGE_WALK_STRIDE_M },
+  });
   expect(walk.clip).toBe('Walk');
-  expect(walk.timeScale).toBeCloseTo(1.4 / WALK_REF_MPS);
+  expect(walk.fade).toBe(LOCO_FADE_SEC);
+  const raw = clipTimeScale(AREA_PACE.walk, AREA_PACE.forgeWalkDuration, FORGE_WALK_STRIDE_M);
+  expect(raw).toBeGreaterThan(1);
+  expect(walk.timeScale).toBeCloseTo(Math.min(AREA_PACE.walkPlaybackCap, raw));
+  expect(walk.timeScale).toBeLessThanOrEqual(AREA_PACE.walkPlaybackCap);
   expect(forgeClip(walk, 'Idle')).toBe('Walk');
+  const jog = clipTimeScale(
+    AREA_PACE.run,
+    AREA_PACE.forgeWalkDuration,
+    FORGE_WALK_STRIDE_M,
+    1,
+    AREA_PACE.fastPlaybackCap,
+  );
+  const dash = clipTimeScale(
+    AREA_PACE.sprint,
+    AREA_PACE.forgeWalkDuration,
+    FORGE_WALK_STRIDE_M,
+    1,
+    AREA_PACE.fastPlaybackCap,
+  );
+  expect(jog).toBeLessThanOrEqual(AREA_PACE.fastPlaybackCap);
+  expect(dash).toBe(AREA_PACE.fastPlaybackCap);
+  expect(dash).toBeGreaterThan(walk.timeScale);
   const sprint = locomotionSample({
     state: 'sprint',
     speed: 8,

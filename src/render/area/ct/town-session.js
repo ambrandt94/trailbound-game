@@ -10,6 +10,7 @@ import {
   zoomDistance,
 } from '../../../core/state/area-camera.ts';
 import { visualNumbers } from '../../../core/state/area-look.ts';
+import { AREA_PACE } from '../../../core/state/area-pace.ts';
 import { forgeClip, locomotionSample } from '../locomotion.ts';
 import { stepMotor, takeSimSteps } from '../motor.ts';
 import { aimForgeSun, getPlayerBody, tickPlayerBody } from '../../characters/forge.ts';
@@ -21,6 +22,10 @@ const DEF = {
   maxSpeed: 5.5,
   sprintMult: 1.6,
   sneakMult: 0.45,
+  walkMps: AREA_PACE.walk,
+  runMps: AREA_PACE.run,
+  sprintMps: AREA_PACE.sprint,
+  sneakMps: AREA_PACE.sneak,
   accel: 45,
   decel: 55,
   turn: 14,
@@ -157,7 +162,7 @@ export async function createTownSession(canvas, hooks) {
   let pushAt = 0;
   let simAcc = 0;
   const FEEL_KEYS = [
-    'maxSpeed', 'sprintMult', 'sneakMult', 'horseMult', 'accel', 'decel', 'turn', 'airCtl',
+    'walkMps', 'runMps', 'sprintMps', 'sneakMps', 'horseMult', 'accel', 'decel', 'turn', 'airCtl',
     'jumpH', 'grav', 'fall', 'coyote', 'buffer', 'dodgeSpeed', 'dodgeTime', 'dodgeCd', 'scale', 'slow',
   ];
   let NP = playerCount();
@@ -348,6 +353,8 @@ export async function createTownSession(canvas, hooks) {
       speed,
       scale: P.scale,
       clips: ['Idle', 'Walk'],
+      durations: { Walk: AREA_PACE.forgeWalkDuration },
+      strides: { Walk: AREA_PACE.forgeWalkStride },
     });
     const clip = forgeClip(sample, forgePawn.clip === 'Walk' ? 'Walk' : 'Idle');
     const pose = {
@@ -601,6 +608,12 @@ export async function createTownSession(canvas, hooks) {
       dodgeCd: P.dodgeCd,
       stretch: P.stretch,
       camYaw: P.camYaw,
+      walkMps: P.walkMps,
+      runMps: P.runMps,
+      sprintMps: P.sprintMps,
+      sneakMps: P.sneakMps,
+      sprintCharge: AREA_PACE.sprintCharge,
+      blockStride: AREA_PACE.blockStride,
       radius: p.mount ? 0.6 : RAD,
       stepSnap: 0.45,
     };

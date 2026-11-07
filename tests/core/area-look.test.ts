@@ -29,6 +29,9 @@ test('every original visual control is in the settings schema', () => {
   expect(DEFAULT_AREA_LOOK.camDist).toBe(60);
   expect(DEFAULT_AREA_LOOK.fog).toBe(1);
   expect(DEFAULT_AREA_LOOK.outline).toBe(true);
+  expect(DEFAULT_AREA_LOOK.walkMps).toBe(1.6);
+  expect(DEFAULT_AREA_LOOK.sprintMps).toBe(5.5);
+  expect(normalizeAreaLook({ maxSpeed: 9 }).walkMps).toBe(1.6);
 });
 
 test('saved looks clamp and old saves without a look keep the shipped defaults', () => {
@@ -73,12 +76,14 @@ test('feel presets restore the controller sidebar values', () => {
   const tuned = normalizeAreaLook({ ...DEFAULT_AREA_LOOK, maxSpeed: 9, camDist: 4 });
   const souls = applyFeelPreset(tuned, 'Souls-like');
   expect(souls.feelPreset).toBe('Souls-like');
-  expect(souls.maxSpeed).toBe(4.2);
+  expect(souls.walkMps).toBe(1.3);
+  expect(souls.sprintMps).toBe(4.4);
   expect(souls.camDist).toBe(11);
   expect(souls.turn).toBe(7);
   expect(souls.px).toBe(2);
   const back = applyFeelPreset(souls, 'Default');
-  expect(back.maxSpeed).toBe(DEFAULT_AREA_LOOK.maxSpeed);
+  expect(back.walkMps).toBe(DEFAULT_AREA_LOOK.walkMps);
+  expect(back.sprintMps).toBe(DEFAULT_AREA_LOOK.sprintMps);
   expect(back.camDist).toBe(DEFAULT_AREA_LOOK.camDist);
   expect(back.camYaw).toBe(45);
 });

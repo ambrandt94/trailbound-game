@@ -33,6 +33,15 @@ export {
   type LookField,
 } from './area-look';
 export {
+  AREA_PACE,
+  FORGE_WALK_STRIDE_M,
+  HERO_HEIGHT_M,
+  clipTimeScale,
+  gaitSpeed,
+  playbackCap,
+  type GaitName,
+} from './area-pace';
+export {
   createWorld,
   HERO_OUTSIDE_TOWN,
   WorldState,
