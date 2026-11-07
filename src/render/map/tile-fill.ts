@@ -1,7 +1,7 @@
 import { BIOME_COUNT } from '../../core/world/models';
 import { hash2 } from '../../core/world/noise';
 import { BIOME_GROUND, DIRT_EDGE_BASE, EDGE_INDEX, PAIR_BASE, SANDSTONE_ROAD } from './biome-table';
-import { BIOME_NAMES } from './terrain-pick';
+import { BIOME_NAMES, waterBand } from './terrain-pick';
 
 const TILE = 48;
 
@@ -33,6 +33,39 @@ export function edgeField(wx: number, wy: number, seed: number): { x: number; y:
     x: (n - 0.5) * 1.24 + (n2 - 0.5) * 0.36,
     y: (m - 0.5) * 1.24 + (m2 - 0.5) * 0.36,
   };
+}
+
+/**
+ * Shallow or deep water for one texel. The same edge field that moves the
+ * coast moves this boundary, so it does not step a whole tile at a time.
+ */
+export function waterKindAt(
+  tileX: number,
+  tileY: number,
+  px: number,
+  py: number,
+  seed: number,
+  at: (x: number, y: number) => number,
+  size = TILE,
+): 'shallow' | 'deep' {
+  const wx = tileX + (px + 0.5) / size;
+  const wy = tileY + (py + 0.5) / size;
+  const shift = edgeField(wx, wy, seed);
+  return waterBand(at, Math.floor(wx + shift.x), Math.floor(wy + shift.y));
+}
+
+/** True when this water tile meets water of the other band. */
+export function waterBandSeam(at: (x: number, y: number) => number, x: number, y: number): boolean {
+  if (at(x, y) !== 0) return false;
+  const here = waterBand(at, x, y);
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx === 0 && dy === 0) continue;
+      if (at(x + dx, y + dy) !== 0) continue;
+      if (waterBand(at, x + dx, y + dy) !== here) return true;
+    }
+  }
+  return false;
 }
 
 /** World tile that owns this texel after the edge field is applied. */

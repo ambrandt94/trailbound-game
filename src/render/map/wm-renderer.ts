@@ -550,10 +550,7 @@ export class WorldRenderer {
       const job = this.terrain.bakeFast(world);
       this.worldBake = job.canvas;
       this.overview = job;
-      // Finish the per-tile sheet now. A half-painted sheet is a grid of flat
-      // blocks sitting on the coarse overview.
-      this.ensureFarPalette(world);
-      this.far.step(world, world.width / 2, world.height / 2, 30000);
+      this.terrain.buildCoarseMip(world);
       this.bakeMs = performance.now() - started;
       return;
     }
@@ -1297,8 +1294,19 @@ export class WorldRenderer {
     ctx.save();
     cameraTransform(ctx, camera, viewW, viewH);
 
-    const farCovers = this.terrain && this.far.ready && camera.scale * TILE < 3;
-    if (this.worldBake && !farCovers) {
+    if (this.terrain?.coarseMip) {
+      this.terrain.frame = this.waterFrame;
+      this.terrain.drawArtMips(
+        ctx,
+        camera.x,
+        camera.y,
+        camera.scale,
+        viewW,
+        viewH,
+        world.width,
+        world.height,
+      );
+    } else if (this.worldBake) {
       ctx.imageSmoothingEnabled = false;
       const wpx = world.width * TILE;
       const hpx = world.height * TILE;
@@ -1310,9 +1318,11 @@ export class WorldRenderer {
         if (camera.x + halfW > world.width) ctx.drawImage(this.worldBake, wpx, 0, wpx, hpx);
       }
     }
-    this.far.draw(ctx, world, camera, viewW, viewH);
-    if (this.terrain) this.paintRegions(ctx);
-    else this.drawClassicBlocks(ctx, world, camera, viewW, viewH);
+    if (!this.terrain?.coarseMip) {
+      this.far.draw(ctx, world, camera, viewW, viewH);
+      if (this.terrain) this.paintRegions(ctx);
+      else this.drawClassicBlocks(ctx, world, camera, viewW, viewH);
+    }
 
     const featureAlpha = smoothstep(0.35, 1.35, camera.scale);
     // Street chunks are a future settlement/property mode, not this world map.

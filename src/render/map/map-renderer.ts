@@ -107,16 +107,28 @@ export class MapRenderer {
     const paintStarted = performance.now();
     const drawnEarly = crispCamera(camera);
     this.worldRenderer.chunkDestPx = Math.max(1, TILE * drawnEarly.scale);
-    this.worldRenderer.stepFarSheet(world, drawnEarly.x, drawnEarly.y, 4);
-    if (this.skinId !== 'trailbound48') {
-      this.worldRenderer.stepClassicBlocks(world, drawnEarly, cssW, cssH, 4);
-    }
-    if (!this.detailDone && this.skinId === 'trailbound48') {
-      const done = this.worldRenderer.stepOverview(world, 8);
-      if (done) {
-        this.detailDone = true;
-        this.detailMs = now - this.overviewStarted;
-        this.worldRenderer.detailMs = this.detailMs;
+    if (this.skinId === 'trailbound48' && this.trailbound?.coarseMip) {
+      this.trailbound.stepViewMips(
+        world,
+        drawnEarly.x,
+        drawnEarly.y,
+        drawnEarly.scale,
+        cssW,
+        cssH,
+        40,
+      );
+    } else {
+      this.worldRenderer.stepFarSheet(world, drawnEarly.x, drawnEarly.y, 4);
+      if (this.skinId !== 'trailbound48') {
+        this.worldRenderer.stepClassicBlocks(world, drawnEarly, cssW, cssH, 4);
+      }
+      if (!this.detailDone && this.skinId === 'trailbound48') {
+        const done = this.worldRenderer.stepOverview(world, 8);
+        if (done) {
+          this.detailDone = true;
+          this.detailMs = now - this.overviewStarted;
+          this.worldRenderer.detailMs = this.detailMs;
+        }
       }
     }
     const frame = Math.floor(now / 220) % 4;
@@ -125,7 +137,9 @@ export class MapRenderer {
       this.worldRenderer.waterFrame = frame;
     }
     const drawn = drawnEarly;
-    this.fillRegions(world, drawn, cssW, cssH);
+    if (!(this.skinId === 'trailbound48' && this.trailbound?.coarseMip)) {
+      this.fillRegions(world, drawn, cssW, cssH);
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.worldRenderer.draw(ctx, world, drawn, player, cssW, cssH, {
       showOutlines: true,
