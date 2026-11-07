@@ -1,9 +1,10 @@
 import type { ChunkData, WorldData } from '../../core/world/models';
-import { BIOME_COUNT, Biome } from '../../core/world/models';
+import { BIOME_COUNT, Biome, TILE as WORLD_TILE } from '../../core/world/models';
 import { hash2 } from '../../core/world/noise';
-import { BIOME_GROUND, DIRT_EDGE_BASE, EDGE_INDEX, SANDSTONE_ROAD } from './biome-table';
+import { BIOME_GROUND, SANDSTONE_ROAD } from './biome-table';
+import { areaReduce, mipForScreenPx, orientedTexel, snowRotation, spanForMip } from './art-mip';
 import { averageTileColor, type GroundPalette } from './detail-lod';
-import { cellCorners, foamRuns, pickCell, waterBand, type FoamRun } from './terrain-pick';
+import { foamRuns, pickCell, waterBand, type FoamRun } from './terrain-pick';
 import {
   FIELD_REACH,
   SUBCELLS,
@@ -15,6 +16,16 @@ import {
   type FieldSample,
   type TileVariant,
 } from './terrain-field';
+import {
+  averageOpaque,
+  compositeRoadStraight,
+  ownerTile,
+  resolveRoad,
+  resolveTile,
+  waterBandSeam,
+  waterKindAt,
+  type Adj,
+} from './tile-fill';
 
 const TILE = 48;
 const COLS = 16;
@@ -115,6 +126,17 @@ export interface OverviewJob {
   row: number;
 }
 
+interface MipJob {
+  x: number;
+  y: number;
+  span: number;
+  px: number;
+  row: number;
+  col: number;
+  data: Uint8ClampedArray;
+  canvas: HTMLCanvasElement | null;
+}
+
 export class TrailboundTiles {
   readonly tiles: HTMLCanvasElement[] = [];
   readonly masks: HTMLCanvasElement[] = [];
@@ -139,6 +161,15 @@ export class TrailboundTiles {
   private tileImage: ImageData | null = null;
   private foamPixels: ImageData[] | null = null;
   private waterPixels: { deep: ImageData[]; shallow: ImageData[] } | null = null;
+  /** Derived transitions. Never written back onto the authored atlas. */
+  private readonly derived = new Map<string, HTMLCanvasElement>();
+  /** Whole world, one texel per tile, box-reduced from the real 48px art. */
+  coarseMip: HTMLCanvasElement | null = null;
+  private readonly repColor = new Map<number, Rgb>();
+  private readonly reduced = new Map<string, Uint8ClampedArray>();
+  private readonly mipJobs = new Map<string, MipJob>();
+  private readonly tileCanvas: HTMLCanvasElement;
+  private readonly tileCtx: CanvasRenderingContext2D;
 
   constructor(private readonly images: TrailboundImages) {
     this.tiles = sliceSheet(images.atlas, COLS, 6, TILE);
@@ -148,9 +179,15 @@ export class TrailboundTiles {
     this.scratch = document.createElement('canvas');
     this.scratch.width = TILE;
     this.scratch.height = TILE;
-    const ctx = this.scratch.getContext('2d');
+    const ctx = this.scratch.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error('trailbound scratch canvas unavailable');
     this.scratchCtx = ctx;
+    this.tileCanvas = document.createElement('canvas');
+    this.tileCanvas.width = TILE;
+    this.tileCanvas.height = TILE;
+    const tileCtx = this.tileCanvas.getContext('2d', { willReadFrequently: true });
+    if (!tileCtx) throw new Error('trailbound tile canvas unavailable');
+    this.tileCtx = tileCtx;
   }
 
   waterFrame(kind: 'deep' | 'shallow'): HTMLImageElement | null {
@@ -248,7 +285,9 @@ export class TrailboundTiles {
 
   /** Paint tiles until the budget runs out. Returns true when the region is finished. */
   stepRegion(world: WorldData, job: RegionBake, budgetMs: number): boolean {
-    if (job.stamp < 48) return this.stepFlatRegion(world, job, budgetMs);
+    // One 48px skin at every zoom. The displaced field reads as noise up close,
+    // so a region is always whole tiles plus derived edge fills.
+    if (job.stamp > 0) return this.stepFlatRegion(world, job, budgetMs);
     const ctx = job.canvas.getContext('2d');
     const rowImage = job.rowImage;
     if (!ctx || !rowImage || job.row >= job.span) return true;
@@ -388,13 +427,14 @@ export class TrailboundTiles {
     const ctx = canvas.getContext('2d');
     if (!ctx) return canvas;
     ctx.imageSmoothingEnabled = false;
-    const at = (lx: number, ly: number): number => {
+    // Neighbours past the chunk edge come from the world tile, not a one-tile stub.
+    const at = (lx: number, ly: number): number =>
+      this.biomeAt(world, chunk.wx + lx, chunk.wy + ly);
+    const roadAt = (lx: number, ly: number): boolean => {
       if (lx >= 0 && ly >= 0 && lx < size && ly < size) {
-        return chunk.tiles[lx + ly * size] ?? Biome.Plains;
+        return chunk.paths[lx + ly * size] === 1;
       }
-      const wx = chunk.wx + (lx < 0 ? -1 : lx >= size ? 1 : 0);
-      const wy = chunk.wy + (ly < 0 ? -1 : ly >= size ? 1 : 0);
-      return this.biomeAt(world, wx, wy);
+      return this.pathAt(world, chunk.wx + lx, chunk.wy + ly);
     };
     const shores: ShoreMark[] = [];
     const waters: WaterMark[] = [];
@@ -416,12 +456,17 @@ export class TrailboundTiles {
           false,
         );
         const center = at(lx, ly);
-        if (chunk.paths[lx + ly * size] === 1 && center !== Biome.Water) {
-          const pn = ly > 0 && chunk.paths[lx + (ly - 1) * size] === 1;
-          const pe = lx + 1 < size && chunk.paths[lx + 1 + ly * size] === 1;
-          const ps = ly + 1 < size && chunk.paths[lx + (ly + 1) * size] === 1;
-          const pw = lx > 0 && chunk.paths[lx - 1 + ly * size] === 1;
-          this.blitRoad(ctx, pn, pe, ps, pw, lx * stamp, ly * stamp, stamp);
+        if (roadAt(lx, ly) && center !== Biome.Water) {
+          this.blitRoad(
+            ctx,
+            roadAt(lx, ly - 1),
+            roadAt(lx + 1, ly),
+            roadAt(lx, ly + 1),
+            roadAt(lx - 1, ly),
+            lx * stamp,
+            ly * stamp,
+            stamp,
+          );
         }
       }
     }
@@ -438,48 +483,36 @@ export class TrailboundTiles {
     dx: number,
     dy: number,
     stamp: number,
-    shores: ShoreMark[],
+    _shores: ShoreMark[],
     waters: WaterMark[],
     lx: number,
     ly: number,
     roads = true,
   ): void {
-    const corners = cellCorners(at, x, y);
     const center = at(x, y);
-    const mixed =
-      corners[0] !== corners[1] || corners[1] !== corners[2] || corners[2] !== corners[3];
-    const band = center === Biome.Water && !mixed ? waterBand(at, x, y) : 'none';
-    const pick = pickCell(corners, x, y, world.seed, band);
-    this.blitPick(ctx, pick, dx, dy, stamp);
-    if (center === Biome.Water && !mixed) {
+    this.paintGround(ctx, world, at, x, y, dx, dy, stamp, roads, center);
+    const around = [
+      at(x, y - 1),
+      at(x + 1, y),
+      at(x, y + 1),
+      at(x - 1, y),
+      at(x - 1, y - 1),
+      at(x + 1, y - 1),
+      at(x + 1, y + 1),
+      at(x - 1, y + 1),
+    ];
+    if (center === Biome.Water && around.every((biome) => biome === Biome.Water)) {
       const flow = tileVariant(Biome.Water, x, y, world.seed, 128);
+      const kind = waterBand(at, x, y);
       waters.push({
         lx,
         ly,
-        kind: band === 'deep' ? 'deep' : 'shallow',
+        kind,
         ox: flow.ox,
         oy: flow.oy,
         flipX: flow.flipX,
         flipY: flow.flipY,
       });
-    }
-    const landAndWater =
-      corners.some((corner) => corner === Biome.Water) &&
-      corners.some((corner) => corner !== Biome.Water);
-    if (landAndWater && pick.landBits !== 0 && pick.landBits !== 15) {
-      shores.push({ lx, ly, bits: pick.landBits });
-    }
-    if (roads && this.pathAt(world, x, y) && center !== Biome.Water && !mixed) {
-      this.blitRoad(
-        ctx,
-        this.pathAt(world, x, y - 1),
-        this.pathAt(world, x + 1, y),
-        this.pathAt(world, x, y + 1),
-        this.pathAt(world, x - 1, y),
-        dx,
-        dy,
-        stamp,
-      );
     }
   }
 
@@ -490,19 +523,16 @@ export class TrailboundTiles {
   }
 
   private pathAt(world: WorldData, x: number, y: number): boolean {
-    if (x < 0 || y < 0 || x >= world.width || y >= world.height) return false;
-    return world.paths[x + y * world.width] === 1;
+    if (y < 0 || y >= world.height) return false;
+    const wx = ((x % world.width) + world.width) % world.width;
+    return world.paths[wx + y * world.width] === 1;
   }
 
   /** One average colour per biome, plus the road tile. Used by the far-zoom sheet. */
   groundPalette(): GroundPalette {
     const ground = new Uint8Array(BIOME_COUNT * 3);
     for (let biome = 0; biome < BIOME_COUNT; biome++) {
-      const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
-      const tile = this.tiles[id] ?? this.tiles[0];
-      const [r, g, b] = tile
-        ? averageTileColor(tile, 0, 0, tile.width, tile.height)
-        : averageTileColor(this.scratch, 0, 0, 1, 1);
+      const [r, g, b] = biome === Biome.Water ? this.waterSwatch('deep') : this.landSwatch(biome);
       ground[biome * 3] = r;
       ground[biome * 3 + 1] = g;
       ground[biome * 3 + 2] = b;
@@ -514,16 +544,25 @@ export class TrailboundTiles {
     return { ground, road: { r: rr, g: rg, b: rb } };
   }
 
+  /** Centre texel of the ground art. Water uses the deep frame, not the wet-sand atlas cell. */
+  private landSwatch(biome: number): [number, number, number] {
+    const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
+    const data = this.tileData[id];
+    return swatchFrom(data?.data, data?.width ?? TILE, data?.height ?? TILE);
+  }
+
+  private waterSwatch(kind: 'deep' | 'shallow'): [number, number, number] {
+    const img = this.waterFrame(kind);
+    if (!img) return kind === 'deep' ? [62, 120, 178] : [74, 158, 178];
+    const data = imageDataOf(img);
+    return swatchFrom(data.data, data.width, data.height);
+  }
+
   private flatColors(): string[] {
     if (this.flatColorCache) return this.flatColorCache;
     const colors: string[] = [];
     for (let biome = 0; biome < BIOME_GROUND.length; biome++) {
-      const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
-      const data = this.tileData[id];
-      const pixel = (24 + 24 * TILE) * 4;
-      const r = data?.data[pixel] ?? 120;
-      const g = data?.data[pixel + 1] ?? 150;
-      const b = data?.data[pixel + 2] ?? 90;
+      const [r, g, b] = biome === Biome.Water ? this.waterSwatch('deep') : this.landSwatch(biome);
       colors.push(`rgb(${r}, ${g}, ${b})`);
     }
     this.flatColorCache = colors;
@@ -578,9 +617,7 @@ export class TrailboundTiles {
       return;
     }
     const out = this.scratchCtx.createImageData(TILE, TILE);
-    const lit = rgb(rim.lit);
-    const shaded = rgb(rim.shaded);
-    const shadow = rgb(rim.shadow);
+    void rim;
     const fd = fg.data;
     const bd = bg.data;
     const md = mask.data;
@@ -588,19 +625,14 @@ export class TrailboundTiles {
     for (let i = 0; i < TILE * TILE; i++) {
       const m = quantizeMask(md[i * 4] ?? 0);
       const o = i * 4;
-      const src = m >= 224 ? fd : m === 0 ? bd : null;
-      if (src) {
-        od[o] = src[o] ?? 0;
-        od[o + 1] = src[o + 1] ?? 0;
-        od[o + 2] = src[o + 2] ?? 0;
-        od[o + 3] = 255;
-      } else {
-        const tone = m >= 160 ? lit : m >= 96 ? shaded : shadow;
-        od[o] = tone.r;
-        od[o + 1] = tone.g;
-        od[o + 2] = tone.b;
-        od[o + 3] = 255;
-      }
+      const x = i % TILE;
+      const y = (i / TILE) | 0;
+      const bayer = ((y & 3) * 4 + (x & 3) * 3) & 15;
+      const src = m >= 224 || (m > 0 && bayer < Math.round((m / 255) * 16)) ? fd : bd;
+      od[o] = src[o] ?? 0;
+      od[o + 1] = src[o + 1] ?? 0;
+      od[o + 2] = src[o + 2] ?? 0;
+      od[o + 3] = 255;
     }
     this.scratchCtx.putImageData(out, 0, 0);
     ctx.imageSmoothingEnabled = false;
@@ -705,25 +737,8 @@ export class TrailboundTiles {
     stamp: number,
     waterKind?: 'shallow' | 'deep',
   ): void {
-    const span = biome === Biome.Water ? 128 : TILE;
-    const variant = tileVariant(biome, x, y, world.seed, span);
-    if (biome === Biome.Water) {
-      const kind = waterKind ?? waterBand((wx, wy) => this.biomeAt(world, wx, wy), x, y);
-      const img = this.waterFrame(kind === 'deep' ? 'deep' : 'shallow');
-      // One continuous sheet, so open water does not restart on every world tile.
-      if (img) {
-        this.blitSheet(ctx, img, dx, dy, stamp, {
-          ox: x * TILE,
-          oy: y * TILE,
-          flipX: false,
-          flipY: false,
-        });
-      }
-    } else {
-      const tile = this.tiles[variant.id] ?? this.tiles[0];
-      if (tile) this.blitSheet(ctx, tile, dx, dy, stamp, variant);
-    }
-    this.paintRoad(ctx, world, x, y, biome, false, dx, dy, stamp);
+    const at = (tx: number, ty: number) => this.biomeAt(world, tx, ty);
+    this.paintGround(ctx, world, at, x, y, dx, dy, stamp, true, biome, waterKind);
   }
 
   private neighborhoodSame(
@@ -1312,13 +1327,716 @@ export class TrailboundTiles {
     dy: number,
     stamp: number,
   ): void {
-    const bits = (n ? 8 : 0) | (e ? 4 : 0) | (s ? 2 : 0) | (w ? 1 : 0);
-    if (bits === 15 || bits === 0) {
-      this.blitTile(ctx, SANDSTONE_ROAD, dx, dy, stamp);
+    const road = resolveRoad(n, e, s, w);
+    if (road.kind === 'authored' || !road.parts || !road.axis) {
+      this.blitTile(ctx, road.atlasId, dx, dy, stamp);
       return;
     }
-    const edge = EDGE_INDEX.get(bits);
-    this.blitTile(ctx, edge === undefined ? SANDSTONE_ROAD : DIRT_EDGE_BASE + edge, dx, dy, stamp);
+    const canvas = this.derivedCanvas(road.id, () => {
+      const first = this.tileData[road.parts?.[0] ?? 0]?.data;
+      const second = this.tileData[road.parts?.[1] ?? 0]?.data;
+      const out = new Uint8ClampedArray(TILE * TILE * 4);
+      if (first && second) compositeRoadStraight(first, second, out, road.axis ?? 'ew');
+      return out;
+    });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(canvas, dx, dy, stamp, stamp);
+  }
+
+  /**
+   * One world tile: authored ground, an authored edge sheet, or a derived
+   * fringe kept off the atlas. Neighbours are whatever `at` returns, so a
+   * chunk samples the world past its own canvas.
+   */
+  private paintGround(
+    ctx: DrawCtx,
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+    roads: boolean,
+    biome = at(x, y),
+    waterKind?: 'shallow' | 'deep',
+  ): void {
+    const adj: Adj = {
+      center: biome,
+      n: at(x, y - 1),
+      e: at(x + 1, y),
+      s: at(x, y + 1),
+      w: at(x - 1, y),
+      nw: at(x - 1, y - 1),
+      ne: at(x + 1, y - 1),
+      se: at(x + 1, y + 1),
+      sw: at(x - 1, y + 1),
+    };
+    const tile = resolveTile(adj);
+    ctx.imageSmoothingEnabled = false;
+    if (tile.kind === 'authored') {
+      this.blitTile(ctx, tile.atlasId, dx, dy, stamp);
+    } else if (tile.kind === 'ground' && biome === Biome.Water && waterBandSeam(at, x, y)) {
+      this.blitWaterField(ctx, at, x, y, dx, dy, stamp, world.seed);
+    } else if (tile.kind === 'ground') {
+      this.blitInterior(ctx, at, x, y, dx, dy, stamp, biome, world.seed, waterKind);
+    } else {
+      this.blitEdgeField(ctx, world, at, x, y, dx, dy, stamp);
+    }
+    if (roads) this.paintRoad(ctx, world, x, y, biome, false, dx, dy, stamp);
+  }
+
+  /** Interior ground. Flips break repetition; the cell is not scrolled, so edges still meet. */
+  private blitInterior(
+    ctx: DrawCtx,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+    biome: number,
+    seed: number,
+    waterKind?: 'shallow' | 'deep',
+  ): void {
+    if (biome === Biome.Water) {
+      const kind = waterKind ?? waterBand(at, x, y);
+      const img = this.waterFrame(kind === 'deep' ? 'deep' : 'shallow');
+      if (img) {
+        this.blitSheet(ctx, img, dx, dy, stamp, {
+          ox: x * TILE,
+          oy: y * TILE,
+          flipX: false,
+          flipY: false,
+        });
+      }
+      return;
+    }
+    const variant = tileVariant(biome, x, y, seed, TILE);
+    const rot = biome === Biome.Snow ? snowRotation(x, y, seed) : 0;
+    this.blitVariant(ctx, variant.id, variant.flipX, variant.flipY, rot, dx, dy, stamp);
+  }
+
+  /** Draws one authored ground cell. Snow may turn by quarters; the cell is never scrolled. */
+  private blitVariant(
+    ctx: DrawCtx,
+    id: number,
+    flipX: boolean,
+    flipY: boolean,
+    rot: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+  ): void {
+    const tile = this.tiles[id] ?? this.tiles[0];
+    if (!tile) return;
+    if (rot === 0) {
+      this.blitSheet(ctx, tile, dx, dy, stamp, { ox: 0, oy: 0, flipX, flipY });
+      return;
+    }
+    const src = this.tileData[id]?.data;
+    if (!src) return;
+    const image = this.scratchCtx.createImageData(TILE, TILE);
+    const data = image.data;
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        const { u, v } = orientedTexel(px, py, TILE, flipX, flipY, rot);
+        const s = (v * TILE + u) * 4;
+        const d = (py * TILE + px) * 4;
+        data[d] = src[s] ?? 0;
+        data[d + 1] = src[s + 1] ?? 0;
+        data[d + 2] = src[s + 2] ?? 0;
+        data[d + 3] = 255;
+      }
+    }
+    this.scratchCtx.putImageData(image, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.scratch, dx, dy, stamp, stamp);
+  }
+
+  /** Shallow and deep water share the coast noise, so the band is not a tile stair. */
+  private blitWaterField(
+    ctx: DrawCtx,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+    seed: number,
+  ): void {
+    const image = this.scratchCtx.createImageData(TILE, TILE);
+    const data = image.data;
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        const kind = waterKindAt(x, y, px, py, seed, at);
+        const color = this.sampleWater(kind, x * TILE + px, y * TILE + py);
+        const o = (py * TILE + px) * 4;
+        data[o] = color.r;
+        data[o + 1] = color.g;
+        data[o + 2] = color.b;
+        data[o + 3] = 255;
+      }
+    }
+    this.scratchCtx.putImageData(image, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.scratch, dx, dy, stamp, stamp);
+  }
+
+  /**
+   * Missing transition. One noise field in world space, sampled by both tiles,
+   * so the edge is a single irregular contour instead of a repeated comb.
+   */
+  private blitEdgeField(
+    ctx: DrawCtx,
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+  ): void {
+    const image = this.scratchCtx.createImageData(TILE, TILE);
+    const data = image.data;
+    const seed = world.seed;
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        const owner = ownerTile(x, y, px, py, seed);
+        const biome = at(owner.x, owner.y);
+        const color = this.sampleOwned(biome, owner.x, owner.y, px, py, seed, x, y, at);
+        const o = (py * TILE + px) * 4;
+        data[o] = color.r;
+        data[o + 1] = color.g;
+        data[o + 2] = color.b;
+        data[o + 3] = 255;
+      }
+    }
+    this.scratchCtx.putImageData(image, 0, 0);
+    ctx.drawImage(this.scratch, dx, dy, stamp, stamp);
+  }
+
+  private sampleOwned(
+    biome: number,
+    ownerX: number,
+    ownerY: number,
+    px: number,
+    py: number,
+    seed: number,
+    destX: number,
+    destY: number,
+    at: (x: number, y: number) => number,
+  ): Rgb {
+    if (biome === Biome.Water) {
+      const kind = waterKindAt(destX, destY, px, py, seed, at);
+      return this.sampleWater(kind, destX * TILE + px, destY * TILE + py);
+    }
+    const variant = tileVariant(biome, ownerX, ownerY, seed, TILE);
+    const src = this.tileData[variant.id]?.data;
+    if (!src) return { r: 90, g: 140, b: 80 };
+    const rot = biome === Biome.Snow ? snowRotation(ownerX, ownerY, seed) : 0;
+    const { u, v } = orientedTexel(px, py, TILE, variant.flipX, variant.flipY, rot);
+    const s = (v * TILE + u) * 4;
+    const r = src[s] ?? 0;
+    const g = src[s + 1] ?? 0;
+    const b = src[s + 2] ?? 0;
+    if (r + g + b < 12) {
+      const fallback = averageOpaque(src);
+      if (fallback.r + fallback.g + fallback.b >= 12) return fallback;
+    }
+    return { r, g, b };
+  }
+
+  private sampleWater(kind: 'shallow' | 'deep', gx: number, gy: number): Rgb {
+    const sheets = this.ensureWaterPixels();
+    const list = kind === 'deep' ? sheets.deep : sheets.shallow;
+    const sheet = list[this.frame % Math.max(1, list.length)] ?? list[0];
+    if (!sheet) return kind === 'deep' ? { r: 62, g: 120, b: 178 } : { r: 74, g: 158, b: 178 };
+    return this.sampleSheetPixel(sheet, gx, gy);
+  }
+
+  private sampleSheetPixel(sheet: ImageData, gx: number, gy: number): Rgb {
+    const w = sheet.width;
+    const h = sheet.height;
+    const sx = ((gx % w) + w) % w;
+    const sy = ((gy % h) + h) % h;
+    const o = (sy * w + sx) * 4;
+    return { r: sheet.data[o] ?? 0, g: sheet.data[o + 1] ?? 0, b: sheet.data[o + 2] ?? 0 };
+  }
+
+  private derivedCanvas(key: string, paint: () => Uint8ClampedArray): HTMLCanvasElement {
+    const hit = this.derived.get(key);
+    if (hit) return hit;
+    if (this.derived.size > 800) {
+      const oldest = this.derived.keys().next().value;
+      if (oldest !== undefined) this.derived.delete(oldest);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = TILE;
+    canvas.height = TILE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    const pixels = paint();
+    const image = ctx.createImageData(TILE, TILE);
+    image.data.set(pixels);
+    ctx.putImageData(image, 0, 0);
+    this.derived.set(key, canvas);
+    return canvas;
+  }
+
+  /**
+   * One real texel per world tile, reduced from the 48px art. This is on screen
+   * before any finer mip, so the map never falls back to a flat biome swatch.
+   */
+  buildCoarseMip(world: WorldData): void {
+    const width = world.width;
+    const height = world.height;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+    const image = ctx.createImageData(width, height);
+    const data = image.data;
+    const at = (x: number, y: number) => this.biomeAt(world, x, y);
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const biome = at(x, y);
+        const color = this.coarseTexel(world, at, x, y, biome);
+        const o = (y * width + x) * 4;
+        data[o] = color.r;
+        data[o + 1] = color.g;
+        data[o + 2] = color.b;
+        data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
+    this.coarseMip = canvas;
+    this.mipJobs.clear();
+    this.reduced.clear();
+  }
+
+  /** Build the mip nearest the current scale. A chunk is drawn only when the whole view is ready. */
+  stepViewMips(
+    world: WorldData,
+    cameraX: number,
+    cameraY: number,
+    scale: number,
+    viewW: number,
+    viewH: number,
+    budgetMs: number,
+  ): void {
+    if (!this.coarseMip) return;
+    const want = mipForScreenPx(scale * WORLD_TILE);
+    if (want <= 1) return;
+    const span = spanForMip(want);
+    const halfW = viewW / (2 * Math.max(scale, 1e-6)) / WORLD_TILE;
+    const halfH = viewH / (2 * Math.max(scale, 1e-6)) / WORLD_TILE;
+    const blocks = this.visibleMips(
+      cameraX,
+      cameraY,
+      halfW,
+      halfH,
+      world.width,
+      world.height,
+      span,
+    );
+    const started = performance.now();
+    const pending = blocks
+      .map((block) => {
+        const key = `${block.x}:${block.y}:${want}`;
+        let job = this.mipJobs.get(key);
+        if (!job) {
+          job = {
+            x: block.x,
+            y: block.y,
+            span: block.span,
+            px: want,
+            row: 0,
+            col: 0,
+            data: new Uint8ClampedArray(block.span * want * block.span * want * 4),
+            canvas: null,
+          };
+          this.mipJobs.set(key, job);
+        }
+        return { job, d: block.d };
+      })
+      .filter((item) => !item.job.canvas)
+      .sort((a, b) => a.d - b.d);
+    for (const item of pending) {
+      if (performance.now() - started >= budgetMs) break;
+      this.paintMipJob(world, item.job, budgetMs - (performance.now() - started));
+    }
+    this.trimMipJobs(cameraX, cameraY, want);
+  }
+
+  drawArtMips(
+    ctx: CanvasRenderingContext2D,
+    cameraX: number,
+    cameraY: number,
+    scale: number,
+    viewW: number,
+    viewH: number,
+    worldW: number,
+    worldH: number,
+  ): void {
+    const coarse = this.coarseMip;
+    if (!coarse) return;
+    const drawLayer = (shift: number) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(
+        coarse,
+        shift * worldW * WORLD_TILE,
+        0,
+        worldW * WORLD_TILE,
+        worldH * WORLD_TILE,
+      );
+      const want = mipForScreenPx(scale * WORLD_TILE);
+      if (want <= 1) return;
+      const span = spanForMip(want);
+      const halfW = viewW / (2 * Math.max(scale, 1e-6)) / WORLD_TILE;
+      const halfH = viewH / (2 * Math.max(scale, 1e-6)) / WORLD_TILE;
+      const blocks = this.visibleMips(cameraX - shift, cameraY, halfW, halfH, worldW, worldH, span);
+      const pad = 1 / Math.max(scale, 1e-4);
+      for (const block of blocks) {
+        const job = this.mipJobs.get(`${block.x}:${block.y}:${want}`);
+        if (!job?.canvas) continue;
+        ctx.drawImage(
+          job.canvas,
+          (job.x + shift) * WORLD_TILE - pad,
+          job.y * WORLD_TILE - pad,
+          job.span * WORLD_TILE + pad * 2,
+          job.span * WORLD_TILE + pad * 2,
+        );
+      }
+    };
+    drawLayer(0);
+    const halfW = viewW / (2 * Math.max(scale, 1e-6)) / WORLD_TILE;
+    const viewTilesX = viewW / (Math.max(scale, 1e-6) * WORLD_TILE);
+    if (viewTilesX < worldW * 0.92) {
+      if (cameraX - halfW < 0) drawLayer(-worldW);
+      if (cameraX + halfW > worldW) drawLayer(worldW);
+    }
+  }
+
+  private coarseTexel(
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    biome: number,
+  ): Rgb {
+    if (biome === Biome.Water) {
+      if (this.openOcean(at, x, y)) return this.sampleWater('deep', x * TILE + 24, y * TILE + 24);
+      if (!waterBandSeam(at, x, y)) {
+        return this.sampleWater(waterBand(at, x, y), x * TILE + 24, y * TILE + 24);
+      }
+    } else if (this.pathAt(world, x, y)) {
+      return this.atlasColor(SANDSTONE_ROAD);
+    } else if (this.isPlainLand(at, x, y, biome)) {
+      const variant = tileVariant(biome, x, y, world.seed, TILE);
+      return this.atlasColor(variant.id);
+    }
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let n = 0;
+    let bestR = 0;
+    let bestG = 0;
+    let bestB = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < 4; i++) {
+      const px = i % 2 === 0 ? 12 : 36;
+      const py = i < 2 ? 12 : 36;
+      const owner = ownerTile(x, y, px, py, world.seed);
+      const sampleBiome = at(owner.x, owner.y);
+      const color = this.sampleOwned(sampleBiome, owner.x, owner.y, px, py, world.seed, x, y, at);
+      r += color.r;
+      g += color.g;
+      b += color.b;
+      n += 1;
+    }
+    const ar = r / n;
+    const ag = g / n;
+    const ab = b / n;
+    for (let i = 0; i < 4; i++) {
+      const px = i % 2 === 0 ? 12 : 36;
+      const py = i < 2 ? 12 : 36;
+      const owner = ownerTile(x, y, px, py, world.seed);
+      const sampleBiome = at(owner.x, owner.y);
+      const color = this.sampleOwned(sampleBiome, owner.x, owner.y, px, py, world.seed, x, y, at);
+      const dr = color.r - ar;
+      const dg = color.g - ag;
+      const db = color.b - ab;
+      const dist = dr * dr + dg * dg + db * db;
+      if (dist < bestD) {
+        bestD = dist;
+        bestR = color.r;
+        bestG = color.g;
+        bestB = color.b;
+      }
+    }
+    return { r: bestR, g: bestG, b: bestB };
+  }
+
+  private openOcean(at: (x: number, y: number) => number, x: number, y: number): boolean {
+    for (let dy = -3; dy <= 3; dy++) {
+      for (let dx = -3; dx <= 3; dx++) {
+        if (at(x + dx, y + dy) !== Biome.Water) return false;
+      }
+    }
+    return true;
+  }
+
+  private isPlainLand(
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    biome: number,
+  ): boolean {
+    return (
+      at(x, y - 1) === biome &&
+      at(x + 1, y) === biome &&
+      at(x, y + 1) === biome &&
+      at(x - 1, y) === biome &&
+      at(x - 1, y - 1) === biome &&
+      at(x + 1, y - 1) === biome &&
+      at(x + 1, y + 1) === biome &&
+      at(x - 1, y + 1) === biome
+    );
+  }
+
+  private atlasColor(id: number): Rgb {
+    const cached = this.repColor.get(id);
+    if (cached) return cached;
+    const src = this.tileData[id]?.data;
+    const reduced = src ? areaReduce(src, TILE, 1) : new Uint8ClampedArray([90, 140, 80, 255]);
+    const color = { r: reduced[0] ?? 90, g: reduced[1] ?? 140, b: reduced[2] ?? 80 };
+    this.repColor.set(id, color);
+    return color;
+  }
+
+  private visibleMips(
+    cameraX: number,
+    cameraY: number,
+    halfW: number,
+    halfH: number,
+    worldW: number,
+    worldH: number,
+    span: number,
+  ): Array<{ x: number; y: number; span: number; d: number }> {
+    const blocks: Array<{ x: number; y: number; span: number; d: number }> = [];
+    const x0 = Math.floor((cameraX - halfW) / span) * span;
+    const y0 = Math.floor((cameraY - halfH) / span) * span;
+    const x1 = cameraX + halfW;
+    const y1 = cameraY + halfH;
+    for (let y = y0; y < y1 + span; y += span) {
+      if (y >= worldH || y + span <= 0) continue;
+      for (let x = x0; x < x1 + span; x += span) {
+        if (x >= worldW || x + span <= 0) continue;
+        const dx = x + span * 0.5 - cameraX;
+        const dy = y + span * 0.5 - cameraY;
+        blocks.push({
+          x,
+          y,
+          span: Math.min(span, worldW - x, worldH - y),
+          d: dx * dx + dy * dy,
+        });
+      }
+    }
+    return blocks;
+  }
+
+  private paintMipJob(world: WorldData, job: MipJob, budgetMs: number): void {
+    const started = performance.now();
+    const at = (x: number, y: number) => this.biomeAt(world, x, y);
+    const stride = job.span * job.px;
+    while (job.row < job.span && performance.now() - started < budgetMs) {
+      while (job.col < job.span && performance.now() - started < budgetMs) {
+        const wx = job.x + job.col;
+        const wy = job.y + job.row;
+        if (wy >= 0 && wy < world.height && wx >= 0 && wx < world.width) {
+          const pixels = this.mipTilePixels(world, at, wx, wy, job.px);
+          const ox = job.col * job.px;
+          const oy = job.row * job.px;
+          for (let py = 0; py < job.px; py++) {
+            const dest = ((oy + py) * stride + ox) * 4;
+            const src = py * job.px * 4;
+            job.data.set(pixels.subarray(src, src + job.px * 4), dest);
+          }
+        }
+        job.col += 1;
+      }
+      if (job.col >= job.span) {
+        job.col = 0;
+        job.row += 1;
+      }
+    }
+    if (job.row < job.span) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = stride;
+    canvas.height = job.span * job.px;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const image = ctx.createImageData(canvas.width, canvas.height);
+    image.data.set(job.data);
+    ctx.putImageData(image, 0, 0);
+    job.canvas = canvas;
+    job.data = new Uint8ClampedArray(0);
+  }
+
+  private mipTilePixels(
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    px: number,
+  ): Uint8ClampedArray {
+    const biome = at(x, y);
+    if (biome === Biome.Water) {
+      if (waterBandSeam(at, x, y)) return this.renderedMip(world, at, x, y, px);
+      return this.waterMip(x, y, px, waterBand(at, x, y));
+    }
+    if (this.pathAt(world, x, y) || !this.isPlainLand(at, x, y, biome)) {
+      return this.renderedMip(world, at, x, y, px);
+    }
+    const variant = tileVariant(biome, x, y, world.seed, TILE);
+    const rot = biome === Biome.Snow ? snowRotation(x, y, world.seed) : 0;
+    const key = `${variant.id}:${variant.flipX ? 1 : 0}:${variant.flipY ? 1 : 0}:${rot}:${px}`;
+    const cached = this.reduced.get(key);
+    if (cached) return cached;
+    const src = this.tileData[variant.id]?.data;
+    const reduced = src
+      ? areaReduce(src, TILE, px, { flipX: variant.flipX, flipY: variant.flipY, rot })
+      : new Uint8ClampedArray(px * px * 4);
+    this.reduced.set(key, reduced);
+    return reduced;
+  }
+
+  private waterMip(x: number, y: number, px: number, kind: 'shallow' | 'deep'): Uint8ClampedArray {
+    const out = new Uint8ClampedArray(px * px * 4);
+    const box = TILE / px;
+    for (let j = 0; j < px; j++) {
+      for (let i = 0; i < px; i++) {
+        const gx = x * TILE + Math.floor(i * box + box / 2);
+        const gy = y * TILE + Math.floor(j * box + box / 2);
+        const color = this.sampleWater(kind, gx, gy);
+        const o = (j * px + i) * 4;
+        out[o] = color.r;
+        out[o + 1] = color.g;
+        out[o + 2] = color.b;
+        out[o + 3] = 255;
+      }
+    }
+    return out;
+  }
+
+  private renderedMip(
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    px: number,
+  ): Uint8ClampedArray {
+    const raw = this.fillTileBuffer(world, at, x, y);
+    return px === TILE ? raw : areaReduce(raw, TILE, px);
+  }
+
+  /** The same pixels paintGround would draw, without a canvas readback. */
+  private fillTileBuffer(
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+  ): Uint8ClampedArray {
+    const data = new Uint8ClampedArray(TILE * TILE * 4);
+    const biome = at(x, y);
+    const seed = world.seed;
+    const adj: Adj = {
+      center: biome,
+      n: at(x, y - 1),
+      e: at(x + 1, y),
+      s: at(x, y + 1),
+      w: at(x - 1, y),
+      nw: at(x - 1, y - 1),
+      ne: at(x + 1, y - 1),
+      se: at(x + 1, y + 1),
+      sw: at(x - 1, y + 1),
+    };
+    const tile = resolveTile(adj);
+    const write = (px: number, py: number, color: Rgb) => {
+      const o = (py * TILE + px) * 4;
+      data[o] = color.r;
+      data[o + 1] = color.g;
+      data[o + 2] = color.b;
+      data[o + 3] = 255;
+    };
+    if (this.pathAt(world, x, y) && biome !== Biome.Water) {
+      const road = resolveRoad(
+        this.pathAt(world, x, y - 1),
+        this.pathAt(world, x + 1, y),
+        this.pathAt(world, x, y + 1),
+        this.pathAt(world, x - 1, y),
+      );
+      const src = this.tileData[road.atlasId]?.data;
+      if (src) data.set(src);
+      return data;
+    }
+    if (tile.kind === 'authored') {
+      const src = this.tileData[tile.atlasId]?.data;
+      if (src) data.set(src);
+      return data;
+    }
+    if (biome === Biome.Water && tile.kind === 'ground') {
+      const seam = waterBandSeam(at, x, y);
+      const still = seam ? null : waterBand(at, x, y);
+      for (let py = 0; py < TILE; py++) {
+        for (let px = 0; px < TILE; px++) {
+          const kind = seam ? waterKindAt(x, y, px, py, seed, at) : (still ?? 'deep');
+          write(px, py, this.sampleWater(kind, x * TILE + px, y * TILE + py));
+        }
+      }
+      return data;
+    }
+    if (tile.kind === 'ground') {
+      const variant = tileVariant(biome, x, y, seed, TILE);
+      const rot = biome === Biome.Snow ? snowRotation(x, y, seed) : 0;
+      const src = this.tileData[variant.id]?.data;
+      if (!src) return data;
+      for (let py = 0; py < TILE; py++) {
+        for (let px = 0; px < TILE; px++) {
+          const { u, v } = orientedTexel(px, py, TILE, variant.flipX, variant.flipY, rot);
+          const s = (v * TILE + u) * 4;
+          write(px, py, { r: src[s] ?? 0, g: src[s + 1] ?? 0, b: src[s + 2] ?? 0 });
+        }
+      }
+      return data;
+    }
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        const owner = ownerTile(x, y, px, py, seed);
+        const sampleBiome = at(owner.x, owner.y);
+        write(px, py, this.sampleOwned(sampleBiome, owner.x, owner.y, px, py, seed, x, y, at));
+      }
+    }
+    return data;
+  }
+
+  private trimMipJobs(cameraX: number, cameraY: number, want: number): void {
+    if (this.mipJobs.size <= 96) return;
+    const ranked = [...this.mipJobs.entries()].map(([key, job]) => {
+      const dx = job.x + job.span * 0.5 - cameraX;
+      const dy = job.y + job.span * 0.5 - cameraY;
+      return { key, d: dx * dx + dy * dy, keep: job.px === want };
+    });
+    ranked.sort((a, b) => b.d - a.d);
+    let extra = this.mipJobs.size - 72;
+    for (const item of ranked) {
+      if (extra <= 0) break;
+      if (item.keep && item.d < 1e8) continue;
+      this.mipJobs.delete(item.key);
+      extra -= 1;
+    }
   }
 }
 
@@ -1444,11 +2162,6 @@ function drawRun(
   ctx.restore();
 }
 
-function rgb(hex: string): Rgb {
-  const n = Number.parseInt(hex.slice(1), 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-
 function sourceSize(image: CanvasImageSource): { w: number; h: number } {
   if (
     image instanceof HTMLImageElement ||
@@ -1462,6 +2175,26 @@ function sourceSize(image: CanvasImageSource): { w: number; h: number } {
 
 function hashCut(x: number, y: number, seed: number): boolean {
   return hash2(x, y, seed + 9) < 0.42;
+}
+
+function swatchFrom(
+  data: Uint8ClampedArray | undefined,
+  width: number,
+  height: number,
+): [number, number, number] {
+  if (!data || width < 1 || height < 1) return [120, 150, 90];
+  const cx = width >> 1;
+  const cy = height >> 1;
+  for (let radius = 0; radius < 6; radius++) {
+    const x = Math.min(width - 1, cx + radius);
+    const o = (cy * width + x) * 4;
+    const r = data[o] ?? 0;
+    const g = data[o + 1] ?? 0;
+    const b = data[o + 2] ?? 0;
+    if (r + g + b > 24) return [r, g, b];
+  }
+  const o = (cy * width + cx) * 4;
+  return [data[o] ?? 120, data[o + 1] ?? 150, data[o + 2] ?? 90];
 }
 
 function imageDataOf(image: HTMLImageElement): ImageData {
