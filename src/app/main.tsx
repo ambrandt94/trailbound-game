@@ -4,6 +4,7 @@ import { createBrowserSettings } from '../platform/settings';
 import { createIdbSaveBackend } from '../platform/storage/idb';
 import { Shell } from '../ui/shell';
 import '../ui/styles.css';
+import '../ui/theme/pixel-skin.css';
 import { systemClock } from './fixed-step';
 import { Game } from './game';
 

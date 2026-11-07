@@ -9,6 +9,7 @@ import {
   type SliderView,
   type SwatchView,
 } from './creator-state';
+import { skinText } from './glyphs';
 
 function pretty(id: string): string {
   const bare = id
@@ -128,10 +129,12 @@ export function CreatorScreen() {
   const source = creatorSource.value;
   const confirmLabel = view.intent === 'edit' ? 'Save avatar' : 'Take the road';
   return (
-    <section class="creator">
+    <section class="creator tb-scroll">
       <div class="creator-copy">
-        <p class="eyebrow">Character</p>
-        <h2>{view.intent === 'edit' ? 'Edit avatar' : 'Who walks this road?'}</h2>
+        <p class="eyebrow tb-kicker">Character</p>
+        <h2 class="tb-heading">
+          {view.intent === 'edit' ? 'Edit avatar' : 'Who walks this road?'}
+        </h2>
         <p class="lede tight">Adult travellers only. Drag the view, or use the arrow keys.</p>
       </div>
 
@@ -202,7 +205,7 @@ export function CreatorScreen() {
           ))}
         </select>
       </label>
-      {view.pixieNote ? <p class="note">{view.pixieNote}</p> : null}
+      {view.pixieNote ? <p class="note">{skinText(view.pixieNote)}</p> : null}
 
       <label class="field">
         <span>Gender</span>
@@ -247,12 +250,12 @@ export function CreatorScreen() {
       <p class="age">Age: adult</p>
       {view.errors.map((error) => (
         <p class="note warn" key={error}>
-          {error}
+          {skinText(error)}
         </p>
       ))}
       {view.warnings.map((warning) => (
         <p class="note" key={warning}>
-          {warning}
+          {skinText(warning)}
         </p>
       ))}
 
@@ -302,7 +305,7 @@ export function CreatorScreen() {
           </select>
         </label>
       ) : null}
-      {view.hatNote ? <p class="note">{view.hatNote}</p> : null}
+      {view.hatNote ? <p class="note">{skinText(view.hatNote)}</p> : null}
 
       {view.showFacial ? (
         <label class="field">
@@ -369,7 +372,7 @@ export function CreatorScreen() {
       ))}
       {view.shapeSliders.length > 0 ? (
         <details class="shape-details">
-          <summary>More build</summary>
+          <summary class="tb-heading">More build</summary>
           {view.shapeSliders.map((slider) => (
             <SliderRow
               key={slider.id}
@@ -410,7 +413,7 @@ export function CreatorScreen() {
         />
       ))}
 
-      <div class="slot-block">
+      <div class="slot-block wardrobe-selection" data-surface="wardrobe">
         <p class="slot-title">Clothes</p>
         <div class="slot-grid">
           <label class="field">
@@ -454,7 +457,7 @@ export function CreatorScreen() {
         ))}
       </div>
 
-      {view.note ? <p class="note">{view.note}</p> : null}
+      {view.note ? <p class="note">{skinText(view.note)}</p> : null}
       {view.hash ? <p class="hash">Look {view.hash.slice(0, 8)}</p> : null}
 
       <div class="actions">

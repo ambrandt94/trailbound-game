@@ -1,0 +1,880 @@
+/*
+ * Trailbound menu skin v2.1.2.
+ * Scoped to #ui so controller overlays and any future wardrobe screen
+ * outside this shell are left alone. The character creator's clothes
+ * block opts out with [data-surface="wardrobe"].
+ *
+ * Sprites and slices: ./sprites and ./ui_atlas_9slice.json (authored 1x).
+ * Outer frame and the title plate use the thick ring. Inner panels use
+ * frame_light at 2x. Label bands are flat: header_strip stitch stays in
+ * the 2px (4px at 2x) edge, and button centers are a solid leather fill
+ * because those sprite centers are transparent.
+ * Softball Gold is used at 16px, or 32px for the screen title.
+ */
+
+@font-face {
+  font-family: 'Softball Gold';
+  src:
+    url('../fonts/SoftballGold.woff') format('woff'),
+    url('../fonts/SoftballGold.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+#ui {
+  --tb-ink: #2a1d2c;
+  --tb-cream: #fff1d2;
+  --tb-parchment: #f1d7ae;
+  --tb-leather: #a8592f;
+  --tb-leather-hot: #cc8248;
+  --tb-leather-press: #7a3a26;
+  --tb-wood: #845437;
+  --tb-disabled: #816251;
+  --tb-muted: #62463f;
+  --tb-brass: #deb44a;
+  --tb-fit: #5aa862;
+  --tb-bad: #c2342c;
+  --tb-font: 'Softball Gold', monospace;
+  color: var(--tb-ink);
+  font-family: var(--tb-font);
+  font-size: 16px;
+  line-height: 16px;
+  letter-spacing: 0;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#ui button,
+#ui input,
+#ui select,
+#ui summary {
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+#ui .tb-screen,
+#ui .tb-window,
+#ui .tb-panel,
+#ui .tb-titlebar,
+#ui .tb-heading,
+#ui .action,
+#ui .pill,
+#ui .chip,
+#ui .lock,
+#ui .swatch,
+#ui .place {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* Outermost menus: 16px plank ring at 1x so the frame does not eat the page. */
+#ui .tb-screen {
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 16px 18px 20px;
+  overflow: hidden;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  background-clip: padding-box;
+  border-style: solid;
+  border-width: 16px;
+  border-image-source: url('./sprites/frame.png');
+  border-image-slice: 16;
+  border-image-width: 16px;
+  border-image-repeat: repeat;
+}
+
+#ui .tb-screen .tb-body {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 12px;
+  width: min(40rem, 100%);
+  min-height: 0;
+  min-width: 0;
+  margin: 28px auto 0;
+  overflow: auto;
+}
+
+#ui .tb-screen .settings-card {
+  flex: 1 1 auto;
+  width: min(42rem, 100%);
+  min-height: 0;
+  max-height: none;
+  margin: 0 auto;
+}
+
+#ui .tb-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-height: 84px;
+  margin: 0;
+  padding: 0 12px;
+  text-align: center;
+  color: var(--tb-cream);
+  background: var(--tb-wood);
+  border-style: solid;
+  border-width: 20px 32px 32px;
+  border-image-source: url('./sprites/title_bar.png');
+  border-image-slice: 10 16 16 16;
+  border-image-width: 20px 32px 32px;
+  border-image-repeat: repeat;
+}
+
+#ui .tb-titlebar h1 {
+  margin: 0;
+  max-width: 100%;
+  color: var(--tb-cream);
+  background: transparent;
+  font-family: inherit;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 32px;
+  letter-spacing: 0;
+}
+
+/* Flat leather under every section label. Stitch lives in the border. */
+#ui .tb-heading,
+#ui .look-group summary,
+#ui .shape-details summary,
+#ui .place h2 {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 44px;
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  color: var(--tb-cream);
+  background: var(--tb-leather);
+  border-style: solid;
+  border-width: 4px 0;
+  border-image-source: url('./sprites/header_strip.png');
+  border-image-slice: 2 0 2 0 fill;
+  border-image-width: 4px 0;
+  border-image-repeat: repeat;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+#ui .eyebrow,
+#ui .tb-kicker {
+  margin: 0;
+  color: var(--tb-muted);
+  background: var(--tb-cream);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+#ui h1,
+#ui h2,
+#ui .lede,
+#ui .note,
+#ui .age,
+#ui .hash,
+#ui .hint,
+#ui .flash {
+  letter-spacing: 0;
+  overflow-wrap: break-word;
+}
+
+#ui .lede {
+  max-width: 36rem;
+  margin: 0;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  font-size: 16px;
+  line-height: 32px;
+}
+
+#ui .lede.tight {
+  margin: 0 0 8px;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 32px;
+}
+
+#ui .tb-panel,
+#ui .tb-window,
+#ui .place {
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  background-clip: padding-box;
+  border-style: solid;
+  border-width: 16px;
+  border-radius: 0;
+  border-image-source: url('./sprites/frame_light.png');
+  border-image-slice: 8;
+  border-image-width: 16px;
+  border-image-repeat: repeat;
+}
+
+/* A docked settings window is its own outer frame, not a nested thick ring. */
+#ui .tb-window {
+  border-image-source: url('./sprites/frame.png');
+  border-image-slice: 16;
+  border-image-width: 16px;
+}
+
+#ui .card {
+  width: min(42rem, 100%);
+  padding: 12px;
+  background: var(--tb-cream);
+  border-radius: 0;
+}
+
+#ui .settings-card {
+  max-height: 100%;
+}
+
+#ui .settings-dock .settings-card {
+  height: 100%;
+  max-height: none;
+  padding: 12px;
+  background: var(--tb-cream);
+  border-radius: 0;
+}
+
+#ui .creator {
+  padding: 12px 12px 20px;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  background-clip: padding-box;
+  border-style: solid;
+  border-width: 16px;
+  border-left-width: 16px;
+  border-radius: 0;
+  border-image-source: url('./sprites/frame_light.png');
+  border-image-slice: 8;
+  border-image-width: 16px;
+  border-image-repeat: repeat;
+  font-family: var(--tb-font);
+  font-size: 16px;
+  line-height: 16px;
+}
+
+#ui .creator h2,
+#ui .creator .slot-title {
+  font-family: inherit;
+}
+
+#ui .action,
+#ui .pill.save,
+#ui .pill.look,
+#ui .pill.avatar,
+#ui .chip,
+#ui .lock {
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 56px;
+  padding: 0 16px;
+  border-style: solid;
+  border-width: 12px 16px;
+  border-radius: 0;
+  border-color: transparent;
+  cursor: pointer;
+  text-align: center;
+  white-space: normal;
+  line-height: 16px;
+  image-rendering: pixelated;
+}
+
+#ui .action,
+#ui .pill.save,
+#ui .pill.look,
+#ui .pill.avatar {
+  color: var(--tb-cream);
+  background: var(--tb-leather);
+  border-image-source: url('./sprites/button_normal.png');
+  border-image-slice: 6 8 6 8;
+  border-image-width: 12px 16px;
+  border-image-repeat: repeat;
+}
+
+#ui .action.secondary,
+#ui .chip,
+#ui .lock {
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border-image-source: url('./sprites/button_normal.png');
+  border-image-slice: 6 8 6 8;
+  border-image-width: 12px 16px;
+}
+
+#ui .chip,
+#ui .lock {
+  border-image-source: url('./sprites/tab_normal.png');
+  border-image-slice: 6;
+  border-image-width: 12px;
+  border-image-repeat: repeat;
+}
+
+#ui .action:hover,
+#ui .pill.save:hover,
+#ui .pill.look:hover,
+#ui .pill.avatar:hover {
+  background: var(--tb-leather-hot);
+  color: var(--tb-cream);
+  border-image-source: url('./sprites/button_hover.png');
+}
+
+#ui .chip:hover,
+#ui .lock:hover {
+  background: var(--tb-leather-hot);
+  color: var(--tb-cream);
+}
+
+#ui .look-group summary:hover,
+#ui .shape-details summary:hover {
+  outline: 2px solid var(--tb-brass);
+  outline-offset: -6px;
+}
+
+#ui .chip:hover,
+#ui .lock:hover {
+  border-image-source: url('./sprites/tab_hover.png');
+  border-image-slice: 6;
+  border-image-width: 12px;
+}
+
+#ui .action:active,
+#ui .pill.save:active,
+#ui .pill.look:active,
+#ui .pill.avatar:active,
+#ui .chip:active,
+#ui .lock:active {
+  background: var(--tb-leather-press);
+  color: var(--tb-cream);
+  border-image-source: url('./sprites/button_pressed.png');
+}
+
+#ui .chip:active,
+#ui .lock:active {
+  border-image-source: url('./sprites/tab_selected.png');
+  border-image-slice: 6;
+  border-image-width: 12px;
+}
+
+#ui .chip.on,
+#ui .lock.on,
+#ui .chip[aria-pressed='true'],
+#ui .lock[aria-pressed='true'] {
+  color: var(--tb-cream);
+  background: var(--tb-leather);
+  border-image-source: url('./sprites/tab_selected.png');
+  border-image-slice: 6;
+  border-image-width: 12px;
+}
+
+#ui .action:disabled,
+#ui .chip:disabled,
+#ui .lock:disabled {
+  color: var(--tb-ink);
+  background: var(--tb-disabled);
+  border-image-source: url('./sprites/button_disabled.png');
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+#ui .chip:disabled,
+#ui .lock:disabled {
+  border-image-source: url('./sprites/tab_disabled.png');
+  border-image-slice: 6;
+  border-image-width: 12px;
+}
+
+#ui .action:focus-visible,
+#ui .pill:focus-visible,
+#ui .chip:focus-visible,
+#ui .lock:focus-visible,
+#ui .swatch:focus-visible,
+#ui input:focus-visible,
+#ui select:focus-visible,
+#ui summary:focus-visible {
+  outline: 3px solid var(--tb-brass);
+  outline-offset: 2px;
+}
+
+#ui .hud-bar {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#ui .hud-bar .pill {
+  position: static;
+  top: auto;
+  right: auto;
+  left: auto;
+  transform: none;
+  pointer-events: auto;
+}
+
+#ui .pill.clock,
+#ui .pill.skin {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 10px;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border-style: solid;
+  border-width: 8px 12px;
+  border-radius: 0;
+  border-image-source: url('./sprites/chip.png');
+  border-image-slice: 4 6 4 6;
+  border-image-width: 8px 12px;
+  border-image-repeat: stretch;
+}
+
+#ui .pill.clock {
+  font-variant-numeric: tabular-nums;
+}
+
+#ui .clock .rate {
+  margin-left: 8px;
+  color: var(--tb-muted);
+  font-size: 16px;
+}
+
+#ui .skin select {
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+#ui .hud-foot {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  max-height: 48%;
+  min-width: 0;
+  overflow: auto;
+  pointer-events: none;
+}
+
+#ui .place {
+  position: static;
+  width: min(22rem, 100%);
+  padding: 10px;
+  pointer-events: auto;
+}
+
+#ui .place h2 {
+  margin-bottom: 8px;
+}
+
+#ui .hint,
+#ui .flash {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  text-align: left;
+  text-shadow: none;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border: 2px solid var(--tb-ink);
+  pointer-events: auto;
+}
+
+#ui .flash {
+  width: max-content;
+  max-width: 100%;
+}
+
+#ui .hint {
+  max-height: 9rem;
+  overflow: auto;
+  font-size: 16px;
+  line-height: 32px;
+}
+
+#ui .flash.ok {
+  color: var(--tb-fit);
+}
+
+#ui .flash.bad {
+  color: var(--tb-bad);
+}
+
+#ui .dive-cue {
+  color: var(--tb-ink);
+  text-shadow: none;
+}
+
+#ui .dive-cue p {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border: 2px solid var(--tb-ink);
+  font-size: 16px;
+  line-height: 16px;
+  letter-spacing: 0;
+}
+
+#ui .field,
+#ui .slider,
+#ui .check {
+  min-width: 0;
+  color: var(--tb-ink);
+  font-size: 16px;
+  line-height: 16px;
+}
+
+#ui .field {
+  gap: 6px;
+}
+
+#ui .slider {
+  grid-template-columns: minmax(8rem, 1.3fr) minmax(5rem, 1fr) auto;
+  gap: 8px;
+  min-height: 44px;
+}
+
+#ui .settings-card .slider {
+  grid-template-columns: minmax(8rem, 1.4fr) minmax(5rem, 1fr) auto;
+}
+
+#ui .settings-card .value,
+#ui .value {
+  min-width: 4.5rem;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  text-align: right;
+}
+
+#ui .field input[type='text'],
+#ui .field select,
+#ui .screen .field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border: 2px solid var(--tb-ink);
+  border-radius: 0;
+  font: inherit;
+}
+
+#ui input[type='range'] {
+  width: 100%;
+  height: 44px;
+  margin: 0;
+  accent-color: var(--tb-leather);
+  background: transparent;
+}
+
+#ui input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  background: #b9937a;
+  border: 2px solid var(--tb-ink);
+}
+
+#ui input[type='range']::-webkit-slider-thumb {
+  width: 16px;
+  height: 20px;
+  margin-top: -8px;
+  background: var(--tb-leather);
+  border: 2px solid var(--tb-ink);
+  appearance: none;
+}
+
+#ui input[type='range']::-moz-range-track {
+  height: 8px;
+  background: #b9937a;
+  border: 2px solid var(--tb-ink);
+}
+
+#ui input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 20px;
+  background: var(--tb-leather);
+  border: 2px solid var(--tb-ink);
+  border-radius: 0;
+}
+
+#ui .check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin: 8px 0;
+  cursor: pointer;
+}
+
+#ui .check input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--tb-leather);
+}
+
+#ui input[type='color'] {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 2px solid var(--tb-ink);
+  background: var(--tb-cream);
+}
+
+#ui .look-group {
+  margin: 8px 0;
+  min-width: 0;
+}
+
+#ui .look-group summary,
+#ui .shape-details summary {
+  cursor: pointer;
+  color: var(--tb-cream);
+  font-weight: 400;
+}
+
+#ui .look-actions {
+  gap: 8px;
+  margin: 8px 0;
+}
+
+#ui .look-view {
+  margin: 0;
+  flex: 1 1 8rem;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  line-height: 16px;
+}
+
+#ui .swatches {
+  gap: 6px;
+}
+
+#ui .swatch {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-style: solid;
+  border-width: 8px;
+  border-radius: 0;
+  border-color: transparent;
+  border-image-source: url('./sprites/dye_swatch.png');
+  border-image-slice: 4;
+  border-image-width: 8px;
+  border-image-repeat: stretch;
+  cursor: pointer;
+}
+
+#ui .swatch.on,
+#ui .swatch[aria-pressed='true'] {
+  border-image-source: url('./sprites/dye_swatch_selected.png');
+  outline: none;
+}
+
+#ui .swatch.on:focus-visible,
+#ui .swatch[aria-pressed='true']:focus-visible {
+  outline: 3px solid var(--tb-brass);
+  outline-offset: 2px;
+}
+
+#ui .note {
+  margin: 4px 0;
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 32px;
+}
+
+#ui .note.warn {
+  color: var(--tb-bad);
+}
+
+#ui .age,
+#ui .hash,
+#ui .tag {
+  color: var(--tb-muted);
+  background: var(--tb-cream);
+  letter-spacing: 0;
+  font-size: 16px;
+  line-height: 16px;
+}
+
+#ui .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--tb-ink);
+  border-top-color: var(--tb-brass);
+  border-radius: 0;
+}
+
+#ui .tb-scroll {
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: auto;
+  scrollbar-color: var(--tb-wood) #b9937a;
+}
+
+#ui .tb-scroll::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+#ui .tb-scroll::-webkit-scrollbar-track {
+  background-color: #b9937a;
+  background-image: url('./sprites/scroll_track.png');
+  background-size: 16px 64px;
+  background-repeat: repeat-y;
+  image-rendering: pixelated;
+}
+
+#ui .tb-scroll::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  background-color: var(--tb-wood);
+  background-image: url('./sprites/scroll_thumb.png');
+  background-size: 16px 32px;
+  background-repeat: repeat-y;
+  border: 2px solid var(--tb-ink);
+  border-radius: 0;
+  image-rendering: pixelated;
+}
+
+#ui .actions {
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  #ui .tb-titlebar {
+    min-height: 52px;
+    border-width: 10px 16px 16px;
+    border-image-width: 10px 16px 16px;
+  }
+
+  #ui .tb-titlebar h1 {
+    font-size: 16px;
+    line-height: 16px;
+  }
+
+  #ui .slider,
+  #ui .settings-card .slider {
+    grid-template-columns: 1fr auto;
+  }
+
+  #ui .slider input[type='range'] {
+    grid-column: 1 / -1;
+  }
+
+  #ui .settings-dock {
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: calc(100% - 16px);
+  }
+}
+
+@media (max-width: 800px) {
+  #ui .creator {
+    border-top-width: 16px;
+    border-left-width: 16px;
+  }
+}
+
+/*
+ * Wardrobe selection stays on the previous creator look.
+ * These rules must beat the skin rules above.
+ */
+#ui .wardrobe-selection {
+  margin-top: 8px;
+  padding: 10px 8px 4px;
+  color: #2c261f;
+  background: rgba(246, 241, 230, 0.96);
+  border: 1px solid #e4d8c4;
+  border-image: none;
+  border-radius: 0.4rem;
+  font-family: 'Trailbound Pixel', Candara, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+#ui .wardrobe-selection .slot-title {
+  margin: 0;
+  color: #241e18;
+  background: transparent;
+  border: 0;
+  border-image: none;
+  font-family: Palatino, 'Palatino Linotype', Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.3;
+  min-height: 0;
+  padding: 0;
+}
+
+#ui .wardrobe-selection .field,
+#ui .wardrobe-selection .field span,
+#ui .wardrobe-selection select,
+#ui .wardrobe-selection .swatch {
+  font-family: 'Trailbound Pixel', Candara, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+#ui .wardrobe-selection select {
+  min-height: 0;
+  padding: 0.35rem 0.45rem;
+  color: #241e18;
+  background: #fffaf3;
+  border: 1px solid #c9b79a;
+  border-radius: 0.4rem;
+}
+
+#ui .wardrobe-selection .swatch {
+  width: 1.35rem;
+  height: 1.35rem;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 2px solid #e4d8c4;
+  border-image: none;
+  border-radius: 0.28rem;
+  background-clip: border-box;
+}
+
+#ui .wardrobe-selection .swatch.on,
+#ui .wardrobe-selection .swatch[aria-pressed='true'] {
+  border: 2px solid #1f6a56;
+  border-image: none;
+  outline: 2px solid #d4652f;
+}

@@ -1,0 +1,642 @@
+{
+  "version": "2.1.2",
+  "title": "Trailbound UI v2.1 hierarchy",
+  "atlas": "ui_atlas.png",
+  "width": 512,
+  "height": 256,
+  "padding": 2,
+  "extrude": 1,
+  "grid": 1,
+  "display_scale": 2,
+  "sprites": {
+    "title_bar": {
+      "rect": {
+        "x": 3,
+        "y": 3,
+        "w": 80,
+        "h": 48
+      },
+      "borders": {
+        "l": 16,
+        "t": 10,
+        "r": 16,
+        "b": 16
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "branded plate, 8px rope coil on bottom, wheels on ends"
+    },
+    "frame": {
+      "rect": {
+        "x": 87,
+        "y": 3,
+        "w": 48,
+        "h": 48
+      },
+      "borders": {
+        "l": 16,
+        "t": 16,
+        "r": 16,
+        "b": 16
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "16px plank ring, 3 boards, iron corner brackets with 3 rivets \u2014 outer screen / title only"
+    },
+    "panel": {
+      "rect": {
+        "x": 139,
+        "y": 3,
+        "w": 48,
+        "h": 48
+      },
+      "borders": {
+        "l": 12,
+        "t": 12,
+        "r": 12,
+        "b": 12
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "wagon-canvas body with edge vignette and hem stitches"
+    },
+    "scroll_track": {
+      "rect": {
+        "x": 191,
+        "y": 3,
+        "w": 12,
+        "h": 48
+      },
+      "borders": {
+        "l": 3,
+        "t": 3,
+        "r": 3,
+        "b": 3
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": ""
+    },
+    "floor_active": {
+      "rect": {
+        "x": 207,
+        "y": 3,
+        "w": 48,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "active",
+      "notes": "wood tray + canvas ribs"
+    },
+    "floor_ghost": {
+      "rect": {
+        "x": 259,
+        "y": 3,
+        "w": 48,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "ghost",
+      "notes": ""
+    },
+    "canvas_fill": {
+      "rect": {
+        "x": 311,
+        "y": 3,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "tileable wagon-bonnet canvas (panel interiors)"
+    },
+    "cell_blocked": {
+      "rect": {
+        "x": 347,
+        "y": 3,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "recommended_scale": 2,
+      "state": "blocked",
+      "notes": "wood tray + inner stitch pocket"
+    },
+    "cell_empty": {
+      "rect": {
+        "x": 383,
+        "y": 3,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "recommended_scale": 2,
+      "state": "empty",
+      "notes": "wood tray + inner stitch pocket"
+    },
+    "cell_ghost": {
+      "rect": {
+        "x": 419,
+        "y": 3,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "recommended_scale": 2,
+      "state": "ghost",
+      "notes": "wood tray + inner stitch pocket"
+    },
+    "cell_hover": {
+      "rect": {
+        "x": 455,
+        "y": 3,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "recommended_scale": 2,
+      "state": "hover",
+      "notes": "wood tray + inner stitch pocket"
+    },
+    "cell_valid": {
+      "rect": {
+        "x": 3,
+        "y": 55,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "recommended_scale": 2,
+      "state": "valid",
+      "notes": "wood tray + inner stitch pocket"
+    },
+    "frame_light": {
+      "rect": {
+        "x": 39,
+        "y": 55,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "8px single-plank inner panel + small iron caps"
+    },
+    "button_disabled": {
+      "rect": {
+        "x": 75,
+        "y": 55,
+        "w": 40,
+        "h": 28
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "disabled",
+      "notes": "slimmer leather button, buckle, stitch"
+    },
+    "button_hover": {
+      "rect": {
+        "x": 119,
+        "y": 55,
+        "w": 40,
+        "h": 28
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "hover",
+      "notes": "slimmer leather button, buckle, stitch"
+    },
+    "button_normal": {
+      "rect": {
+        "x": 163,
+        "y": 55,
+        "w": 40,
+        "h": 28
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "normal",
+      "notes": "slimmer leather button, buckle, stitch"
+    },
+    "button_pressed": {
+      "rect": {
+        "x": 207,
+        "y": 55,
+        "w": 40,
+        "h": 28
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "pressed",
+      "notes": "slimmer leather button, buckle, stitch"
+    },
+    "btn_rotate_left": {
+      "rect": {
+        "x": 251,
+        "y": 55,
+        "w": 28,
+        "h": 28
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "touch rotate left with wagon wheel"
+    },
+    "btn_rotate_right": {
+      "rect": {
+        "x": 283,
+        "y": 55,
+        "w": 28,
+        "h": 28
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "touch rotate right with wagon wheel"
+    },
+    "tab_disabled": {
+      "rect": {
+        "x": 315,
+        "y": 55,
+        "w": 36,
+        "h": 24
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "disabled",
+      "notes": "slimmer leather tab with running stitch"
+    },
+    "tab_hover": {
+      "rect": {
+        "x": 355,
+        "y": 55,
+        "w": 36,
+        "h": 24
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "hover",
+      "notes": "slimmer leather tab with running stitch"
+    },
+    "tab_normal": {
+      "rect": {
+        "x": 395,
+        "y": 55,
+        "w": 36,
+        "h": 24
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "normal",
+      "notes": "slimmer leather tab with running stitch"
+    },
+    "tab_selected": {
+      "rect": {
+        "x": 435,
+        "y": 55,
+        "w": 36,
+        "h": 24
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "recommended_scale": 2,
+      "state": "selected",
+      "notes": "slimmer leather tab with running stitch"
+    },
+    "scroll_thumb": {
+      "rect": {
+        "x": 475,
+        "y": 55,
+        "w": 12,
+        "h": 24
+      },
+      "borders": {
+        "l": 3,
+        "t": 3,
+        "r": 3,
+        "b": 3
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": ""
+    },
+    "badge_hidden": {
+      "rect": {
+        "x": 3,
+        "y": 91,
+        "w": 32,
+        "h": 16
+      },
+      "borders": {
+        "l": 6,
+        "t": 4,
+        "r": 6,
+        "b": 4
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "hidden under outer"
+    },
+    "chip": {
+      "rect": {
+        "x": 39,
+        "y": 91,
+        "w": 32,
+        "h": 16
+      },
+      "borders": {
+        "l": 6,
+        "t": 4,
+        "r": 6,
+        "b": 4
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": ""
+    },
+    "chip_legend": {
+      "rect": {
+        "x": 75,
+        "y": 91,
+        "w": 28,
+        "h": 16
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": ""
+    },
+    "dye_swatch": {
+      "rect": {
+        "x": 107,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "recommended_scale": 2,
+      "state": "normal",
+      "notes": ""
+    },
+    "dye_swatch_selected": {
+      "rect": {
+        "x": 127,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "recommended_scale": 2,
+      "state": "selected",
+      "notes": ""
+    },
+    "icon_back": {
+      "rect": {
+        "x": 147,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 2,
+        "t": 2,
+        "r": 2,
+        "b": 2
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "extra: back arrow"
+    },
+    "icon_close": {
+      "rect": {
+        "x": 167,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 2,
+        "t": 2,
+        "r": 2,
+        "b": 2
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "control icon"
+    },
+    "icon_down": {
+      "rect": {
+        "x": 187,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 2,
+        "t": 2,
+        "r": 2,
+        "b": 2
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "control icon"
+    },
+    "icon_rotate": {
+      "rect": {
+        "x": 207,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 2,
+        "t": 2,
+        "r": 2,
+        "b": 2
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "control icon"
+    },
+    "icon_up": {
+      "rect": {
+        "x": 227,
+        "y": 91,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 2,
+        "t": 2,
+        "r": 2,
+        "b": 2
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "control icon"
+    },
+    "header_strip": {
+      "rect": {
+        "x": 247,
+        "y": 91,
+        "w": 16,
+        "h": 12
+      },
+      "borders": {
+        "l": 0,
+        "t": 2,
+        "r": 0,
+        "b": 2
+      },
+      "recommended_scale": 2,
+      "state": null,
+      "notes": "seamless leather header: flat face under glyphs, stitch only on top/bottom 2px"
+    },
+    "scroll_cap_down": {
+      "rect": {
+        "x": 267,
+        "y": 91,
+        "w": 12,
+        "h": 12
+      },
+      "borders": {
+        "l": 3,
+        "t": 3,
+        "r": 3,
+        "b": 3
+      },
+      "recommended_scale": 2,
+      "state": "down",
+      "notes": ""
+    },
+    "scroll_cap_up": {
+      "rect": {
+        "x": 283,
+        "y": 91,
+        "w": 12,
+        "h": 12
+      },
+      "borders": {
+        "l": 3,
+        "t": 3,
+        "r": 3,
+        "b": 3
+      },
+      "recommended_scale": 2,
+      "state": "up",
+      "notes": ""
+    }
+  }
+}
