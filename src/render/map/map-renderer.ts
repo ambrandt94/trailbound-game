@@ -27,9 +27,9 @@ export interface MapDrawState {
 }
 
 /**
- * Canvas2D overworld. Classic uses the frozen map's sheets. Trailbound 48
- * stamps Alex's atlas through the same camera, with the map sprites on top.
- * Bakes are detached canvases, not on the document.
+ * Canvas2D overworld. The default skin is the Pixel Kingdom pack, autotiled
+ * the way trailbound-world-map draws grasslands.png. Trailbound 48 stays an
+ * optional skin. Bakes are detached canvases, not on the document.
  */
 export class MapRenderer {
   private disposed = false;
@@ -38,7 +38,7 @@ export class MapRenderer {
   private trailbound: TrailboundTiles | null = null;
   private ready: Promise<void> | null = null;
   private bakedFor: WorldData | null = null;
-  private skinId: MapSkinId = 'trailbound48';
+  private skinId: MapSkinId = 'classic';
   private waterStamp = -1;
   private overviewStarted = 0;
   private detailDone = false;
@@ -105,7 +105,7 @@ export class MapRenderer {
     }
     if (this.bakedFor !== world) this.bake(world);
     const paintStarted = performance.now();
-    const drawnEarly = crispCamera(camera);
+    const drawnEarly = this.skinId === 'trailbound48' ? crispCamera(camera) : camera;
     this.worldRenderer.chunkDestPx = Math.max(1, TILE * drawnEarly.scale);
     if (this.skinId === 'trailbound48' && this.trailbound?.coarseMip) {
       this.trailbound.stepViewMips(
@@ -117,12 +117,9 @@ export class MapRenderer {
         cssH,
         40,
       );
-    } else {
+    } else if (this.skinId === 'trailbound48') {
       this.worldRenderer.stepFarSheet(world, drawnEarly.x, drawnEarly.y, 4);
-      if (this.skinId !== 'trailbound48') {
-        this.worldRenderer.stepClassicBlocks(world, drawnEarly, cssW, cssH, 4);
-      }
-      if (!this.detailDone && this.skinId === 'trailbound48') {
+      if (!this.detailDone) {
         const done = this.worldRenderer.stepOverview(world, 8);
         if (done) {
           this.detailDone = true;
