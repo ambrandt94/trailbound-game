@@ -1,9 +1,9 @@
 import type { ChunkData, WorldData } from '../../core/world/models';
 import { BIOME_COUNT, Biome } from '../../core/world/models';
 import { hash2 } from '../../core/world/noise';
-import { BIOME_GROUND, DIRT_EDGE_BASE, EDGE_INDEX, SANDSTONE_ROAD } from './biome-table';
+import { BIOME_GROUND, SANDSTONE_ROAD } from './biome-table';
 import { averageTileColor, type GroundPalette } from './detail-lod';
-import { cellCorners, foamRuns, pickCell, waterBand, type FoamRun } from './terrain-pick';
+import { foamRuns, pickCell, waterBand, type FoamRun } from './terrain-pick';
 import {
   FIELD_REACH,
   SUBCELLS,
@@ -15,6 +15,14 @@ import {
   type FieldSample,
   type TileVariant,
 } from './terrain-field';
+import {
+  compositeFringe,
+  compositeRoadStraight,
+  neighborAnchor,
+  resolveRoad,
+  resolveTile,
+  type Adj,
+} from './tile-fill';
 
 const TILE = 48;
 const COLS = 16;
@@ -139,6 +147,9 @@ export class TrailboundTiles {
   private tileImage: ImageData | null = null;
   private foamPixels: ImageData[] | null = null;
   private waterPixels: { deep: ImageData[]; shallow: ImageData[] } | null = null;
+  /** Derived transitions. Never written back onto the authored atlas. */
+  private readonly derived = new Map<string, HTMLCanvasElement>();
+  private readonly variantPixels = new Map<string, Uint8ClampedArray>();
 
   constructor(private readonly images: TrailboundImages) {
     this.tiles = sliceSheet(images.atlas, COLS, 6, TILE);
@@ -248,7 +259,9 @@ export class TrailboundTiles {
 
   /** Paint tiles until the budget runs out. Returns true when the region is finished. */
   stepRegion(world: WorldData, job: RegionBake, budgetMs: number): boolean {
-    if (job.stamp < 48) return this.stepFlatRegion(world, job, budgetMs);
+    // One 48px skin at every zoom. The displaced field reads as noise up close,
+    // so a region is always whole tiles plus derived edge fills.
+    if (job.stamp > 0) return this.stepFlatRegion(world, job, budgetMs);
     const ctx = job.canvas.getContext('2d');
     const rowImage = job.rowImage;
     if (!ctx || !rowImage || job.row >= job.span) return true;
@@ -388,13 +401,14 @@ export class TrailboundTiles {
     const ctx = canvas.getContext('2d');
     if (!ctx) return canvas;
     ctx.imageSmoothingEnabled = false;
-    const at = (lx: number, ly: number): number => {
+    // Neighbours past the chunk edge come from the world tile, not a one-tile stub.
+    const at = (lx: number, ly: number): number =>
+      this.biomeAt(world, chunk.wx + lx, chunk.wy + ly);
+    const roadAt = (lx: number, ly: number): boolean => {
       if (lx >= 0 && ly >= 0 && lx < size && ly < size) {
-        return chunk.tiles[lx + ly * size] ?? Biome.Plains;
+        return chunk.paths[lx + ly * size] === 1;
       }
-      const wx = chunk.wx + (lx < 0 ? -1 : lx >= size ? 1 : 0);
-      const wy = chunk.wy + (ly < 0 ? -1 : ly >= size ? 1 : 0);
-      return this.biomeAt(world, wx, wy);
+      return this.pathAt(world, chunk.wx + lx, chunk.wy + ly);
     };
     const shores: ShoreMark[] = [];
     const waters: WaterMark[] = [];
@@ -416,12 +430,17 @@ export class TrailboundTiles {
           false,
         );
         const center = at(lx, ly);
-        if (chunk.paths[lx + ly * size] === 1 && center !== Biome.Water) {
-          const pn = ly > 0 && chunk.paths[lx + (ly - 1) * size] === 1;
-          const pe = lx + 1 < size && chunk.paths[lx + 1 + ly * size] === 1;
-          const ps = ly + 1 < size && chunk.paths[lx + (ly + 1) * size] === 1;
-          const pw = lx > 0 && chunk.paths[lx - 1 + ly * size] === 1;
-          this.blitRoad(ctx, pn, pe, ps, pw, lx * stamp, ly * stamp, stamp);
+        if (roadAt(lx, ly) && center !== Biome.Water) {
+          this.blitRoad(
+            ctx,
+            roadAt(lx, ly - 1),
+            roadAt(lx + 1, ly),
+            roadAt(lx, ly + 1),
+            roadAt(lx - 1, ly),
+            lx * stamp,
+            ly * stamp,
+            stamp,
+          );
         }
       }
     }
@@ -438,48 +457,36 @@ export class TrailboundTiles {
     dx: number,
     dy: number,
     stamp: number,
-    shores: ShoreMark[],
+    _shores: ShoreMark[],
     waters: WaterMark[],
     lx: number,
     ly: number,
     roads = true,
   ): void {
-    const corners = cellCorners(at, x, y);
     const center = at(x, y);
-    const mixed =
-      corners[0] !== corners[1] || corners[1] !== corners[2] || corners[2] !== corners[3];
-    const band = center === Biome.Water && !mixed ? waterBand(at, x, y) : 'none';
-    const pick = pickCell(corners, x, y, world.seed, band);
-    this.blitPick(ctx, pick, dx, dy, stamp);
-    if (center === Biome.Water && !mixed) {
+    this.paintGround(ctx, world, at, x, y, dx, dy, stamp, roads, center);
+    const around = [
+      at(x, y - 1),
+      at(x + 1, y),
+      at(x, y + 1),
+      at(x - 1, y),
+      at(x - 1, y - 1),
+      at(x + 1, y - 1),
+      at(x + 1, y + 1),
+      at(x - 1, y + 1),
+    ];
+    if (center === Biome.Water && around.every((biome) => biome === Biome.Water)) {
       const flow = tileVariant(Biome.Water, x, y, world.seed, 128);
+      const kind = waterBand(at, x, y);
       waters.push({
         lx,
         ly,
-        kind: band === 'deep' ? 'deep' : 'shallow',
+        kind,
         ox: flow.ox,
         oy: flow.oy,
         flipX: flow.flipX,
         flipY: flow.flipY,
       });
-    }
-    const landAndWater =
-      corners.some((corner) => corner === Biome.Water) &&
-      corners.some((corner) => corner !== Biome.Water);
-    if (landAndWater && pick.landBits !== 0 && pick.landBits !== 15) {
-      shores.push({ lx, ly, bits: pick.landBits });
-    }
-    if (roads && this.pathAt(world, x, y) && center !== Biome.Water && !mixed) {
-      this.blitRoad(
-        ctx,
-        this.pathAt(world, x, y - 1),
-        this.pathAt(world, x + 1, y),
-        this.pathAt(world, x, y + 1),
-        this.pathAt(world, x - 1, y),
-        dx,
-        dy,
-        stamp,
-      );
     }
   }
 
@@ -490,8 +497,9 @@ export class TrailboundTiles {
   }
 
   private pathAt(world: WorldData, x: number, y: number): boolean {
-    if (x < 0 || y < 0 || x >= world.width || y >= world.height) return false;
-    return world.paths[x + y * world.width] === 1;
+    if (y < 0 || y >= world.height) return false;
+    const wx = ((x % world.width) + world.width) % world.width;
+    return world.paths[wx + y * world.width] === 1;
   }
 
   /** One average colour per biome, plus the road tile. Used by the far-zoom sheet. */
@@ -578,9 +586,7 @@ export class TrailboundTiles {
       return;
     }
     const out = this.scratchCtx.createImageData(TILE, TILE);
-    const lit = rgb(rim.lit);
-    const shaded = rgb(rim.shaded);
-    const shadow = rgb(rim.shadow);
+    void rim;
     const fd = fg.data;
     const bd = bg.data;
     const md = mask.data;
@@ -588,19 +594,14 @@ export class TrailboundTiles {
     for (let i = 0; i < TILE * TILE; i++) {
       const m = quantizeMask(md[i * 4] ?? 0);
       const o = i * 4;
-      const src = m >= 224 ? fd : m === 0 ? bd : null;
-      if (src) {
-        od[o] = src[o] ?? 0;
-        od[o + 1] = src[o + 1] ?? 0;
-        od[o + 2] = src[o + 2] ?? 0;
-        od[o + 3] = 255;
-      } else {
-        const tone = m >= 160 ? lit : m >= 96 ? shaded : shadow;
-        od[o] = tone.r;
-        od[o + 1] = tone.g;
-        od[o + 2] = tone.b;
-        od[o + 3] = 255;
-      }
+      const x = i % TILE;
+      const y = (i / TILE) | 0;
+      const bayer = ((y & 3) * 4 + (x & 3) * 3) & 15;
+      const src = m >= 224 || (m > 0 && bayer < Math.round((m / 255) * 16)) ? fd : bd;
+      od[o] = src[o] ?? 0;
+      od[o + 1] = src[o + 1] ?? 0;
+      od[o + 2] = src[o + 2] ?? 0;
+      od[o + 3] = 255;
     }
     this.scratchCtx.putImageData(out, 0, 0);
     ctx.imageSmoothingEnabled = false;
@@ -705,25 +706,8 @@ export class TrailboundTiles {
     stamp: number,
     waterKind?: 'shallow' | 'deep',
   ): void {
-    const span = biome === Biome.Water ? 128 : TILE;
-    const variant = tileVariant(biome, x, y, world.seed, span);
-    if (biome === Biome.Water) {
-      const kind = waterKind ?? waterBand((wx, wy) => this.biomeAt(world, wx, wy), x, y);
-      const img = this.waterFrame(kind === 'deep' ? 'deep' : 'shallow');
-      // One continuous sheet, so open water does not restart on every world tile.
-      if (img) {
-        this.blitSheet(ctx, img, dx, dy, stamp, {
-          ox: x * TILE,
-          oy: y * TILE,
-          flipX: false,
-          flipY: false,
-        });
-      }
-    } else {
-      const tile = this.tiles[variant.id] ?? this.tiles[0];
-      if (tile) this.blitSheet(ctx, tile, dx, dy, stamp, variant);
-    }
-    this.paintRoad(ctx, world, x, y, biome, false, dx, dy, stamp);
+    const at = (tx: number, ty: number) => this.biomeAt(world, tx, ty);
+    this.paintGround(ctx, world, at, x, y, dx, dy, stamp, true, biome, waterKind);
   }
 
   private neighborhoodSame(
@@ -1312,13 +1296,131 @@ export class TrailboundTiles {
     dy: number,
     stamp: number,
   ): void {
-    const bits = (n ? 8 : 0) | (e ? 4 : 0) | (s ? 2 : 0) | (w ? 1 : 0);
-    if (bits === 15 || bits === 0) {
-      this.blitTile(ctx, SANDSTONE_ROAD, dx, dy, stamp);
+    const road = resolveRoad(n, e, s, w);
+    if (road.kind === 'authored' || !road.parts || !road.axis) {
+      this.blitTile(ctx, road.atlasId, dx, dy, stamp);
       return;
     }
-    const edge = EDGE_INDEX.get(bits);
-    this.blitTile(ctx, edge === undefined ? SANDSTONE_ROAD : DIRT_EDGE_BASE + edge, dx, dy, stamp);
+    const canvas = this.derivedCanvas(road.id, () => {
+      const first = this.tileData[road.parts?.[0] ?? 0]?.data;
+      const second = this.tileData[road.parts?.[1] ?? 0]?.data;
+      const out = new Uint8ClampedArray(TILE * TILE * 4);
+      if (first && second) compositeRoadStraight(first, second, out, road.axis ?? 'ew');
+      return out;
+    });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(canvas, dx, dy, stamp, stamp);
+  }
+
+  /**
+   * One world tile: authored ground, an authored edge sheet, or a derived
+   * fringe kept off the atlas. Neighbours are whatever `at` returns, so a
+   * chunk samples the world past its own canvas.
+   */
+  private paintGround(
+    ctx: DrawCtx,
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+    roads: boolean,
+    biome = at(x, y),
+    waterKind?: 'shallow' | 'deep',
+  ): void {
+    const adj: Adj = {
+      center: biome,
+      n: at(x, y - 1),
+      e: at(x + 1, y),
+      s: at(x, y + 1),
+      w: at(x - 1, y),
+      nw: at(x - 1, y - 1),
+      ne: at(x + 1, y - 1),
+      se: at(x + 1, y + 1),
+      sw: at(x - 1, y + 1),
+    };
+    const tile = resolveTile(adj);
+    ctx.imageSmoothingEnabled = false;
+    if (tile.kind === 'authored') {
+      this.blitTile(ctx, tile.atlasId, dx, dy, stamp);
+    } else if (biome === Biome.Water) {
+      const kind = waterKind ?? waterBand(at, x, y);
+      const img = this.waterFrame(kind === 'deep' ? 'deep' : 'shallow');
+      if (img) {
+        this.blitSheet(ctx, img, dx, dy, stamp, {
+          ox: x * TILE,
+          oy: y * TILE,
+          flipX: false,
+          flipY: false,
+        });
+      }
+    } else {
+      const variant = tileVariant(biome, x, y, world.seed, TILE);
+      const ground = this.tiles[variant.id] ?? this.tiles[0];
+      if (ground) this.blitSheet(ctx, ground, dx, dy, stamp, variant);
+    }
+    if (tile.kind === 'fill') {
+      for (const layer of tile.fills) {
+        const anchor = neighborAnchor(adj, layer.fg, x, y);
+        const variant = tileVariant(layer.fg, anchor.x, anchor.y, world.seed, TILE);
+        const key = `fringe:${variant.id}:${variant.ox}:${variant.oy}:${variant.flipX ? 1 : 0}:${variant.flipY ? 1 : 0}:${layer.bits}`;
+        const canvas = this.derivedCanvas(key, () => {
+          const out = new Uint8ClampedArray(TILE * TILE * 4);
+          compositeFringe(this.displayedVariant(variant), layer.bits, out);
+          return out;
+        });
+        ctx.drawImage(canvas, dx, dy, stamp, stamp);
+      }
+    }
+    if (roads) this.paintRoad(ctx, world, x, y, biome, false, dx, dy, stamp);
+  }
+
+  private displayedVariant(variant: TileVariant): Uint8ClampedArray {
+    const key = `${variant.id}:${variant.ox}:${variant.oy}:${variant.flipX ? 1 : 0}:${variant.flipY ? 1 : 0}`;
+    const cached = this.variantPixels.get(key);
+    if (cached) return cached;
+    const out = new Uint8ClampedArray(TILE * TILE * 4);
+    const src = this.tileData[variant.id]?.data;
+    if (src) {
+      for (let py = 0; py < TILE; py++) {
+        for (let px = 0; px < TILE; px++) {
+          let u = variant.flipX ? TILE - 1 - px : px;
+          let v = variant.flipY ? TILE - 1 - py : py;
+          u = (u + variant.ox) % TILE;
+          v = (v + variant.oy) % TILE;
+          const s = (v * TILE + u) * 4;
+          const d = (py * TILE + px) * 4;
+          out[d] = src[s] ?? 0;
+          out[d + 1] = src[s + 1] ?? 0;
+          out[d + 2] = src[s + 2] ?? 0;
+          out[d + 3] = 255;
+        }
+      }
+    }
+    this.variantPixels.set(key, out);
+    return out;
+  }
+
+  private derivedCanvas(key: string, paint: () => Uint8ClampedArray): HTMLCanvasElement {
+    const hit = this.derived.get(key);
+    if (hit) return hit;
+    if (this.derived.size > 800) {
+      const oldest = this.derived.keys().next().value;
+      if (oldest !== undefined) this.derived.delete(oldest);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = TILE;
+    canvas.height = TILE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+    const pixels = paint();
+    const image = ctx.createImageData(TILE, TILE);
+    image.data.set(pixels);
+    ctx.putImageData(image, 0, 0);
+    this.derived.set(key, canvas);
+    return canvas;
   }
 }
 
@@ -1442,11 +1544,6 @@ function drawRun(
     ctx.drawImage(image, 0, -thick / 2, run.len * stamp, thick);
   }
   ctx.restore();
-}
-
-function rgb(hex: string): Rgb {
-  const n = Number.parseInt(hex.slice(1), 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
 }
 
 function sourceSize(image: CanvasImageSource): { w: number; h: number } {

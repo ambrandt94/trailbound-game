@@ -25,6 +25,7 @@ import {
 } from '../../core/world/models';
 import { type ChatBubble, peerMarkerColor } from './markers';
 import { LOCAL_PLAYER_ID } from '../../core/sim/player';
+import { pixelSnapScale } from './map-camera';
 import { AssetLibrary, drawCharFrame } from './assets';
 import { armyVisibleFollowers, boatChar, kindColor } from '../../core/sim/entities';
 import {
@@ -70,7 +71,6 @@ import {
   CHUNK_SCREEN_PX,
   FarSheet,
   averageTileColor,
-  chunkDetailWanted,
   mipFactorFor,
   solidPalette,
   type GroundPalette,
@@ -193,6 +193,20 @@ function drawNametag(
   },
 ): TagBox | null {
   return drawTagLabel(ctx, text, x, y, scale, { ...opts, kind: 'name' });
+}
+
+/** Nearest-neighbour camera. Translation is whole pixels so tiles stay crisp while zoom eases. */
+function cameraTransform(
+  ctx: CanvasRenderingContext2D,
+  camera: CameraState,
+  viewW: number,
+  viewH: number,
+): void {
+  const scale = pixelSnapScale(camera.scale);
+  const ox = Math.round(viewW / 2 - camera.x * TILE * scale);
+  const oy = Math.round(viewH / 2 - camera.y * TILE * scale);
+  ctx.setTransform(scale, 0, 0, scale, ox, oy);
+  ctx.imageSmoothingEnabled = false;
 }
 
 function drawSpeechBubble(
@@ -1162,9 +1176,7 @@ export class WorldRenderer {
         else contextNodes.push(node);
       }
       ctx.save();
-      ctx.translate(viewW / 2, viewH / 2);
-      ctx.scale(camera.scale, camera.scale);
-      ctx.translate(-camera.x * TILE, -camera.y * TILE);
+      cameraTransform(ctx, camera, viewW, viewH);
       if (this.worldBake) {
         ctx.imageSmoothingEnabled = false;
         ctx.globalAlpha = 0.34;
@@ -1208,9 +1220,7 @@ export class WorldRenderer {
       lctx.clearRect(0, 0, viewW, viewH);
       lctx.imageSmoothingEnabled = false;
       lctx.save();
-      lctx.translate(viewW / 2, viewH / 2);
-      lctx.scale(camera.scale, camera.scale);
-      lctx.translate(-camera.x * TILE, -camera.y * TILE);
+      cameraTransform(lctx, camera, viewW, viewH);
       this.drawVisibleChunks(lctx, camera, viewW, viewH, world, 1, isoKeys);
       if (opts.showHeight) this.drawRelief(lctx, world, camera, viewW, viewH, !!opts.showContours);
       this.drawChunkSprites(
@@ -1257,9 +1267,7 @@ export class WorldRenderer {
       if (opts.interior) this.applyInteriorBlur(lctx, opts.interior, camera, viewW, viewH);
       this.applyScreenFog(lctx, isolated, camera, viewW, viewH);
       lctx.save();
-      lctx.translate(viewW / 2, viewH / 2);
-      lctx.scale(camera.scale, camera.scale);
-      lctx.translate(-camera.x * TILE, -camera.y * TILE);
+      cameraTransform(lctx, camera, viewW, viewH);
       this.drawPois(
         lctx,
         world,
@@ -1275,9 +1283,7 @@ export class WorldRenderer {
       const remote = opts.markerEntities;
       if (remote?.length) {
         ctx.save();
-        ctx.translate(viewW / 2, viewH / 2);
-        ctx.scale(camera.scale, camera.scale);
-        ctx.translate(-camera.x * TILE, -camera.y * TILE);
+        cameraTransform(ctx, camera, viewW, viewH);
         this.drawEntityPins(ctx, remote, camera, viewW, viewH, opts.hoveredEntityId);
         ctx.restore();
       }
@@ -1285,9 +1291,7 @@ export class WorldRenderer {
     }
 
     ctx.save();
-    ctx.translate(viewW / 2, viewH / 2);
-    ctx.scale(camera.scale, camera.scale);
-    ctx.translate(-camera.x * TILE, -camera.y * TILE);
+    cameraTransform(ctx, camera, viewW, viewH);
 
     if (this.worldBake) {
       ctx.imageSmoothingEnabled = false;
@@ -1306,7 +1310,9 @@ export class WorldRenderer {
     else this.drawClassicBlocks(ctx, world, camera, viewW, viewH);
 
     const featureAlpha = smoothstep(0.35, 1.35, camera.scale);
-    const showChunks = chunkDetailWanted(camera.scale);
+    // Street chunks are a future settlement/property mode, not this world map.
+    // Zoom past the cap dives into the 3D area. Settlement markers stay icons.
+    const showChunks = false;
     const detailT = showChunks ? 1 : 0;
     const halfW = viewW / (2 * camera.scale) / TILE;
     const viewTilesX = viewW / (camera.scale * TILE);
@@ -1555,9 +1561,7 @@ export class WorldRenderer {
     mctx.clearRect(0, 0, mask.width, mask.height);
     mctx.fillStyle = '#fff';
     mctx.save();
-    mctx.translate(viewW / 2, viewH / 2);
-    mctx.scale(camera.scale, camera.scale);
-    mctx.translate(-camera.x * TILE, -camera.y * TILE);
+    cameraTransform(mctx, camera, viewW, viewH);
     const halfW = viewW / (2 * camera.scale) / TILE + 2;
     const halfH = viewH / (2 * camera.scale) / TILE + 2;
     const x0 = camera.x - halfW;
@@ -1678,9 +1682,7 @@ export class WorldRenderer {
     bctx.fillRect(0, 0, blur.width, blur.height);
     bctx.globalCompositeOperation = 'destination-out';
     bctx.save();
-    bctx.translate(viewW / 2, viewH / 2);
-    bctx.scale(camera.scale, camera.scale);
-    bctx.translate(-camera.x * TILE, -camera.y * TILE);
+    cameraTransform(bctx, camera, viewW, viewH);
     const pad = 0.03;
     const cell = TILE / ZONE_SCALE;
     bctx.fillStyle = '#fff';

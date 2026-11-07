@@ -197,8 +197,7 @@ export class FarSheet {
       if (camera.x + halfW > world.width) shifts.push(world.width);
     }
     const smooth = ctx.imageSmoothingEnabled;
-    ctx.imageSmoothingEnabled = scale * TILE < 3;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingEnabled = false;
     for (const shift of shifts) {
       const x0 = camera.x - shift - halfW;
       const x1 = camera.x - shift + halfW;

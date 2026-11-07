@@ -137,7 +137,7 @@ export function downsamplePixels(
   return { data, width: dw, height: dh };
 }
 
-/** Half, quarter, or eighth of a chunk bake. Smoothing is the minify filter. */
+/** Half, quarter, or eighth of a chunk bake. Nearest neighbour, same art. */
 export function downsampleCanvas(source: PixelSource, factor: number): HTMLCanvasElement {
   const scale = Math.max(1, factor);
   const width = Math.max(1, Math.round(source.width / scale));
@@ -147,8 +147,7 @@ export function downsampleCanvas(source: PixelSource, factor: number): HTMLCanva
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(source, 0, 0, width, height);
   return canvas;
 }
