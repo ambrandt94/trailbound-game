@@ -16,6 +16,7 @@ import { Keyboard } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
 import { loadTownFixture, townFixtureId } from '../render/area/area-from-export';
 import { AreaRenderer } from '../render/area/area-renderer';
+import { clearAreaLeaveOverlay } from '../render/area/leave-overlay';
 import { MapRenderer, type MapDrawState } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
 import { creatorBusy, creatorSerial, creatorSource, creatorView } from '../ui/creator-state';
@@ -309,12 +310,14 @@ export class Game implements GameHost {
   }
 
   leaveArea(exit?: AreaExit): void {
+    clearAreaLeaveOverlay(this.options.fade.ownerDocument);
     if (this.areaScene) {
       this.stack.remove(this.areaScene);
       this.areaScene = null;
     }
     if (exit) this.world.placeHeroOutside(exit);
     this.setView('map');
+    this.setFade(1);
     void this.persist();
   }
 
