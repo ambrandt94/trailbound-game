@@ -1,4 +1,5 @@
 import type { AreaLook } from '../../core/state/area-look';
+import { AREA_PACE } from '../../core/state/area-pace';
 
 /** Downhill glue. Uphill already snaps because the body is below the new ground. */
 export const STEP_SNAP = 0.45;
@@ -38,6 +39,10 @@ export interface MotorBody {
   ph: number;
   emT: number;
   yl: boolean;
+  /** How long Shift has been held. Jog becomes sprint after `sprintCharge`. */
+  sprintHold: number;
+  /** Gait chosen this tick: sneak, walk, run, or sprint. */
+  gear: string;
   lock: boolean;
   carry: { k?: string } | null;
   mount: object | null;
@@ -71,6 +76,12 @@ export interface MotorParams {
   dodgeCd: number;
   stretch: number;
   camYaw: number;
+  walkMps: number;
+  runMps: number;
+  sprintMps: number;
+  sneakMps: number;
+  sprintCharge: number;
+  blockStride: number;
   radius: number;
   stepSnap: number;
 }
@@ -103,6 +114,12 @@ export function motorParamsFromLook(look: AreaLook, radius = 0.3): MotorParams {
     dodgeCd: look.dodgeCd,
     stretch: 0.5,
     camYaw: look.camYaw,
+    walkMps: look.walkMps,
+    runMps: look.runMps,
+    sprintMps: look.sprintMps,
+    sneakMps: look.sneakMps,
+    sprintCharge: AREA_PACE.sprintCharge,
+    blockStride: AREA_PACE.blockStride,
     radius,
     stepSnap: STEP_SNAP,
   };
@@ -113,6 +130,31 @@ export function motorParamsFromLook(look: AreaLook, radius = 0.3): MotorParams {
  * Speeds, coyote, jump buffer, and step collision match the original step().
  * A short downhill snap keeps the body on slopes the original left in the air.
  */
+function targetGait(
+  body: MotorBody,
+  input: MotorInput,
+  params: MotorParams,
+  dt: number,
+): { speed: number } {
+  if (input.sneak) {
+    body.sprintHold = 0;
+    body.gear = 'sneak';
+    return { speed: params.sneakMps };
+  }
+  if (input.sprint) {
+    body.sprintHold += dt;
+    if (body.sprintHold >= params.sprintCharge) {
+      body.gear = 'sprint';
+      return { speed: params.sprintMps };
+    }
+    body.gear = 'run';
+    return { speed: params.runMps };
+  }
+  body.sprintHold = 0;
+  body.gear = 'walk';
+  return { speed: params.walkMps };
+}
+
 export function stepMotor(
   body: MotorBody,
   input: MotorInput,
@@ -166,21 +208,18 @@ export function stepMotor(
     body.vx = body.ddx * params.dodgeSpeed * (0.3 + 0.7 * k);
     body.vz = body.ddz * params.dodgeSpeed * (0.3 + 0.7 * k);
   } else {
+    const gear = targetGait(body, input, params, dt);
     const sm = body.mount
       ? params.horseMult * (input.sprint ? 1.2 : 1)
       : body.carry
         ? body.carry.k === 'crate'
           ? 0.65
           : 0.8
-        : input.sneak
-          ? params.sneakMult
-          : input.sprint
-            ? params.sprintMult
-            : 1;
+        : gear.speed / params.walkMps;
     body.sm = sm;
     const ctl = body.g ? 1 : params.airCtl;
-    const tx = mx * params.maxSpeed * sm;
-    const tz = mz * params.maxSpeed * sm;
+    const tx = mx * gear.speed;
+    const tz = mz * gear.speed;
     const dx = tx - body.vx;
     const dz = tz - body.vz;
     const len = Math.hypot(dx, dz);
@@ -266,22 +305,14 @@ export function stepMotor(
   else if (body.mount) ns = spd > 0.4 ? 'ride' : 'idle';
   else if (body.carry && body.g) ns = 'carry';
   else if (body.g) {
-    ns =
-      body.lt > 0 && mag < 0.1
-        ? 'land'
-        : spd > 0.4
-          ? body.sm < 1
-            ? 'sneak'
-            : body.sm > 1
-              ? 'sprint'
-              : 'run'
-          : 'idle';
+    ns = body.lt > 0 && mag < 0.1 ? 'land' : spd > 0.4 ? body.gear : 'idle';
   } else ns = body.vy > 0 ? 'jump' : 'fall';
   if (ns !== body.st) {
     body.st = ns;
     body.t = 0;
   }
-  body.ph += spd * dt * 1.9;
+  const stride = params.blockStride > 0 ? params.blockStride : 1.4;
+  body.ph += (spd / stride) * Math.PI * 2 * dt;
 }
 
 /** Fixed 120 Hz slices. `slow` matches the original time-scale slider. */
@@ -330,6 +361,8 @@ export function restBody(partial: Partial<MotorBody> = {}): MotorBody {
     ph: 0,
     emT: 0,
     yl: false,
+    sprintHold: 0,
+    gear: 'walk',
     lock: false,
     carry: null,
     mount: null,

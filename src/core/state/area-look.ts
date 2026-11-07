@@ -1,4 +1,5 @@
 import { clampCamera, type CameraPose } from './area-camera';
+import { AREA_PACE } from './area-pace';
 
 /**
  * Every control from the controller's Visuals panel, plus the sidebar
@@ -122,6 +123,11 @@ export interface AreaLook extends CameraPose {
   maxSpeed: number;
   sprintMult: number;
   sneakMult: number;
+  /** On-screen metres per real second. These drive the motor; maxSpeed does not. */
+  walkMps: number;
+  runMps: number;
+  sprintMps: number;
+  sneakMps: number;
   horseMult: number;
   accel: number;
   decel: number;
@@ -575,34 +581,44 @@ export const LOOK_FIELDS: readonly LookField[] = [
   { key: 'invertX', label: 'Invert look X', group: 'Debug', kind: 'bool', fallback: false },
   { key: 'invertY', label: 'Invert look Y', group: 'Debug', kind: 'bool', fallback: false },
   {
-    key: 'maxSpeed',
-    label: 'Run speed',
+    key: 'walkMps',
+    label: 'Walk (no modifier) m/s',
     group: 'Controller',
     kind: 'number',
-    min: 2,
-    max: 10,
-    step: 0.1,
-    fallback: 5.5,
+    min: 0.6,
+    max: 3,
+    step: 0.05,
+    fallback: AREA_PACE.walk,
   },
   {
-    key: 'sprintMult',
-    label: 'Sprint multiplier (Shift)',
+    key: 'runMps',
+    label: 'Jog (Shift) m/s',
     group: 'Controller',
     kind: 'number',
-    min: 1,
-    max: 2.5,
+    min: 1.5,
+    max: 6,
     step: 0.05,
-    fallback: 1.6,
+    fallback: AREA_PACE.run,
   },
   {
-    key: 'sneakMult',
-    label: 'Sneak multiplier (Ctrl)',
+    key: 'sprintMps',
+    label: 'Sprint (hold Shift) m/s',
     group: 'Controller',
     kind: 'number',
-    min: 0.2,
-    max: 0.9,
+    min: 3,
+    max: 8,
     step: 0.05,
-    fallback: 0.45,
+    fallback: AREA_PACE.sprint,
+  },
+  {
+    key: 'sneakMps',
+    label: 'Sneak (Ctrl) m/s',
+    group: 'Controller',
+    kind: 'number',
+    min: 0.3,
+    max: 2,
+    step: 0.05,
+    fallback: AREA_PACE.sneak,
   },
   {
     key: 'horseMult',
@@ -774,9 +790,10 @@ export const LOOK_GROUPS: readonly LookGroup[] = [
 ];
 
 const FEEL_RESET: (keyof AreaLook)[] = [
-  'maxSpeed',
-  'sprintMult',
-  'sneakMult',
+  'walkMps',
+  'runMps',
+  'sprintMps',
+  'sneakMps',
   'horseMult',
   'accel',
   'decel',
@@ -800,7 +817,9 @@ const FEEL_RESET: (keyof AreaLook)[] = [
 const PRESETS: Record<Exclude<FeelPreset, 'Custom'>, Partial<AreaLook>> = {
   Default: {},
   "Baldur's Gate": {
-    maxSpeed: 4.5,
+    walkMps: 1.4,
+    runMps: 3,
+    sprintMps: 4.6,
     accel: 22,
     decel: 30,
     turn: 9,
@@ -817,7 +836,9 @@ const PRESETS: Record<Exclude<FeelPreset, 'Custom'>, Partial<AreaLook>> = {
     camLag: 0.2,
   },
   Diablo: {
-    maxSpeed: 6.5,
+    walkMps: 1.8,
+    runMps: 4,
+    sprintMps: 6,
     accel: 80,
     decel: 90,
     turn: 30,
@@ -832,7 +853,9 @@ const PRESETS: Record<Exclude<FeelPreset, 'Custom'>, Partial<AreaLook>> = {
     camLag: 0.08,
   },
   'Bravely Default': {
-    maxSpeed: 5,
+    walkMps: 1.5,
+    runMps: 3.2,
+    sprintMps: 5,
     accel: 35,
     decel: 40,
     turn: 16,
@@ -845,7 +868,9 @@ const PRESETS: Record<Exclude<FeelPreset, 'Custom'>, Partial<AreaLook>> = {
     camLag: 0.15,
   },
   'Souls-like': {
-    maxSpeed: 4.2,
+    walkMps: 1.3,
+    runMps: 2.8,
+    sprintMps: 4.4,
     accel: 18,
     decel: 26,
     turn: 7,
@@ -863,7 +888,9 @@ const PRESETS: Record<Exclude<FeelPreset, 'Custom'>, Partial<AreaLook>> = {
     camLag: 0.25,
   },
   Platformer: {
-    maxSpeed: 7,
+    walkMps: 2,
+    runMps: 4.2,
+    sprintMps: 6.5,
     accel: 90,
     decel: 70,
     turn: 25,
@@ -897,6 +924,10 @@ function blankLook(): AreaLook {
       Reflect.set(look, field.key, field.fallback);
     }
   }
+  /* Kept so older saves and feel presets still parse. The motor uses the m/s fields. */
+  look.maxSpeed = 5.5;
+  look.sprintMult = 1.6;
+  look.sneakMult = 0.45;
   return look;
 }
 

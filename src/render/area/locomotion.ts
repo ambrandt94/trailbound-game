@@ -1,14 +1,15 @@
 /**
  * Clip choice and playback rate shared by Character Forge bodies and skinned props.
- * Forge clips are in place (no root motion). Walk rate is speed / 1.4, the same
- * reference the controller uses. Clips that publish a stride are foot-locked instead.
+ * Clips are in place. The mixer rate is ground speed × cycle duration / stride,
+ * so the planted foot stays with the ground. Walk and sneak are capped near the
+ * clip's natural rate.
  */
+
+import { playbackCap } from '../../core/state/area-pace';
 
 export const LOCO_FADE_SEC = 0.16;
 /** Metres per second at which a scale-1 walk clip still reads as a walk. */
 export const WALK_MAX_MPS = 2.2;
-/** Authored Forge walk speed at timeScale 1. */
-export const WALK_REF_MPS = 1.4;
 
 export interface LocoSampleInput {
   state: string;
@@ -19,6 +20,8 @@ export interface LocoSampleInput {
   strides?: Readonly<Record<string, number>>;
   /** FF3 rips play at half rate. Forge bodies omit this and use 1. */
   gaitRate?: number;
+  /** Hard ceiling on the mixer rate. Walk defaults to the pace cap. */
+  maxRate?: number;
 }
 
 export interface LocoSample {
@@ -54,7 +57,7 @@ export function locomotionSample(input: LocoSampleInput): LocoSample {
   if (state === 'sprint' || state === 'dodge' || state === 'run') {
     const walked = !!input.strides && speed < WALK_MAX_MPS * size;
     name = walked ? 'Walk' : 'Run';
-  } else if (state === 'sneak' || state === 'carry') name = 'Walk';
+  } else if (state === 'walk' || state === 'sneak' || state === 'carry') name = 'Walk';
   else if (state === 'ride') {
     name = 'Idle';
     timeScale = rate * 0.8;
@@ -66,12 +69,15 @@ export function locomotionSample(input: LocoSampleInput): LocoSample {
   if (name) name = resolveClip(name, clips);
   const stride = name && input.strides ? input.strides[name] : undefined;
   const duration = name && input.durations ? input.durations[name] : undefined;
-  if (name && stride && duration && (name === 'Walk' || name === 'Run')) {
-    timeScale = Math.max(0.15, (speed * duration) / (stride * size));
+  const cap = input.maxRate ?? playbackCap(state);
+  if (name && stride && duration && (name === 'Walk' || name === 'Run' || name === 'Carry')) {
+    const sized = stride * size;
+    timeScale = sized > 0 ? (speed * duration) / sized : 1;
+    timeScale = Math.min(cap, Math.max(0.2, timeScale));
   } else if (!input.strides && name === 'Run') {
-    timeScale = state === 'sprint' ? 1.28 : state === 'dodge' ? 1.45 : 1;
+    timeScale = Math.min(cap, state === 'sprint' ? 1.28 : state === 'dodge' ? 1.45 : 1);
   } else if (!input.strides && (name === 'Walk' || name === 'Carry')) {
-    timeScale = Math.max(0.35, speed / WALK_REF_MPS);
+    timeScale = Math.min(cap, 1);
   }
   return {
     clip: name,

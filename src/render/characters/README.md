@@ -19,7 +19,7 @@ const body = getPlayerBody();
 if (body) {
   body.object3D.position.set(pose.x, 0, pose.z);
   body.object3D.rotation.y = pose.yaw;
-  body.present({ clip: moving ? 'Walk' : 'Idle', timeScale: moving ? speed / 1.4 : 1, fade: 0.16 });
+  body.present({ clip: moving ? 'Walk' : 'Idle', timeScale, fade: 0.16 });
   tickPlayerBody(dt);
 } else {
   placeholderPawn.visible = true;

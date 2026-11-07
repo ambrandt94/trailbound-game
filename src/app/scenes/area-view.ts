@@ -19,7 +19,7 @@ export interface AreaEnter {
 }
 
 const CONTROLS =
-  'WASD move · Space jump · Shift sprint · Ctrl sneak · Alt roll · F use · Q/E orbit · Z/X pitch · V zoom · C overhead/3rd · wheel zoom. Walk off the edge to leave.';
+  'WASD walk · Shift jog, hold to sprint · Ctrl sneak · Space jump · Alt roll · F use · Q/E orbit · Z/X pitch · V zoom · C overhead/3rd · wheel zoom. Walk off the edge to leave.';
 
 export class AreaView implements Scene {
   readonly id = 'area';
