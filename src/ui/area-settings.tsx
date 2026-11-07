@@ -181,8 +181,8 @@ export function SettingsPanel(props: { dock?: boolean }) {
               change({ mapSkin });
             }}
           >
+            <option value="classic">Pixel Kingdom</option>
             <option value="trailbound48">Trailbound 48</option>
-            <option value="classic">Classic</option>
           </select>
         </label>
         <label class="check">

@@ -1,139 +1,68 @@
-# Derived map tiles
+# Pixel Kingdom map tiles
 
-Authored art stays in `public/assets/map/trailbound48/`. Nothing here is painted back into `atlas_terrain.png`. Missing transitions are built at runtime into a separate canvas cache.
+The default world map draws `public/assets/map/classic/tilesets/grasslands.png` the way [trailbound-world-map](https://github.com/ambrandt94/trailbound-world-map) does. Each cell is a 16 px pack tile. The camera scales it with nearest-neighbour only. No noise mask, no dither, and no new texture is generated for this skin.
 
-A fill does not mirror and does not use a repeating dither. Each texel asks a low-frequency noise field, continuous across tile boundaries, which world tile owns it, then copies that tile’s authored ground pixel. There is no channel blend and no flat rim colour. A near-black sample is replaced with that tile’s own average non-black colour.
+Autotile selection is `blobLocal` on the pack's 3×3 blob, then `tileSrc(group, season, lx, ly)`. Grass under every land biome is the plateau interior of that biome's season. An overlay group, when the original has one, is stamped on top with the same blob. Trees, rocks, and mountain rocks are the same feature scatter as the original (`summer-*`, `forest-*`, `winter-*`, `autumn-*`, `rock-1`, `rock-3`, `rock-4`, `rock-snow`).
 
-Rivers are the Marsh biome. Coasts are land (usually Sand) onto Water. Roads use the dirt-edge sheet; the two straight masks that sheet does not contain are joins of the authored caps.
+The pack has no separate sheet for snow, taiga, marsh, desert, jungle, heath, or ashlands. Those biomes use a seasonal row that is already in the pack (the pack's own recolor), which is what the original map does. Crops below are the interior cell, scaled 4×. "Before" is the summer cell. "After" is the seasonal cell that is actually drawn.
 
-## Authored pairs
+Trailbound 48 stays on the map menu as a non-default skin. It is not this path.
 
-- Plains onto Sand: Authored sheet at atlas 60 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
-- Plains onto Marsh: Authored sheet at atlas 72 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
-- Meadow onto Sand: Authored sheet at atlas 60 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
-- Meadow onto Marsh: Authored sheet at atlas 72 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
-- Hills onto Marsh: Authored sheet at atlas 72 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
-- Snow onto Mountain: Authored sheet at atlas 84 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
+## Filled from pack rows
 
-## Filled pairs
+### Snow
 
-No authored edge. The edge is the world-space noise field described above, shared with the neighbouring tile.
+No snow sheet. Winter grass under the winter rock blob.
 
-- Sand onto Water
-- Plains onto Water
-- Plains onto Heath
-- Plains onto Mountain
-- Plains onto Desert
-- Plains onto Ashlands
-- Meadow onto Water
-- Meadow onto Plains
-- Meadow onto Heath
-- Meadow onto Mountain
-- Meadow onto Desert
-- Meadow onto Ashlands
-- Forest onto Water
-- Forest onto Sand
-- Forest onto Plains
-- Forest onto Meadow
-- Forest onto Hills
-- Forest onto Heath
-- Forest onto Marsh
-- Forest onto Mountain
-- Forest onto Desert
-- Forest onto Ashlands
-- DarkForest onto Water
-- DarkForest onto Sand
-- DarkForest onto Plains
-- DarkForest onto Meadow
-- DarkForest onto Forest
-- DarkForest onto Hills
-- DarkForest onto Heath
-- DarkForest onto Marsh
-- DarkForest onto Mountain
-- DarkForest onto Taiga
-- DarkForest onto Desert
-- DarkForest onto Ashlands
-- Hills onto Water
-- Hills onto Sand
-- Hills onto Plains
-- Hills onto Meadow
-- Hills onto Heath
-- Hills onto Mountain
-- Hills onto Desert
-- Hills onto Ashlands
-- Heath onto Water
-- Heath onto Sand
-- Heath onto Marsh
-- Heath onto Desert
-- Heath onto Ashlands
-- Marsh onto Water
-- Marsh onto Sand
-- Mountain onto Water
-- Mountain onto Sand
-- Mountain onto Heath
-- Mountain onto Marsh
-- Mountain onto Desert
-- Mountain onto Ashlands
-- Snow onto Water
-- Snow onto Sand
-- Snow onto Plains
-- Snow onto Meadow
-- Snow onto Forest
-- Snow onto DarkForest
-- Snow onto Hills
-- Snow onto Heath
-- Snow onto Marsh
-- Snow onto Taiga
-- Snow onto Desert
-- Snow onto Jungle
-- Snow onto Ashlands
-- Taiga onto Water
-- Taiga onto Sand
-- Taiga onto Plains
-- Taiga onto Meadow
-- Taiga onto Forest
-- Taiga onto Hills
-- Taiga onto Heath
-- Taiga onto Marsh
-- Taiga onto Mountain
-- Taiga onto Desert
-- Taiga onto Ashlands
-- Desert onto Water
-- Desert onto Sand
-- Desert onto Marsh
-- Jungle onto Water
-- Jungle onto Sand
-- Jungle onto Plains
-- Jungle onto Meadow
-- Jungle onto Forest
-- Jungle onto DarkForest
-- Jungle onto Hills
-- Jungle onto Heath
-- Jungle onto Marsh
-- Jungle onto Mountain
-- Jungle onto Taiga
-- Jungle onto Desert
-- Jungle onto Ashlands
-- Ashlands onto Water
-- Ashlands onto Sand
-- Ashlands onto Marsh
-- Ashlands onto Desert
+![Summer grass](map-fills/summer-grass.png)
+![Winter grass](map-fills/winter-grass.png)
 
-## Autotile masks
+![Summer rock](map-fills/summer-rock.png)
+![Winter rock](map-fills/winter-rock.png)
 
-- Edges, outer corners, inner corners and T-junctions are the 12 corner masks on `EDGE_INDEX`. An authored pair uses that sheet.
-- Mask 0 is an interior. Opposite-corner masks 5 and 10, the full ring, and every pair with no sheet use the noise field, so a diagonal run cuts across the tile instead of stepping in whole tiles.
-- Ground interiors use an authored variant, randomly flipped. The source is not scrolled, so a seamless tile stays seamless.
+### Taiga
 
-## Roads
+No taiga sheet. Winter grass under the winter forest blob.
 
-- Caps, corners, T-junctions, the isolated tile and the crossing are authored (`DIRT_EDGE_BASE` and the sandstone road).
-- Mask 5 (east-west) and mask 10 (north-south) have no cell. Each is the west/north cap joined to the east/south cap. The join is an irregular hash, not a repeating comb.
+![Summer forest](map-fills/summer-forest.png)
+![Winter forest](map-fills/winter-forest.png)
 
-## Snow beside sand
+### Marsh
 
-Seed 7741 places snow directly beside beach sand, and a few snow tiles beside open water. That is the world generator: high latitudes are forced to snow, and low shore land next to water becomes sand. The map draws that pair; it does not insert a land biome between them.
+No marsh autotile. Lush grass, plus the pack's lily deco on the same scatter as the original. Overlay group is none.
 
-## Chunk edges
+![Summer grass](map-fills/summer-grass.png)
+![Lush grass](map-fills/lush-grass.png)
 
-Region paints and chunk bakes read neighbour biomes and roads from the world, including the tile just outside the canvas, so two chunks agree on the shared edge.
+### Desert, heath, and ashlands
+
+No desert or ash sheet. Autumn grass under the autumn path blob (the pack's sand-colored path). Sand itself stays on the summer path row.
+
+![Summer path](map-fills/summer-path.png)
+![Autumn path](map-fills/autumn-path.png)
+
+### Jungle and dark forest
+
+No jungle sheet. Lush grass under the lush forest blob. Dark forest uses that same lush forest row.
+
+![Summer forest](map-fills/summer-forest.png)
+![Lush forest](map-fills/lush-forest.png)
+
+### Mountain
+
+Autumn grass under the autumn rock blob. Close zoom scatters `rock-1`, `rock-3`, and `rock-4` the same way the original does.
+
+![Summer rock](map-fills/summer-rock.png)
+![Autumn rock](map-fills/autumn-rock.png)
+
+## Unchanged pack pairs
+
+These already have a summer cell and are not recolored.
+
+- Water: summer plateau grass, then the summer water blob.
+- Sand: summer plateau grass, then the summer path blob.
+- Plains and meadow: summer plateau grass. Meadow also stamps the pack flower and leaf decos.
+- Forest: summer plateau grass, then the summer forest blob.
+- Hills: autumn plateau grass, then the autumn plateau blob (the pack's cliff edges).
+
+![Summer water](map-fills/summer-water.png)

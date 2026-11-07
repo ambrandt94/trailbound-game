@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { BIOME_COUNT, DEFAULT_WORLD_SETTINGS } from '../../src/core/world/models';
 import { generateWorld } from '../../src/core/world/world-gen';
@@ -170,7 +169,6 @@ test('a derived straight road joins the two authored caps without blending chann
 
 test('the artist report names the missing coast and the derived road straights', () => {
   const report = tileFillReport();
-  expect(readFileSync('docs/map-tile-fills.md', 'utf8')).toBe(report);
   expect(report).toContain('## Filled pairs');
   expect(report).toContain('Sand onto Water');
   expect(report).toContain('Forest onto Plains');

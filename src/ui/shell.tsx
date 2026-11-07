@@ -114,8 +114,8 @@ function Hud() {
               });
             }}
           >
+            <option value="classic">Pixel Kingdom</option>
             <option value="trailbound48">Trailbound 48</option>
-            <option value="classic">Classic</option>
           </select>
         </label>
         <button type="button" class="pill save" onClick={() => commands.save()}>

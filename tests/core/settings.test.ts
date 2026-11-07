@@ -2,6 +2,9 @@ import { expect, test } from 'vitest';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../src/core/state/settings';
 
 test('voices default to 40 and mute is off', () => {
+  expect(DEFAULT_SETTINGS.mapSkin).toBe('classic');
+  expect(normalizeSettings({}).mapSkin).toBe('classic');
+  expect(normalizeSettings({ mapSkin: 'trailbound48' }).mapSkin).toBe('trailbound48');
   expect(DEFAULT_SETTINGS.voices).toBe(40);
   expect(DEFAULT_SETTINGS.muteVoices).toBe(false);
   expect(normalizeSettings({}).voices).toBe(40);

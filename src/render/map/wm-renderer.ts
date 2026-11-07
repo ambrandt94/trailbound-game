@@ -1318,10 +1318,9 @@ export class WorldRenderer {
         if (camera.x + halfW > world.width) ctx.drawImage(this.worldBake, wpx, 0, wpx, hpx);
       }
     }
-    if (!this.terrain?.coarseMip) {
+    if (this.terrain && !this.terrain.coarseMip) {
       this.far.draw(ctx, world, camera, viewW, viewH);
-      if (this.terrain) this.paintRegions(ctx);
-      else this.drawClassicBlocks(ctx, world, camera, viewW, viewH);
+      this.paintRegions(ctx);
     }
 
     const featureAlpha = smoothstep(0.35, 1.35, camera.scale);

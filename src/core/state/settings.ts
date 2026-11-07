@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   effects: 80,
   voices: 40,
   muteVoices: false,
-  mapSkin: 'trailbound48',
+  mapSkin: 'classic',
   look: DEFAULT_AREA_LOOK,
 };
 
@@ -41,7 +41,7 @@ export function normalizeSettings(value: unknown): GameSettings {
     voices: clampPercent(record.voices, DEFAULT_SETTINGS.voices),
     muteVoices:
       typeof record.muteVoices === 'boolean' ? record.muteVoices : DEFAULT_SETTINGS.muteVoices,
-    mapSkin: record.mapSkin === 'classic' ? 'classic' : 'trailbound48',
+    mapSkin: record.mapSkin === 'trailbound48' ? 'trailbound48' : 'classic',
     look: normalizeAreaLook(record.look),
   };
 }
