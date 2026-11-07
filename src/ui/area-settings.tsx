@@ -16,6 +16,7 @@ import {
   type AreaLook,
   type LookField,
 } from '../core/state/area-look';
+import { skinText } from './glyphs';
 import { commands, settings } from './state';
 
 function trim(value: number): string {
@@ -66,7 +67,7 @@ function LookControl(props: {
             }
           }}
         />
-        {field.label}
+        {skinText(field.label)}
       </label>
     );
   }
@@ -74,7 +75,7 @@ function LookControl(props: {
     const color = typeof raw === 'string' ? raw : field.fallback;
     return (
       <label class="slider">
-        <span>{field.label}</span>
+        <span>{skinText(field.label)}</span>
         <input
           type="color"
           value={color}
@@ -94,7 +95,7 @@ function LookControl(props: {
     const selected = typeof raw === 'number' ? raw : field.fallback;
     return (
       <label class="field">
-        {field.label}
+        {skinText(field.label)}
         <select
           aria-label={field.label}
           value={String(selected)}
@@ -106,7 +107,7 @@ function LookControl(props: {
         >
           {field.choices.map((pair) => (
             <option key={pair[0]} value={String(pair[0])}>
-              {pair[1]}
+              {skinText(pair[1])}
             </option>
           ))}
         </select>
@@ -117,7 +118,7 @@ function LookControl(props: {
   const shown = field.key === 'sunHour' ? hourLabel(value) : trim(value);
   return (
     <label class="slider">
-      <span>{field.label}</span>
+      <span>{skinText(field.label)}</span>
       <input
         type="range"
         min={field.min}
@@ -152,10 +153,14 @@ export function SettingsPanel(props: { dock?: boolean }) {
     void clipboard.writeText(text);
   };
   return (
-    <section class={props.dock ? 'settings-dock' : 'screen'}>
-      <div class={props.dock ? 'settings-card' : 'card settings-card'}>
-        <p class="eyebrow">Mix</p>
-        <h2>Settings</h2>
+    <section class={props.dock ? 'settings-dock' : 'screen tb-screen'}>
+      <div
+        class={
+          props.dock ? 'settings-card tb-window tb-scroll' : 'card settings-card tb-panel tb-scroll'
+        }
+      >
+        <p class="eyebrow tb-kicker">Mix</p>
+        <h2 class="tb-heading">Settings</h2>
         <Slider label="Master" value={current.master} onChange={(master) => change({ master })} />
         <Slider label="Music" value={current.music} onChange={(music) => change({ music })} />
         <Slider
@@ -192,8 +197,9 @@ export function SettingsPanel(props: { dock?: boolean }) {
           Mute voices
         </label>
         <p class="lede tight">
-          The 3D view uses the same look, camera, and feel as the controller demo. Fog density also
-          sets how far the town draws. Changes apply immediately.
+          {skinText(
+            'The 3D view uses the same look, camera, and feel as the controller demo. Fog density also sets how far the town draws. Changes apply immediately.',
+          )}
         </p>
         {LOOK_GROUPS.map((group) => (
           <details
