@@ -2,22 +2,22 @@
 
 Authored art stays in `public/assets/map/trailbound48/`. Nothing here is painted back into `atlas_terrain.png`. Missing transitions are built at runtime into a separate canvas cache.
 
-A fill copies the two ground tiles. The foreground is mirrored across the shared edge (so the outer pixel continues the neighbour) and chosen with a 4×4 Bayer dither. There is no channel blend and no flat rim colour. A near-black sample is replaced with that tile’s own average non-black colour.
+A fill does not mirror and does not use a repeating dither. Each texel asks a low-frequency noise field, continuous across tile boundaries, which world tile owns it, then copies that tile’s authored ground pixel. There is no channel blend and no flat rim colour. A near-black sample is replaced with that tile’s own average non-black colour.
 
 Rivers are the Marsh biome. Coasts are land (usually Sand) onto Water. Roads use the dirt-edge sheet; the two straight masks that sheet does not contain are joins of the authored caps.
 
 ## Authored pairs
 
-- Plains onto Sand: Authored sheet at atlas 60 for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.
-- Plains onto Marsh: Authored sheet at atlas 72 for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.
-- Meadow onto Sand: Authored sheet at atlas 60 for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.
-- Meadow onto Marsh: Authored sheet at atlas 72 for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.
-- Hills onto Marsh: Authored sheet at atlas 72 for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.
-- Snow onto Mountain: Authored sheet at atlas 84 for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.
+- Plains onto Sand: Authored sheet at atlas 60 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
+- Plains onto Marsh: Authored sheet at atlas 72 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
+- Meadow onto Sand: Authored sheet at atlas 60 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
+- Meadow onto Marsh: Authored sheet at atlas 72 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
+- Hills onto Marsh: Authored sheet at atlas 72 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
+- Snow onto Mountain: Authored sheet at atlas 84 for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.
 
 ## Filled pairs
 
-No authored edge. The background tile keeps its ground, and the foreground ground is mirrored across the shared edge with a 4×4 Bayer dither. Colours are copied from those two tiles.
+No authored edge. The edge is the world-space noise field described above, shared with the neighbouring tile.
 
 - Sand onto Water
 - Plains onto Water
@@ -122,13 +122,17 @@ No authored edge. The background tile keeps its ground, and the foreground groun
 ## Autotile masks
 
 - Edges, outer corners, inner corners and T-junctions are the 12 corner masks on `EDGE_INDEX`. An authored pair uses that sheet.
-- Mask 0 is empty and mask 15 is a solid ring. Opposite-corner masks 5 and 10 are not on the sheet. Those three, and every pair with no sheet, use the dither fill.
-- An isolated foreground tile stays the authored ground. The surrounding background tiles carry the fringe, so the seam is the same pixel on both sides.
+- Mask 0 is an interior. Opposite-corner masks 5 and 10, the full ring, and every pair with no sheet use the noise field, so a diagonal run cuts across the tile instead of stepping in whole tiles.
+- Ground interiors use an authored variant, randomly flipped. The source is not scrolled, so a seamless tile stays seamless.
 
 ## Roads
 
 - Caps, corners, T-junctions, the isolated tile and the crossing are authored (`DIRT_EDGE_BASE` and the sandstone road).
-- Mask 5 (east-west) and mask 10 (north-south) have no cell. Each is the west/north cap joined to the east/south cap, with a Bayer dither on the four-pixel join.
+- Mask 5 (east-west) and mask 10 (north-south) have no cell. Each is the west/north cap joined to the east/south cap. The join is an irregular hash, not a repeating comb.
+
+## Snow beside sand
+
+Seed 7741 places snow directly beside beach sand, and a few snow tiles beside open water. That is the world generator: high latitudes are forced to snow, and low shore land next to water becomes sand. The map draws that pair; it does not insert a land biome between them.
 
 ## Chunk edges
 

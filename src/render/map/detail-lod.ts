@@ -208,12 +208,14 @@ export class FarSheet {
           continue;
         }
         if (!block.canvas) continue;
+        // Overlap by one screen pixel so fractional scales do not open a crack between blocks.
+        const pad = 1 / scale;
         ctx.drawImage(
           block.canvas,
-          (block.x + shift) * TILE,
-          block.y * TILE,
-          block.w * TILE,
-          block.h * TILE,
+          (block.x + shift) * TILE - pad,
+          block.y * TILE - pad,
+          block.w * TILE + pad * 2,
+          block.h * TILE + pad * 2,
         );
       }
     }
@@ -260,9 +262,25 @@ export class FarSheet {
     const width = Math.max(1, spec.w);
     const height = Math.max(1, spec.h);
     const data = new Uint8ClampedArray(width * height * 4);
+    const biomes = new Uint8Array(width * height);
     const ground = this.palette.ground;
     const road = this.palette.road;
-    const fallback = nonBlack(0, 0, 0, [127, 175, 114]);
+    const fallback = nonBlack(0, 0, 0, [62, 120, 178]);
+    const paint = (lx: number, ly: number, biome: number, path: boolean) => {
+      const o = (ly * width + lx) * 4;
+      if (path && biome !== Biome.Water) {
+        data[o] = road.r;
+        data[o + 1] = road.g;
+        data[o + 2] = road.b;
+      } else {
+        const p = biome * 3;
+        const rgb = nonBlack(ground[p] ?? 0, ground[p + 1] ?? 0, ground[p + 2] ?? 0, fallback);
+        data[o] = rgb[0];
+        data[o + 1] = rgb[1];
+        data[o + 2] = rgb[2];
+      }
+      data[o + 3] = 255;
+    };
     for (let ly = 0; ly < spec.h; ly++) {
       const wy = spec.y + ly;
       if (wy < 0 || wy >= world.height) continue;
@@ -271,20 +289,24 @@ export class FarSheet {
         const wx = spec.x + lx;
         if (wx < 0 || wx >= world.width) continue;
         const index = row + wx;
-        const biome = world.biomes[index] ?? Biome.Plains;
-        const o = (ly * width + lx) * 4;
-        if ((world.paths[index] ?? 0) > 0 && biome !== Biome.Water) {
-          data[o] = road.r;
-          data[o + 1] = road.g;
-          data[o + 2] = road.b;
-        } else {
-          const p = biome * 3;
-          const rgb = nonBlack(ground[p] ?? 0, ground[p + 1] ?? 0, ground[p + 2] ?? 0, fallback);
-          data[o] = rgb[0];
-          data[o + 1] = rgb[1];
-          data[o + 2] = rgb[2];
-        }
-        data[o + 3] = 255;
+        const biome = world.biomes[index] ?? Biome.Water;
+        biomes[ly * width + lx] = biome;
+        paint(lx, ly, biome, (world.paths[index] ?? 0) > 0);
+      }
+    }
+    // Drop one-tile specks so the far map keeps the coast and loses the noise.
+    for (let ly = 0; ly < spec.h; ly++) {
+      const wy = spec.y + ly;
+      if (wy <= 0 || wy >= world.height - 1) continue;
+      for (let lx = 0; lx < spec.w; lx++) {
+        const wx = spec.x + lx;
+        if (wx <= 0 || wx >= world.width - 1) continue;
+        const here = biomes[ly * width + lx] ?? Biome.Water;
+        const n = world.biomes[wx + (wy - 1) * world.width] ?? here;
+        const e = world.biomes[wx + 1 + wy * world.width] ?? here;
+        const s = world.biomes[wx + (wy + 1) * world.width] ?? here;
+        const w = world.biomes[wx - 1 + wy * world.width] ?? here;
+        if (n === e && n === s && n === w && n !== here) paint(lx, ly, n, false);
       }
     }
     const canvas = document.createElement('canvas');

@@ -3,11 +3,11 @@ import { expect, test } from 'vitest';
 import { BIOME_COUNT, DEFAULT_WORLD_SETTINGS } from '../../src/core/world/models';
 import { generateWorld } from '../../src/core/world/world-gen';
 import {
-  compositeFringe,
   compositeRoadStraight,
+  edgeField,
   fillCases,
   foregroundBits,
-  fringeCoverage,
+  ownerTile,
   resolveRoad,
   resolveTile,
   tileFillReport,
@@ -125,36 +125,29 @@ test('inner corners clear the diagonal and opposite corners are mask 5 or 10', (
   expect(opposite).toBe(8 | 2);
 });
 
-test('the fringe is solid on the outer pixel, empty in the middle, and palette-locked', () => {
-  expect(fringeCoverage(12, 10, 0)).toBe(1);
-  expect(fringeCoverage(12, 24, 40)).toBe(0);
-  const fg = new Uint8ClampedArray(48 * 48 * 4);
-  for (let i = 0; i < fg.length; i += 4) {
-    fg[i] = 20;
-    fg[i + 1] = 140;
-    fg[i + 2] = 40;
-    fg[i + 3] = 255;
+test('the edge field is continuous and a staircase cuts the corner', () => {
+  const a = edgeField(4, 8.5, 7741);
+  const b = edgeField(4.02, 8.5, 7741);
+  expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(0.08);
+  let waterSide = 0;
+  let samples = 0;
+  for (let ty = 0; ty < 16; ty++) {
+    for (let py = 0; py < 48; py += 4) {
+      samples += 1;
+      if (ownerTile(10, ty, 0, py, 7741).x < 10) waterSide += 1;
+    }
   }
-  const sampled = 47 * 48 * 4;
-  fg[sampled] = 0;
-  fg[sampled + 1] = 0;
-  fg[sampled + 2] = 0;
-  const out = new Uint8ClampedArray(48 * 48 * 4);
-  compositeFringe(fg, 12, out);
-  expect(out[3]).toBe(255);
-  expect((out[0] ?? 0) + (out[1] ?? 0) + (out[2] ?? 0)).toBeGreaterThan(12);
-  const mid = (40 * 48 + 24) * 4;
-  expect(out[mid + 3]).toBe(0);
-  for (let i = 0; i < out.length; i += 4) {
-    if ((out[i + 3] ?? 0) === 0) continue;
-    const r = out[i] ?? 0;
-    const g = out[i + 1] ?? 0;
-    const b = out[i + 2] ?? 0;
-    const fromTile = r === 20 && g === 140 && b === 40;
-    const fromAverage = r + g + b > 12;
-    expect(fromTile || fromAverage).toBe(true);
-    expect(r + g + b).toBeGreaterThan(11);
+  expect(waterSide).toBeGreaterThan(samples * 0.15);
+  expect(waterSide).toBeLessThan(samples * 0.85);
+  let land = 0;
+  for (let py = 0; py < 48; py++) {
+    for (let px = 0; px < 48; px++) {
+      const owner = ownerTile(3, 4, px, py, 7741);
+      if (owner.x + owner.y >= 8) land += 1;
+    }
   }
+  expect(land).toBeGreaterThan(48);
+  expect(land).toBeLessThan(48 * 48 - 48);
 });
 
 test('a derived straight road joins the two authored caps without blending channels', () => {

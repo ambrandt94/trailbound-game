@@ -550,6 +550,10 @@ export class WorldRenderer {
       const job = this.terrain.bakeFast(world);
       this.worldBake = job.canvas;
       this.overview = job;
+      // Finish the per-tile sheet now. A half-painted sheet is a grid of flat
+      // blocks sitting on the coarse overview.
+      this.ensureFarPalette(world);
+      this.far.step(world, world.width / 2, world.height / 2, 30000);
       this.bakeMs = performance.now() - started;
       return;
     }
@@ -1293,7 +1297,8 @@ export class WorldRenderer {
     ctx.save();
     cameraTransform(ctx, camera, viewW, viewH);
 
-    if (this.worldBake) {
+    const farCovers = this.terrain && this.far.ready && camera.scale * TILE < 3;
+    if (this.worldBake && !farCovers) {
       ctx.imageSmoothingEnabled = false;
       const wpx = world.width * TILE;
       const hpx = world.height * TILE;

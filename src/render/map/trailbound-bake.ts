@@ -16,9 +16,9 @@ import {
   type TileVariant,
 } from './terrain-field';
 import {
-  compositeFringe,
+  averageOpaque,
   compositeRoadStraight,
-  neighborAnchor,
+  ownerTile,
   resolveRoad,
   resolveTile,
   type Adj,
@@ -149,7 +149,6 @@ export class TrailboundTiles {
   private waterPixels: { deep: ImageData[]; shallow: ImageData[] } | null = null;
   /** Derived transitions. Never written back onto the authored atlas. */
   private readonly derived = new Map<string, HTMLCanvasElement>();
-  private readonly variantPixels = new Map<string, Uint8ClampedArray>();
 
   constructor(private readonly images: TrailboundImages) {
     this.tiles = sliceSheet(images.atlas, COLS, 6, TILE);
@@ -506,11 +505,7 @@ export class TrailboundTiles {
   groundPalette(): GroundPalette {
     const ground = new Uint8Array(BIOME_COUNT * 3);
     for (let biome = 0; biome < BIOME_COUNT; biome++) {
-      const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
-      const tile = this.tiles[id] ?? this.tiles[0];
-      const [r, g, b] = tile
-        ? averageTileColor(tile, 0, 0, tile.width, tile.height)
-        : averageTileColor(this.scratch, 0, 0, 1, 1);
+      const [r, g, b] = biome === Biome.Water ? this.waterSwatch('deep') : this.landSwatch(biome);
       ground[biome * 3] = r;
       ground[biome * 3 + 1] = g;
       ground[biome * 3 + 2] = b;
@@ -522,16 +517,25 @@ export class TrailboundTiles {
     return { ground, road: { r: rr, g: rg, b: rb } };
   }
 
+  /** Centre texel of the ground art. Water uses the deep frame, not the wet-sand atlas cell. */
+  private landSwatch(biome: number): [number, number, number] {
+    const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
+    const data = this.tileData[id];
+    return swatchFrom(data?.data, data?.width ?? TILE, data?.height ?? TILE);
+  }
+
+  private waterSwatch(kind: 'deep' | 'shallow'): [number, number, number] {
+    const img = this.waterFrame(kind);
+    if (!img) return kind === 'deep' ? [62, 120, 178] : [74, 158, 178];
+    const data = imageDataOf(img);
+    return swatchFrom(data.data, data.width, data.height);
+  }
+
   private flatColors(): string[] {
     if (this.flatColorCache) return this.flatColorCache;
     const colors: string[] = [];
     for (let biome = 0; biome < BIOME_GROUND.length; biome++) {
-      const id = BIOME_GROUND[biome]?.atlas[0] ?? 0;
-      const data = this.tileData[id];
-      const pixel = (24 + 24 * TILE) * 4;
-      const r = data?.data[pixel] ?? 120;
-      const g = data?.data[pixel + 1] ?? 150;
-      const b = data?.data[pixel + 2] ?? 90;
+      const [r, g, b] = biome === Biome.Water ? this.waterSwatch('deep') : this.landSwatch(biome);
       colors.push(`rgb(${r}, ${g}, ${b})`);
     }
     this.flatColorCache = colors;
@@ -1345,7 +1349,28 @@ export class TrailboundTiles {
     ctx.imageSmoothingEnabled = false;
     if (tile.kind === 'authored') {
       this.blitTile(ctx, tile.atlasId, dx, dy, stamp);
-    } else if (biome === Biome.Water) {
+    } else if (tile.kind === 'ground') {
+      this.blitInterior(ctx, at, x, y, dx, dy, stamp, biome, world.seed, waterKind);
+    } else {
+      this.blitEdgeField(ctx, world, at, x, y, dx, dy, stamp);
+    }
+    if (roads) this.paintRoad(ctx, world, x, y, biome, false, dx, dy, stamp);
+  }
+
+  /** Interior ground. Flips break repetition; the cell is not scrolled, so edges still meet. */
+  private blitInterior(
+    ctx: DrawCtx,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+    biome: number,
+    seed: number,
+    waterKind?: 'shallow' | 'deep',
+  ): void {
+    if (biome === Biome.Water) {
       const kind = waterKind ?? waterBand(at, x, y);
       const img = this.waterFrame(kind === 'deep' ? 'deep' : 'shallow');
       if (img) {
@@ -1356,51 +1381,88 @@ export class TrailboundTiles {
           flipY: false,
         });
       }
-    } else {
-      const variant = tileVariant(biome, x, y, world.seed, TILE);
-      const ground = this.tiles[variant.id] ?? this.tiles[0];
-      if (ground) this.blitSheet(ctx, ground, dx, dy, stamp, variant);
+      return;
     }
-    if (tile.kind === 'fill') {
-      for (const layer of tile.fills) {
-        const anchor = neighborAnchor(adj, layer.fg, x, y);
-        const variant = tileVariant(layer.fg, anchor.x, anchor.y, world.seed, TILE);
-        const key = `fringe:${variant.id}:${variant.ox}:${variant.oy}:${variant.flipX ? 1 : 0}:${variant.flipY ? 1 : 0}:${layer.bits}`;
-        const canvas = this.derivedCanvas(key, () => {
-          const out = new Uint8ClampedArray(TILE * TILE * 4);
-          compositeFringe(this.displayedVariant(variant), layer.bits, out);
-          return out;
-        });
-        ctx.drawImage(canvas, dx, dy, stamp, stamp);
-      }
-    }
-    if (roads) this.paintRoad(ctx, world, x, y, biome, false, dx, dy, stamp);
+    const variant = tileVariant(biome, x, y, seed, TILE);
+    const ground = this.tiles[variant.id] ?? this.tiles[0];
+    if (ground) this.blitSheet(ctx, ground, dx, dy, stamp, { ...variant, ox: 0, oy: 0 });
   }
 
-  private displayedVariant(variant: TileVariant): Uint8ClampedArray {
-    const key = `${variant.id}:${variant.ox}:${variant.oy}:${variant.flipX ? 1 : 0}:${variant.flipY ? 1 : 0}`;
-    const cached = this.variantPixels.get(key);
-    if (cached) return cached;
-    const out = new Uint8ClampedArray(TILE * TILE * 4);
-    const src = this.tileData[variant.id]?.data;
-    if (src) {
-      for (let py = 0; py < TILE; py++) {
-        for (let px = 0; px < TILE; px++) {
-          let u = variant.flipX ? TILE - 1 - px : px;
-          let v = variant.flipY ? TILE - 1 - py : py;
-          u = (u + variant.ox) % TILE;
-          v = (v + variant.oy) % TILE;
-          const s = (v * TILE + u) * 4;
-          const d = (py * TILE + px) * 4;
-          out[d] = src[s] ?? 0;
-          out[d + 1] = src[s + 1] ?? 0;
-          out[d + 2] = src[s + 2] ?? 0;
-          out[d + 3] = 255;
-        }
+  /**
+   * Missing transition. One noise field in world space, sampled by both tiles,
+   * so the edge is a single irregular contour instead of a repeated comb.
+   */
+  private blitEdgeField(
+    ctx: DrawCtx,
+    world: WorldData,
+    at: (x: number, y: number) => number,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    stamp: number,
+  ): void {
+    const image = this.scratchCtx.createImageData(TILE, TILE);
+    const data = image.data;
+    const seed = world.seed;
+    for (let py = 0; py < TILE; py++) {
+      for (let px = 0; px < TILE; px++) {
+        const owner = ownerTile(x, y, px, py, seed);
+        const biome = at(owner.x, owner.y);
+        const color = this.sampleOwned(biome, owner.x, owner.y, px, py, seed, x, y, at);
+        const o = (py * TILE + px) * 4;
+        data[o] = color.r;
+        data[o + 1] = color.g;
+        data[o + 2] = color.b;
+        data[o + 3] = 255;
       }
     }
-    this.variantPixels.set(key, out);
-    return out;
+    this.scratchCtx.putImageData(image, 0, 0);
+    ctx.drawImage(this.scratch, dx, dy, stamp, stamp);
+  }
+
+  private sampleOwned(
+    biome: number,
+    ownerX: number,
+    ownerY: number,
+    px: number,
+    py: number,
+    seed: number,
+    destX: number,
+    destY: number,
+    at: (x: number, y: number) => number,
+  ): Rgb {
+    if (biome === Biome.Water) {
+      const kind = waterBand(at, ownerX, ownerY);
+      const sheets = this.ensureWaterPixels();
+      const list = kind === 'deep' ? sheets.deep : sheets.shallow;
+      const sheet = list[this.frame % Math.max(1, list.length)] ?? list[0];
+      if (!sheet) return { r: 62, g: 120, b: 178 };
+      return this.sampleSheetPixel(sheet, destX * TILE + px, destY * TILE + py);
+    }
+    const variant = tileVariant(biome, ownerX, ownerY, seed, TILE);
+    const src = this.tileData[variant.id]?.data;
+    if (!src) return { r: 90, g: 140, b: 80 };
+    const u = variant.flipX ? TILE - 1 - px : px;
+    const v = variant.flipY ? TILE - 1 - py : py;
+    const s = (v * TILE + u) * 4;
+    const r = src[s] ?? 0;
+    const g = src[s + 1] ?? 0;
+    const b = src[s + 2] ?? 0;
+    if (r + g + b < 12) {
+      const fallback = averageOpaque(src);
+      if (fallback.r + fallback.g + fallback.b >= 12) return fallback;
+    }
+    return { r, g, b };
+  }
+
+  private sampleSheetPixel(sheet: ImageData, gx: number, gy: number): Rgb {
+    const w = sheet.width;
+    const h = sheet.height;
+    const sx = ((gx % w) + w) % w;
+    const sy = ((gy % h) + h) % h;
+    const o = (sy * w + sx) * 4;
+    return { r: sheet.data[o] ?? 0, g: sheet.data[o + 1] ?? 0, b: sheet.data[o + 2] ?? 0 };
   }
 
   private derivedCanvas(key: string, paint: () => Uint8ClampedArray): HTMLCanvasElement {
@@ -1559,6 +1621,26 @@ function sourceSize(image: CanvasImageSource): { w: number; h: number } {
 
 function hashCut(x: number, y: number, seed: number): boolean {
   return hash2(x, y, seed + 9) < 0.42;
+}
+
+function swatchFrom(
+  data: Uint8ClampedArray | undefined,
+  width: number,
+  height: number,
+): [number, number, number] {
+  if (!data || width < 1 || height < 1) return [120, 150, 90];
+  const cx = width >> 1;
+  const cy = height >> 1;
+  for (let radius = 0; radius < 6; radius++) {
+    const x = Math.min(width - 1, cx + radius);
+    const o = (cy * width + x) * 4;
+    const r = data[o] ?? 0;
+    const g = data[o + 1] ?? 0;
+    const b = data[o + 2] ?? 0;
+    if (r + g + b > 24) return [r, g, b];
+  }
+  const o = (cy * width + cx) * 4;
+  return [data[o] ?? 120, data[o + 1] ?? 150, data[o + 2] ?? 90];
 }
 
 function imageDataOf(image: HTMLImageElement): ImageData {

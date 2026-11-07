@@ -1,11 +1,54 @@
 import { BIOME_COUNT } from '../../core/world/models';
+import { hash2 } from '../../core/world/noise';
 import { BIOME_GROUND, DIRT_EDGE_BASE, EDGE_INDEX, PAIR_BASE, SANDSTONE_ROAD } from './biome-table';
 import { BIOME_NAMES } from './terrain-pick';
 
-/** 4×4 Bayer matrix. Coverage picks a source pixel; it never blends channels. */
-export const BAYER_4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5] as const;
-
 const TILE = 48;
+
+function valueNoise(x: number, y: number, seed: number): number {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = x - x0;
+  const fy = y - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const n00 = hash2(x0, y0, seed);
+  const n10 = hash2(x0 + 1, y0, seed);
+  const n01 = hash2(x0, y0 + 1, seed);
+  const n11 = hash2(x0 + 1, y0 + 1, seed);
+  return n00 + (n10 - n00) * sx + (n01 - n00) * sy + (n00 - n10 - n01 + n11) * sx * sy;
+}
+
+/**
+ * Edge wander in tiles. Low frequency only, so the coast is one irregular
+ * contour. It is a function of world position, so neighbouring tiles agree
+ * and nothing is mirrored.
+ */
+export function edgeField(wx: number, wy: number, seed: number): { x: number; y: number } {
+  const n = valueNoise(wx * 0.62, wy * 0.62, seed + 17);
+  const m = valueNoise(wx * 0.62 + 11.7, wy * 0.62 + 4.4, seed + 91);
+  const n2 = valueNoise(wx * 1.55 + 3.1, wy * 1.55 + 8.6, seed + 211);
+  const m2 = valueNoise(wx * 1.55 + 6.4, wy * 1.55 + 1.2, seed + 307);
+  return {
+    x: (n - 0.5) * 1.24 + (n2 - 0.5) * 0.36,
+    y: (m - 0.5) * 1.24 + (m2 - 0.5) * 0.36,
+  };
+}
+
+/** World tile that owns this texel after the edge field is applied. */
+export function ownerTile(
+  tileX: number,
+  tileY: number,
+  px: number,
+  py: number,
+  seed: number,
+  size = TILE,
+): { x: number; y: number } {
+  const wx = tileX + (px + 0.5) / size;
+  const wy = tileY + (py + 0.5) / size;
+  const shift = edgeField(wx, wy, seed);
+  return { x: Math.floor(wx + shift.x), y: Math.floor(wy + shift.y) };
+}
 
 export interface Adj {
   center: number;
@@ -210,56 +253,9 @@ export function resolveRoad(n: boolean, e: boolean, s: boolean, w: boolean): Roa
     parts,
     method:
       axis === 'ew'
-        ? 'east-west straight: mirrored the authored west and east road caps and dithered the join'
-        : 'north-south straight: mirrored the authored north and south road caps and dithered the join',
+        ? 'east-west straight: joined the authored west and east road caps with an irregular hash'
+        : 'north-south straight: joined the authored north and south road caps with an irregular hash',
   };
-}
-
-export function fringeBand(size = TILE): number {
-  return Math.max(2, Math.round((size * 14) / 48));
-}
-
-/** 1 on the outer pixel of an active corner, 0 outside the fringe. */
-export function fringeCoverage(bits: number, x: number, y: number, size = TILE): number {
-  const band = fringeBand(size);
-  const nw = (bits & 8) !== 0;
-  const ne = (bits & 4) !== 0;
-  const se = (bits & 2) !== 0;
-  const sw = (bits & 1) !== 0;
-  const mid = size / 2;
-  let cover = 0;
-  if (y < band && (x < mid ? nw : ne)) cover = Math.max(cover, 1 - y / band);
-  if (y >= size - band && (x < mid ? sw : se)) cover = Math.max(cover, 1 - (size - 1 - y) / band);
-  if (x < band && (y < mid ? nw : sw)) cover = Math.max(cover, 1 - x / band);
-  if (x >= size - band && (y < mid ? ne : se)) cover = Math.max(cover, 1 - (size - 1 - x) / band);
-  return cover;
-}
-
-/** Mirror across the stronger edge so the outer pixel continues the neighbour tile. */
-export function fringeSample(
-  bits: number,
-  x: number,
-  y: number,
-  size = TILE,
-): { x: number; y: number } {
-  const band = fringeBand(size);
-  const nw = (bits & 8) !== 0;
-  const ne = (bits & 4) !== 0;
-  const se = (bits & 2) !== 0;
-  const sw = (bits & 1) !== 0;
-  const mid = size / 2;
-  let vertical = 0;
-  let horizontal = 0;
-  if (y < band && (x < mid ? nw : ne)) vertical = Math.max(vertical, 1 - y / band);
-  if (y >= size - band && (x < mid ? sw : se)) {
-    vertical = Math.max(vertical, 1 - (size - 1 - y) / band);
-  }
-  if (x < band && (y < mid ? nw : sw)) horizontal = Math.max(horizontal, 1 - x / band);
-  if (x >= size - band && (y < mid ? ne : se)) {
-    horizontal = Math.max(horizontal, 1 - (size - 1 - x) / band);
-  }
-  if (horizontal > vertical) return { x: size - 1 - x, y };
-  return { x, y: size - 1 - y };
 }
 
 export function averageOpaque(pixels: Uint8ClampedArray): { r: number; g: number; b: number } {
@@ -302,32 +298,6 @@ function writePixel(
   out[index + 3] = 255;
 }
 
-/**
- * Transparent overlay. Lit pixels are copied from the foreground tile
- * (palette-locked, Bayer dither, no channel blend).
- */
-export function compositeFringe(
-  fg: Uint8ClampedArray,
-  bits: number,
-  out: Uint8ClampedArray,
-  size = TILE,
-): void {
-  out.fill(0);
-  const fallback = averageOpaque(fg);
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const cover = fringeCoverage(bits, x, y, size);
-      if (cover <= 0) continue;
-      const bayer = BAYER_4[((y & 3) * 4 + (x & 3)) % 16] ?? 0;
-      if ((bayer + 0.5) / 16 >= cover) continue;
-      const src = fringeSample(bits, x, y, size);
-      const si = (src.y * size + src.x) * 4;
-      const di = (y * size + x) * 4;
-      writePixel(out, di, fg[si] ?? 0, fg[si + 1] ?? 0, fg[si + 2] ?? 0, fallback);
-    }
-  }
-}
-
 /** Join two authored road caps into the straight the sheet does not contain. */
 export function compositeRoadStraight(
   first: Uint8ClampedArray,
@@ -345,8 +315,7 @@ export function compositeRoadStraight(
       let src: Uint8ClampedArray = first;
       if (along > mid + 4) src = second;
       else if (along >= mid - 4) {
-        const bayer = BAYER_4[((y & 3) * 4 + (x & 3)) % 16] ?? 0;
-        src = bayer < 8 ? first : second;
+        src = hash2(x, y, 3) < 0.5 ? first : second;
       }
       writePixel(out, di, src[di] ?? 0, src[di + 1] ?? 0, src[di + 2] ?? 0, fallback);
     }
@@ -376,8 +345,8 @@ export function fillCases(): FillCase[] {
         authoredBase: base ?? null,
         method:
           base === undefined
-            ? 'No authored edge. The background tile keeps its ground, and the foreground ground is mirrored across the shared edge with a 4×4 Bayer dither. Colours are copied from those two tiles.'
-            : `Authored sheet at atlas ${base} for the 12 corner masks. Masks 5, 10 and 15 are not on that sheet; those use the same dither, still from the two ground tiles.`,
+            ? 'No authored edge. Both tiles sample one world-space noise field and copy the owning ground tile, so the edge wanders across the boundary instead of repeating a comb.'
+            : `Authored sheet at atlas ${base} for the 12 corner masks (edges, inner and outer corners, T-junctions). Masks 5, 10 and 15 are not on that sheet; those sample the same noise field.`,
       });
     }
   }
@@ -394,7 +363,7 @@ export function tileFillReport(): string {
     '',
     'Authored art stays in `public/assets/map/trailbound48/`. Nothing here is painted back into `atlas_terrain.png`. Missing transitions are built at runtime into a separate canvas cache.',
     '',
-    'A fill copies the two ground tiles. The foreground is mirrored across the shared edge (so the outer pixel continues the neighbour) and chosen with a 4×4 Bayer dither. There is no channel blend and no flat rim colour. A near-black sample is replaced with that tile’s own average non-black colour.',
+    'A fill does not mirror and does not use a repeating dither. Each texel asks a low-frequency noise field, continuous across tile boundaries, which world tile owns it, then copies that tile’s authored ground pixel. There is no channel blend and no flat rim colour. A near-black sample is replaced with that tile’s own average non-black colour.',
     '',
     'Rivers are the Marsh biome. Coasts are land (usually Sand) onto Water. Roads use the dirt-edge sheet; the two straight masks that sheet does not contain are joins of the authored caps.',
     '',
@@ -404,20 +373,24 @@ export function tileFillReport(): string {
     '',
     '## Filled pairs',
     '',
-    'No authored edge. The background tile keeps its ground, and the foreground ground is mirrored across the shared edge with a 4×4 Bayer dither. Colours are copied from those two tiles.',
+    'No authored edge. The edge is the world-space noise field described above, shared with the neighbouring tile.',
     '',
     ...missing.map((item) => `- ${item.name}`),
     '',
     '## Autotile masks',
     '',
     '- Edges, outer corners, inner corners and T-junctions are the 12 corner masks on `EDGE_INDEX`. An authored pair uses that sheet.',
-    '- Mask 0 is empty and mask 15 is a solid ring. Opposite-corner masks 5 and 10 are not on the sheet. Those three, and every pair with no sheet, use the dither fill.',
-    '- An isolated foreground tile stays the authored ground. The surrounding background tiles carry the fringe, so the seam is the same pixel on both sides.',
+    '- Mask 0 is an interior. Opposite-corner masks 5 and 10, the full ring, and every pair with no sheet use the noise field, so a diagonal run cuts across the tile instead of stepping in whole tiles.',
+    '- Ground interiors use an authored variant, randomly flipped. The source is not scrolled, so a seamless tile stays seamless.',
     '',
     '## Roads',
     '',
     '- Caps, corners, T-junctions, the isolated tile and the crossing are authored (`DIRT_EDGE_BASE` and the sandstone road).',
-    '- Mask 5 (east-west) and mask 10 (north-south) have no cell. Each is the west/north cap joined to the east/south cap, with a Bayer dither on the four-pixel join.',
+    '- Mask 5 (east-west) and mask 10 (north-south) have no cell. Each is the west/north cap joined to the east/south cap. The join is an irregular hash, not a repeating comb.',
+    '',
+    '## Snow beside sand',
+    '',
+    'Seed 7741 places snow directly beside beach sand, and a few snow tiles beside open water. That is the world generator: high latitudes are forced to snow, and low shore land next to water becomes sand. The map draws that pair; it does not insert a land biome between them.',
     '',
     '## Chunk edges',
     '',
