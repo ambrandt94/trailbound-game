@@ -1,17 +1,32 @@
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { CF_PIN } from '../../src/app/version';
+import { characterForgePaths, readCfPin } from '../../src/render/characters/cf-pin';
 import { syncCharacterBundle } from '../../tools/sync-character-bundle.mjs';
 
-test('the vendored pin is Character Forge 1.2.0 generator 1', async () => {
+test('the vendored pin is Character Forge 1.2.0 generator 1 and the loader follows it', async () => {
   const pin = JSON.parse(await readFile('public/vendor/character-forge/current.json', 'utf8')) as {
     version: string;
     generatorVersion: number;
   };
   expect(pin).toEqual({ version: '1.2.0', generatorVersion: 1 });
-  expect(CF_PIN).toEqual({ version: '1.2.0', generatorVersion: '1' });
+  expect(CF_PIN).toEqual({ version: pin.version, generatorVersion: String(pin.generatorVersion) });
+  expect(characterForgePaths().runtime).toBe(
+    `vendor/character-forge/${CF_PIN.version}/cf-runtime.mjs`,
+  );
+  expect(characterForgePaths().base).toBe(`vendor/character-forge/${CF_PIN.version}/`);
+  expect(existsSync(`public/${characterForgePaths().runtime}`)).toBe(true);
+  expect(existsSync('public/vendor/character-forge/1.2.0/cf-runtime.mjs')).toBe(true);
+  expect(existsSync('public/vendor/character-forge/1.2.0/bundle.json')).toBe(true);
+});
+
+test('a pin that is not a version triple is refused', () => {
+  expect(() => readCfPin({ version: '1.2', generatorVersion: 1 })).toThrow(/version/);
+  expect(() => readCfPin({ version: '1.2.0', generatorVersion: 1.2 })).toThrow(/generatorVersion/);
+  expect(() => characterForgePaths('latest')).toThrow(/version/);
 });
 
 test('sync copies a dist into public/vendor/character-forge/<version> and writes current.json', async () => {

@@ -108,6 +108,56 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
     const rejected = checkRecipeEdit(human, { facialHair: 'goatee' });
     expect(rejected.ok).toBe(false);
     expect(rejected.errors.some((issue) => issue.code === 'not_allowed')).toBe(true);
+
+    const adult = optionsFor('human', 'm', 'adult');
+    const slotOrder = Object.keys(adult.slots);
+    expect(slotOrder).toHaveLength(29);
+    expect(slotOrder).toContain('baldric');
+    expect(slotOrder.indexOf('bandolier')).toBeLessThan(slotOrder.indexOf('baldric'));
+    expect(slotOrder.indexOf('legs')).toBe(slotOrder.indexOf('hands') + 1);
+    expect(adult.slots.baldric?.some((item) => item.id === 'baldric')).toBe(true);
+    expect(adult.slots.tunic).toBeUndefined();
+    const tunic = editRecipe(human, { outfit: { chest: 'tunic' } });
+    const tunicLook = describeRecipe(tunic);
+    expect(tunicLook.outfit.chest).toMatchObject({ id: 'tunic' });
+    expect(tunicLook.outfit.torso_mid).toMatchObject({ id: 'tunic' });
+    const boots = editRecipe(tunic, { outfit: { feet: 'riding_boots' } });
+    const bootLook = describeRecipe(boots);
+    expect(bootLook.outfit.feet?.id).toBe('riding_boots');
+    expect(bootLook.outfit.shins?.id).toBe('riding_boots');
+    const headed = editRecipe(human, { outfit: { head_inner: 'bandana' } });
+    expect(describeRecipe(headed).outfit.head_inner?.id).toBe('bandana');
+    const neck = editRecipe(headed, {
+      outfit: { neck_wrap: { id: 'bandana', states: { wear: 'neck' } } },
+    });
+    const neckLook = describeRecipe(neck);
+    expect(neckLook.outfit.neck_wrap).toMatchObject({ id: 'bandana', states: { wear: 'neck' } });
+    expect(neckLook.outfit.head_inner).toBeNull();
+    const illegal = checkRecipeEdit(neck, {
+      outfit: { head_inner: { id: 'bandana', states: { wear: 'neck' } } },
+    });
+    expect(illegal.ok).toBe(false);
+    const vest = editRecipe(human, { outfit: { torso_mid: 'vest' } });
+    const displaced = editRecipe(vest, { outfit: { chest: 'tunic' } });
+    expect(describeRecipe(displaced).outfit.torso_mid?.id).toBe('tunic');
+    expect(describeRecipe(displaced).outfit.torso_inner?.id).not.toBe('tunic');
+    const again = editRecipe(displaced, { outfit: { chest: 'tunic' } });
+    expect(recipeHashOf(again)).toBe(recipeHashOf(displaced));
+    const cleared = editRecipe(neck, { outfit: { neck_wrap: null } });
+    const clearedLook = describeRecipe(cleared);
+    expect(clearedLook.outfit.neck_wrap).toBeNull();
+    expect(clearedLook.outfit.head_inner?.id).not.toBe('bandana');
+    expect(clearedLook.outfit.face_lower?.id).not.toBe('bandana');
+    const hoodUp = editRecipe(human, {
+      outfit: { head_outer: { id: 'hood', states: { wear: 'up' } } },
+    });
+    expect(describeRecipe(hoodUp).outfit.head_outer?.id).toBe('hood');
+    const hoodDown = editRecipe(hoodUp, {
+      outfit: { neck_wrap: { id: 'hood', states: { wear: 'down' } } },
+    });
+    const hoodLook = describeRecipe(hoodDown);
+    expect(hoodLook.outfit.neck_wrap).toMatchObject({ id: 'hood', states: { wear: 'down' } });
+    expect(hoodLook.outfit.head_outer?.id).not.toBe('hood');
   } finally {
     restoreFetch();
   }

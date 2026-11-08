@@ -46,16 +46,15 @@ describe('pixel menu skin', () => {
     expect(css).toContain('border-image-slice: 6 8 6 8;');
   });
 
-  test('wardrobe selection keeps the previous creator chrome', () => {
-    expect(creator).toContain('data-surface="wardrobe"');
-    expect(creator).toContain('wardrobe-selection');
-    const wardrobe = css.slice(css.indexOf('Wardrobe selection stays'));
-    expect(wardrobe.length).toBeGreaterThan(100);
-    expect(wardrobe).toContain('.wardrobe-selection');
-    expect(wardrobe).toContain('Trailbound Pixel');
-    expect(wardrobe).not.toContain('frame.png');
-    expect(wardrobe).not.toContain('header_strip.png');
-    expect(wardrobe).not.toContain('button_normal.png');
+  test('the paperdoll uses the menu skin', () => {
+    const wardrobe = readFileSync(join(root, 'src/ui/wardrobe.tsx'), 'utf8');
+    expect(creator).not.toContain('wardrobe-selection');
+    expect(creator).not.toContain('data-surface="wardrobe"');
+    expect(wardrobe).toContain('data-surface="paperdoll"');
+    expect(wardrobe).toContain('tb-wardrobe');
+    expect(wardrobe).not.toContain('wardrobe-selection');
+    expect(css).toContain('.tb-wardrobe-columns');
+    expect(css).not.toContain('.wardrobe-selection');
   });
 
   test('menu copy uses glyphs Softball Gold can draw', () => {
