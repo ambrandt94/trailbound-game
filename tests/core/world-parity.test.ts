@@ -33,7 +33,7 @@ const golden = JSON.parse(
   readFileSync(fileURLToPath(new URL('../fixtures/world-7741.json', import.meta.url)), 'utf8'),
 ) as GoldenFile;
 
-test('seed 7741 at worldScale 16 matches the world-map settlement list and Ironmarch hash', () => {
+test('seed 7741 at worldScale 16 matches the settlement fixture and Ironmarch hash', () => {
   const world = generateWorld(7741, { ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
   expect(world.width).toBe(golden.width);
   expect(world.height).toBe(golden.height);

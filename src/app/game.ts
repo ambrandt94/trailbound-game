@@ -12,10 +12,13 @@ import { DEFAULT_WORLD_SEED } from '../core/world/index';
 import {
   Biome,
   WORLD_BASE,
+  clampSettings,
+  DEFAULT_WORLD_SETTINGS,
   startScaleFor,
   type ChunkData,
   type WorldData,
 } from '../core/world/models';
+import { resolveLandStyle } from '../core/world/world-gen';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { Keyboard } from '../input/keyboard';
@@ -25,7 +28,13 @@ import { AreaRenderer } from '../render/area/area-renderer';
 import { clearAreaLeaveOverlay } from '../render/area/leave-overlay';
 import { MapRenderer, type MapDrawState } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
-import { creatorBusy, creatorSerial, creatorSource, creatorView } from '../ui/creator-state';
+import {
+  creatorBusy,
+  creatorSerial,
+  creatorSource,
+  creatorView,
+  newWorldLand,
+} from '../ui/creator-state';
 import {
   bindCommands,
   canContinue,
@@ -388,7 +397,9 @@ export class Game implements GameHost {
       x: this.place.map.x,
       y: this.place.map.y,
     });
-    this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED);
+    this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, {
+      settings: clampSettings({ ...DEFAULT_WORLD_SETTINGS, mapStyle: newWorldLand.value }),
+    });
     await this.mapRenderer.load(this.options.baseUrl ?? './');
     await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
     generating.value = false;
@@ -448,6 +459,16 @@ export class Game implements GameHost {
           await this.persist();
           await this.stack.pop();
           if (intent === 'new') {
+            const resolved = resolveLandStyle(newWorldLand.value, DEFAULT_WORLD_SEED);
+            if (this.world.data?.settings.mapStyle !== resolved) {
+              this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, {
+                settings: clampSettings({
+                  ...DEFAULT_WORLD_SETTINGS,
+                  mapStyle: newWorldLand.value,
+                }),
+              });
+              await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
+            }
             await this.enterMap();
             return;
           }
