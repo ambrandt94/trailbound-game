@@ -17,6 +17,7 @@ import { aimForgeSun, getPlayerBody, tickPlayerBody } from '../../characters/for
 import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
+import { oakLoadMs, oakReady } from '../oak-batch.ts';
 
 const DEF = {
   maxSpeed: 5.5,
@@ -1152,7 +1153,18 @@ export async function createTownSession(canvas, hooks) {
       if (!window.TBArea) throw new Error('town world did not boot');
       const err = TBArea.validate ? TBArea.validate(areaExport) : '';
       if (err) throw new Error(err);
+      const oakT0 = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      try {
+        await oakReady();
+      } catch (error) {
+        console.warn('tb oaks', error);
+      }
+      const oakWaitMs = (typeof performance !== 'undefined' ? performance.now() : Date.now()) - oakT0;
       TBArea.receive(areaExport, null);
+      if (window.__tbEntry) {
+        window.__tbEntry.oakWaitMs = oakWaitMs;
+        window.__tbEntry.oakLoadMs = oakLoadMs();
+      }
       if (entry) applyEntry(entry);
       applyExternalLook();
       if (!hooks.getLook) goView(0);
@@ -1387,6 +1399,16 @@ export async function createTownSession(canvas, hooks) {
         return { meshes, instanced, visibleMeshes };
       },
       stats: () => session.stats(),
+      project(x, y, z) {
+        const v = new THREE.Vector3(x, y, z);
+        v.project(cam);
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (v.x * 0.5 + 0.5) * rect.width,
+          y: (-v.y * 0.5 + 0.5) * rect.height,
+          z: v.z,
+        };
+      },
     };
   }
 

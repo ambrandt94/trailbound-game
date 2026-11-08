@@ -1,0 +1,313 @@
+{
+  "schema": "trailbound.manifest/1",
+  "name": "oak",
+  "model": "variations/base.glb",
+  "filter": "nearest",
+  "units": "metres",
+  "axes": "+Y up, +Z forward, origin = ground centre [0,0,0], metres",
+  "pools": {
+    "oak_wood": {
+      "heart_of_oak": "textures/bark_oak.png",
+      "ironbark": "textures/bark_oak_dark.png"
+    },
+    "oak_foliage": {
+      "oak_canopy": "textures/foliage_oak.png"
+    }
+  },
+  "slots": {
+    "wood": {
+      "label": "Wood",
+      "parts_shown": "trunk, root flare, and branch stubs",
+      "materials": [
+        "bark"
+      ],
+      "meshes": [
+        "OakRoot"
+      ],
+      "pool": "oak_wood",
+      "default": "heart_of_oak"
+    },
+    "foliage": {
+      "label": "Foliage",
+      "parts_shown": "rounded crown masses (lit / mid / shade bands in the atlas)",
+      "materials": [
+        "foliage"
+      ],
+      "meshes": [
+        "OakRoot"
+      ],
+      "pool": "oak_foliage",
+      "default": "oak_canopy"
+    }
+  },
+  "variations": {
+    "schema": "trailbound.variations/1",
+    "layout": "row",
+    "default": "base",
+    "members": [
+      {
+        "id": "base",
+        "label": "Base \u2014 rounded crown",
+        "glb": "variations/base.glb",
+        "pivot": {
+          "kind": "ground",
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        "attributes": {
+          "crown_spread": {
+            "label": "Crown Spread",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_spread",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "crown_height": {
+            "label": "Crown Height",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_height",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_lean": {
+            "label": "Trunk Lean",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_lean",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_thickness": {
+            "label": "Trunk Thickness",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_thickness",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          }
+        }
+      },
+      {
+        "id": "spreading",
+        "label": "Spreading \u2014 broad crown",
+        "glb": "variations/spreading.glb",
+        "pivot": {
+          "kind": "ground",
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        "attributes": {
+          "crown_spread": {
+            "label": "Crown Spread",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_spread",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "crown_height": {
+            "label": "Crown Height",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_height",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_lean": {
+            "label": "Trunk Lean",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_lean",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_thickness": {
+            "label": "Trunk Thickness",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_thickness",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          }
+        }
+      },
+      {
+        "id": "upright",
+        "label": "Upright \u2014 tall oval crown",
+        "glb": "variations/upright.glb",
+        "pivot": {
+          "kind": "ground",
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        "attributes": {
+          "crown_spread": {
+            "label": "Crown Spread",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_spread",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "crown_height": {
+            "label": "Crown Height",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_height",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_lean": {
+            "label": "Trunk Lean",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_lean",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_thickness": {
+            "label": "Trunk Thickness",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_thickness",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          }
+        }
+      },
+      {
+        "id": "windswept",
+        "label": "Windswept \u2014 lopsided crown",
+        "glb": "variations/windswept.glb",
+        "pivot": {
+          "kind": "ground",
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        "attributes": {
+          "crown_spread": {
+            "label": "Crown Spread",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_spread",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "crown_height": {
+            "label": "Crown Height",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "crown_height",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_lean": {
+            "label": "Trunk Lean",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_lean",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          },
+          "trunk_thickness": {
+            "label": "Trunk Thickness",
+            "type": "slider",
+            "object": [
+              "OakRoot"
+            ],
+            "target": "trunk_thickness",
+            "min": -1,
+            "max": 1,
+            "step": 0.05,
+            "default": 0
+          }
+        }
+      }
+    ]
+  },
+  "library": {
+    "trailbound": true,
+    "title": "Oak Tree (staged, unpublished)",
+    "tags": [
+      "oak",
+      "tree",
+      "resource-variations",
+      "staged"
+    ],
+    "description": "Authored oak resource set: base plus three silhouette variations with shared wood and foliage slots. Staged only \u2014 not published."
+  }
+}

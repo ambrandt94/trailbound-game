@@ -1,0 +1,25 @@
+export type {
+  KeptOak,
+  OakInstance,
+  OakMorphKey,
+  OakMorphs,
+  OakSpot,
+  OakVariantId,
+} from '../../core/world/oak-dress';
+export {
+  FOREST_CROWN_OVERLAP,
+  OAK_MORPH_KEYS,
+  OAK_MORPH_RANGES,
+  OAK_TRUNK_RADIUS_M,
+  OAK_VARIANTS,
+  OPEN_CROWN_GAP,
+  isOakKit,
+  oakBiomeIsOpen,
+  oakCrownRadius,
+  oakInGrove,
+  oakMinDistance,
+  oakTrunkRadius,
+  pickOakInstance,
+  quantizeStep,
+  selectOaks,
+} from '../../core/world/oak-dress';
