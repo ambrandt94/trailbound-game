@@ -19,7 +19,8 @@ import {
   OAK_TRUNK_RADIUS_M,
   OAK_VARIANTS,
   isOakKit,
-  pickOakInstance,
+  selectOaks,
+  type KeptOak,
   type OakInstance,
   type OakVariantId,
 } from './oak-dress';
@@ -28,6 +29,8 @@ export interface OakScatterItem {
   kit: string;
   x: number;
   z: number;
+  /** Cell or area biome. Plains and Meadow use the open grove spacing. */
+  biome?: string | number;
 }
 
 export interface OakDebugInstance extends OakInstance {
@@ -57,10 +60,18 @@ let library: Record<OakVariantId, OakPrepared> | null = null;
 let loading: Promise<void> | null = null;
 let loadMs = 0;
 let areaSeed = 1;
+let areaBiome = '';
+let keptOaks: KeptOak[] = [];
 let lastInstances: OakDebugInstance[] = [];
 
 export function useOakSeed(seed: number): void {
   areaSeed = Number.isFinite(seed) ? seed : 1;
+  keptOaks = [];
+  lastInstances = [];
+}
+
+export function useOakBiome(biome: string): void {
+  areaBiome = biome || '';
 }
 
 export function oakLoadMs(): number {
@@ -150,17 +161,28 @@ export function scatterOaks(
   groundY?: (x: number, z: number) => number,
 ): void {
   if (!library || items.length === 0) return;
+  const chosen = selectOaks(
+    items.map((item) => ({
+      x: item.x,
+      z: item.z,
+      kit: item.kit,
+      biome: item.biome ?? areaBiome,
+    })),
+    areaSeed,
+    keptOaks,
+  );
+  keptOaks = keptOaks.concat(chosen);
   const buckets = new Map<string, OakDebugInstance[]>();
   const placed: OakDebugInstance[] = [];
-  for (const item of items) {
-    const picked = pickOakInstance(areaSeed, item.x, item.z);
-    const y = groundY ? groundY(item.x, item.z) || 0 : 0;
-    const record: OakDebugInstance = { ...picked, x: item.x, y, z: item.z, kit: item.kit };
+  for (const oak of chosen) {
+    const y = groundY ? groundY(oak.x, oak.z) || 0 : 0;
+    const record: OakDebugInstance = { ...oak.instance, x: oak.x, y, z: oak.z, kit: oak.kit };
     placed.push(record);
-    pushBucket(buckets, `${picked.variant}:${picked.ironbark ? 'ironbark' : 'bark'}`, record);
-    pushBucket(buckets, `${picked.variant}:foliage`, record);
+    const part = oak.instance.ironbark ? 'ironbark' : 'bark';
+    pushBucket(buckets, `${oak.instance.variant}:${part}`, record);
+    pushBucket(buckets, `${oak.instance.variant}:foliage`, record);
   }
-  lastInstances = placed;
+  lastInstances = lastInstances.concat(placed);
 
   for (const [key, list] of buckets) {
     const split = key.indexOf(':');
@@ -308,6 +330,7 @@ function now(): number {
 export const oakApi = {
   ready: oakReady,
   useSeed: useOakSeed,
+  useBiome: useOakBiome,
   accepts: acceptsOak,
   scatter: scatterOaks,
   instances: oakInstances,

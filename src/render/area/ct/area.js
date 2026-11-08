@@ -9,7 +9,7 @@ import {
   stepEdgeLeave,
   clampClearance,
 } from '../../../core/area/edge-leave.ts';
-import { useOakSeed } from '../oak-batch.ts';
+import { useOakBiome, useOakSeed } from '../oak-batch.ts';
 /* AreaExport v0.1–v0.4 → a smooth heightmapped level.
    Schema: world-map src/app/engine/area-export.ts (types win over the field guide).
    Loaded by ?area=, a dropped JSON file, or postMessage {type:'tb-area', payload}.
@@ -1843,7 +1843,7 @@ const treeP=bn==="Mountain"?0.045:0.08,coverP=bn==="Mountain"?0.05:0.09;
 const x=(field.offX||0)+(ix+0.5)*field.meters,z=(field.offZ||0)+(iz+0.5)*field.meters;
 if(hsh<treeP&&treesL.length&&kits.length<480){
 const pick=pickWeighted(treesL,hash2(ix,iz,17));
-kits.push({kit:pick.kit,x:x,z:z,yaw:hsh*6.283,scale:0.9+hash2(ix,iz,3)*0.2,dist:dist[i],rim:rim});
+kits.push({kit:pick.kit,x:x,z:z,yaw:hsh*6.283,scale:0.9+hash2(ix,iz,3)*0.2,dist:dist[i],rim:rim,biome:bn});
 }else if(hsh<treeP+coverP&&coverL.length&&kits.length<960){
 const pick=pickWeighted(coverL,hash2(ix,iz,29));
 kits.push({kit:pick.kit,x:x,z:z,yaw:hsh*6.283,scale:1,dist:dist[i],rim:rim});
@@ -2063,6 +2063,7 @@ return 1;
 }
 function build(p){
 useOakSeed(areaSeedOf(p));
+useOakBiome((p.area&&p.area.biome)||"");
 window.__tbEntry={t0:(typeof performance!=="undefined"?performance.now():Date.now()),sceneMs:0,firstBodyMs:0,allBodiesMs:0,count:0,charInitMs:window.__tbCharInitMs||0,packsMs:0};
 if(!ctx||!ctx.scene)throw new Error("scene not ready");
 if(typeof THREE==="undefined")throw new Error("THREE missing");
