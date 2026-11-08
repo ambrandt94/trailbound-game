@@ -1,4 +1,5 @@
 import { signal } from '@preact/signals';
+import type { LandStyle } from '../core/world/models';
 import type { AvatarGender } from '../core/people/avatar';
 
 export interface SwatchView {
@@ -79,6 +80,9 @@ export interface CreatorView {
 }
 
 export const creatorView = signal<CreatorView>(emptyCreatorView());
+
+/** Land shape for the next new world. Random picks a style from the world seed. */
+export const newWorldLand = signal<LandStyle>('random');
 export const creatorBusy = signal(false);
 export const creatorSource = signal<'forge' | 'placeholder' | ''>('');
 export const creatorSerial = signal(0);
