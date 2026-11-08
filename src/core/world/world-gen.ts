@@ -3,7 +3,9 @@ import {
   BIOME_COUNT,
   Biome,
   type MapNode,
+  type LandStyle,
   type MapStyle,
+  LAND_CHOICES,
   type WorldData,
   type WorldFeature,
   type WorldSettings,
@@ -12,7 +14,7 @@ import {
   worldExtent,
   clamp,
 } from './models';
-import { fbm, Rng } from './noise';
+import { fbm, hash2, Rng } from './noise';
 import { placePois } from './pois';
 import { prepareLandSketch, sampleLandSketch } from './land-sketch';
 import { buildTerrain, metersToNormalized, reinforceClimate, sampleMacroMeters } from './terrain';
@@ -149,23 +151,105 @@ function landMask(
   seed: number,
   sketch: Float32Array | null,
 ): number {
-  if (style !== 'custom') return styleMask(nx, ny, style, seed);
-  if (!sketch) return styleMask(nx, ny, 'continent', seed);
-  const warp = (fbm(nx * 3.1, ny * 2.9, seed + 71, 3) - 0.5) * 0.04;
-  const warpY = (fbm(ny * 2.9, nx * 3.0, seed + 88, 3) - 0.5) * 0.04;
-  const drawn = sampleLandSketch(sketch, nx + warp, ny + warpY);
-  if (drawn < 0.08) return 0;
-  const nibble = (fbm(nx * 11, ny * 11, seed + 19, 2) - 0.5) * 0.1 * drawn;
-  return clamp(drawn * 0.96 + nibble, 0, 1);
+  if (style === 'custom') {
+    if (!sketch) return sampleLandMask(nx, ny, 'continent', seed);
+    const warp = (fbm(nx * 3.1, ny * 2.9, seed + 71, 3) - 0.5) * 0.04;
+    const warpY = (fbm(ny * 2.9, nx * 3.0, seed + 88, 3) - 0.5) * 0.04;
+    const drawn = sampleLandSketch(sketch, nx + warp, ny + warpY);
+    if (drawn < 0.08) return 0;
+    const nibble = (fbm(nx * 11, ny * 11, seed + 19, 2) - 0.5) * 0.1 * drawn;
+    return clamp(drawn * 0.96 + nibble, 0, 1);
+  }
+  return sampleLandMask(nx, ny, style, seed);
+}
+
+/**
+ * Pull every coastline inside an ocean margin of about 6%. The margin line is
+ * warped, so land does not end on a straight cut. Lakes and highlands stay
+ * full-frame on purpose.
+ */
+export function sampleLandMask(nx: number, ny: number, style: MapStyle, seed: number): number {
+  const mask = styleMask(nx, ny, style, seed);
+  if (style === 'lakes' || style === 'highlands') return mask;
+  return applyOceanMargin(mask, nx, ny, seed);
+}
+
+function applyOceanMargin(mask: number, nx: number, ny: number, seed: number): number {
+  const raw = Math.min(nx, ny, 1 - nx, 1 - ny);
+  if (raw < 0.025) return 0;
+  const wx = (fbm(nx * 2.4, ny * 2.05, seed + 801, 3) - 0.5) * 0.16;
+  const wy = (fbm(ny * 2.25, nx * 2.1, seed + 823, 3) - 0.5) * 0.16;
+  const x = nx + wx;
+  const y = ny + wy;
+  const edge = Math.min(x, y, 1 - x, 1 - y);
+  const wander = (fbm(nx * 6.4, ny * 5.8, seed + 847, 3) - 0.5) * 0.07;
+  const shore = 0.06 + wander;
+  if (edge >= shore + 0.045) return mask;
+  const t = (edge - (shore - 0.03)) / 0.075;
+  return mask * clamp(t, 0, 1);
+}
+
+/** Authored land styles. `random` is resolved from the seed before the mask is built. */
+export function resolveLandStyle(style: LandStyle, seed: number): Exclude<MapStyle, 'custom'> {
+  if (style !== 'random') return style;
+  const choices = LAND_CHOICES.filter((choice) => choice !== 'random');
+  const index = Math.floor(hash2(seed, 3, 91) * choices.length);
+  return choices[index] ?? 'continent';
+}
+
+/**
+ * Seeded continent silhouette. Several lobes, a rotated stretch, and a strong
+ * warp, so two seeds are not the same disc. Land stays off a 6% ocean margin.
+ */
+export function continentMask(nx: number, ny: number, seed: number): number {
+  const cx = 0.5 + (hash2(1, 2, seed) - 0.5) * 0.2;
+  const cy = 0.5 + (hash2(3, 4, seed) - 0.5) * 0.2;
+  const rot = hash2(5, 6, seed) * Math.PI;
+  const stretch = 0.7 + hash2(7, 8, seed) * 0.75;
+  const lobes = 2 + Math.floor(hash2(9, 10, seed) * 3);
+  const warpX =
+    (fbm(nx * 1.7, ny * 1.55, seed + 11, 4) - 0.5) * 0.28 +
+    (fbm(nx * 4.2, ny * 3.8, seed + 41, 3) - 0.5) * 0.1;
+  const warpY =
+    (fbm(ny * 1.65, nx * 1.5, seed + 23, 4) - 0.5) * 0.28 +
+    (fbm(ny * 3.9, nx * 4.4, seed + 57, 3) - 0.5) * 0.1;
+  const wx = nx + warpX;
+  const wy = ny + warpY;
+  let mask = 0;
+  const cos = Math.cos(rot);
+  const sin = Math.sin(rot);
+  for (let i = 0; i < lobes; i++) {
+    const ox = (hash2(20 + i, 1, seed) - 0.5) * 0.46;
+    const oy = (hash2(40 + i, 2, seed) - 0.5) * 0.46;
+    const base = lobes === 2 ? 4.5 : lobes === 3 ? 5.05 : 5.55;
+    const tight = base + hash2(60 + i, 3, seed) * 0.45;
+    const aspect = 0.72 + hash2(80 + i, 4, seed) * 0.7;
+    const dx = wx - (cx + ox);
+    const dy = wy - (cy + oy);
+    const rx = dx * cos - dy * sin;
+    const ry = dx * sin + dy * cos;
+    mask = Math.max(mask, Math.exp(-Math.hypot(rx * tight * stretch, ry * tight * aspect)));
+  }
+  const coast = fbm(wx * 7.5, wy * 7.2, seed + 101, 4) - 0.5;
+  const grit = fbm(wx * 16, wy * 15, seed + 133, 2) - 0.5;
+  const shore = mask > 0.04 && mask < 0.62 ? 1 : 0;
+  mask += (coast * 0.22 + grit * 0.08) * shore;
+  const islands = Math.floor(hash2(12, 13, seed) * 3);
+  for (let i = 0; i < islands; i++) {
+    const ang = hash2(140 + i, 5, seed) * Math.PI * 2;
+    const dist = 0.22 + hash2(160 + i, 6, seed) * 0.08;
+    const ix = cx + Math.cos(ang) * dist;
+    const iy = cy + Math.sin(ang) * dist;
+    const tight = 8.4 + hash2(180 + i, 7, seed) * 2.4;
+    mask = Math.max(mask, bump(wx, wy, ix, iy, tight, tight * 1.12) * 0.72);
+  }
+  return clamp(mask, 0, 1);
 }
 
 function styleMask(nx: number, ny: number, style: MapStyle, seed: number): number {
   switch (style) {
-    case 'continent': {
-      const warp = (fbm(nx * 2.1, ny * 2.0, seed + 4, 3) - 0.5) * 0.14;
-      const r = Math.hypot((nx - 0.5 + warp) * 2.08, (ny - 0.5 - warp * 0.35) * 2.22);
-      return Math.pow(Math.max(0, 1 - r), 1.12);
-    }
+    case 'continent':
+      return continentMask(nx, ny, seed);
     case 'archipelago': {
       const peaks: Array<[number, number, number, number]> = [
         [0.27, 0.34, 5.4, 5.6],
@@ -361,7 +445,8 @@ export function generateWorld(
   const h = w;
   const rng = new Rng(seed);
   const paths = new Uint8Array(w * h);
-  const style = settings.mapStyle ?? 'continent';
+  const requested = settings.mapStyle ?? 'random';
+  const style = requested === 'random' ? resolveLandStyle('random', seed) : requested;
   const sketch = style === 'custom' ? prepareLandSketch(settings.landSketch) : null;
   const terrain = buildTerrain({
     seed,
@@ -510,7 +595,7 @@ export function generateWorld(
     seed,
     width: w,
     height: h,
-    settings,
+    settings: { ...settings, mapStyle: style },
     biomes,
     heights,
     heightM,

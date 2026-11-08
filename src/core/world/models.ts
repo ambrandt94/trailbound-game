@@ -252,7 +252,7 @@ export type ResidentsMode = 'perHouse' | 'perPlace';
 
 export interface WorldSettings {
   worldScale: WorldScale;
-  mapStyle: MapStyle;
+  mapStyle: MapStyle | 'random';
   poiCount: number;
   wanderers: number;
   caravans: number;
@@ -287,6 +287,17 @@ export const MAP_STYLES = [
 ] as const;
 export type MapStyle = (typeof MAP_STYLES)[number];
 
+/** New-world land shape. `random` picks one of the authored styles from the seed. */
+export const LAND_CHOICES = [
+  'random',
+  ...MAP_STYLES.filter((style) => style !== 'custom'),
+] as const;
+export type LandStyle = (typeof LAND_CHOICES)[number];
+
+export function isLandStyle(value: unknown): value is LandStyle {
+  return typeof value === 'string' && (LAND_CHOICES as readonly string[]).includes(value);
+}
+
 export const MAP_STYLE_LABELS: Record<MapStyle, string> = {
   continent: 'Continent',
   archipelago: 'Isles',
@@ -299,6 +310,18 @@ export const MAP_STYLE_LABELS: Record<MapStyle, string> = {
   custom: 'Custom',
 };
 
+export const LAND_CHOICE_LABELS: Record<LandStyle, string> = {
+  random: 'Random',
+  continent: 'Continent',
+  archipelago: 'Isles',
+  isthmus: 'Isthmus',
+  lakes: 'Lakes',
+  highlands: 'Highlands',
+  fjords: 'Fjords',
+  desert: 'Desert basin',
+  shattered: 'Shattered isles',
+};
+
 /** Default people per dwelling. Used when a place picks per-house. */
 export const DEFAULT_AVG_PER_HOUSE = 2.5;
 /** Default people in a town, village, or city. The world default mode. */
@@ -306,7 +329,7 @@ export const DEFAULT_AVG_PER_PLACE = 24;
 
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   worldScale: 16,
-  mapStyle: 'continent',
+  mapStyle: 'random',
   poiCount: 72,
   wanderers: 40,
   caravans: 10,
@@ -436,9 +459,10 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
   const scale = WORLD_SCALES.includes(raw.worldScale as WorldScale)
     ? (raw.worldScale as WorldScale)
     : 16;
-  const mapStyle = MAP_STYLES.includes(raw.mapStyle as MapStyle)
-    ? (raw.mapStyle as MapStyle)
-    : 'continent';
+  const mapStyle =
+    raw.mapStyle === 'random' || MAP_STYLES.includes(raw.mapStyle as MapStyle)
+      ? (raw.mapStyle as MapStyle | 'random')
+      : 'random';
   return {
     worldScale: scale,
     mapStyle,

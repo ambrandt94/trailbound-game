@@ -1,9 +1,11 @@
 import type { AvatarGender } from '../core/people/avatar';
+import { LAND_CHOICES, LAND_CHOICE_LABELS, type LandStyle } from '../core/world/models';
 import {
   creatorBusy,
   creatorCommands,
   creatorSource,
   creatorView,
+  newWorldLand,
   type PartView,
   type SliderView,
   type SwatchView,
@@ -401,6 +403,30 @@ export function CreatorScreen() {
           Wardrobe
         </button>
       </div>
+
+      {view.intent === 'new' ? (
+        <label class="field">
+          <span>Land</span>
+          <select
+            aria-label="Land"
+            value={newWorldLand.value}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (!(target instanceof HTMLSelectElement)) return;
+              const next = target.value;
+              if ((LAND_CHOICES as readonly string[]).includes(next)) {
+                newWorldLand.value = next as LandStyle;
+              }
+            }}
+          >
+            {LAND_CHOICES.map((choice) => (
+              <option key={choice} value={choice}>
+                {LAND_CHOICE_LABELS[choice]}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       {view.note ? <p class="note">{skinText(view.note)}</p> : null}
       {view.hash ? <p class="hash">Look {view.hash.slice(0, 8)}</p> : null}
