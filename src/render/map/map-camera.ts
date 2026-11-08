@@ -1,6 +1,7 @@
 import {
   MAP_ZOOM_CAP,
   TILE,
+  WORLD_BASE,
   clamp,
   clampLatY,
   lerpWrapX,
@@ -38,6 +39,8 @@ export class MapCamera {
   targetY = 0;
   targetScale = 0.2;
   follow = true;
+  /** Fine world tiles covered by one map tile. 16 on a 16× continent. */
+  step = 1;
   private width = 192;
   private height = 192;
   private zoomPivot: {
@@ -50,15 +53,16 @@ export class MapCamera {
   } | null = null;
 
   frame(width: number, height: number, heroX: number, heroY: number): void {
-    this.width = Math.max(1, width);
-    this.height = Math.max(1, height);
+    this.step = width >= WORLD_BASE && width % WORLD_BASE === 0 ? width / WORLD_BASE : 1;
+    this.width = Math.max(1, Math.round(width / this.step));
+    this.height = Math.max(1, Math.round(height / this.step));
     const scale = startScaleFor(this.width);
     this.scale = scale;
     this.targetScale = scale;
-    this.x = heroX;
-    this.y = heroY;
-    this.targetX = heroX;
-    this.targetY = heroY;
+    this.x = heroX / this.step;
+    this.y = heroY / this.step;
+    this.targetX = this.x;
+    this.targetY = this.y;
     this.follow = true;
   }
 
@@ -89,8 +93,8 @@ export class MapCamera {
   lookAt(x: number, y: number, scale?: number): void {
     this.follow = false;
     this.zoomPivot = null;
-    this.targetX = wrapX(x, this.width);
-    this.targetY = clampLatY(y, this.height);
+    this.targetX = wrapX(x / this.step, this.width);
+    this.targetY = clampLatY(y / this.step, this.height);
     this.x = this.targetX;
     this.y = this.targetY;
     if (scale) {
@@ -102,8 +106,8 @@ export class MapCamera {
   update(dt: number, heroX: number, heroY: number): void {
     if (this.follow) {
       this.zoomPivot = null;
-      this.targetX = heroX;
-      this.targetY = heroY;
+      this.targetX = heroX / this.step;
+      this.targetY = heroY / this.step;
     }
     const zoomT = 1 - Math.exp(-ZOOM_FOLLOW * dt);
     const panT = 1 - Math.exp(-PAN_FOLLOW * dt);

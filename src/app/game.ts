@@ -9,7 +9,13 @@ import {
   type WorldState,
 } from '../core/state/world-state';
 import { DEFAULT_WORLD_SEED } from '../core/world/index';
-import { Biome, startScaleFor, type ChunkData, type WorldData } from '../core/world/models';
+import {
+  Biome,
+  WORLD_BASE,
+  startScaleFor,
+  type ChunkData,
+  type WorldData,
+} from '../core/world/models';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { Keyboard } from '../input/keyboard';
@@ -231,7 +237,7 @@ export class Game implements GameHost {
       return this.lookAt('Ironmarch', 9);
     }
     if (kind === 'world') {
-      this.mapScene.lookAt(data.width / 2, data.height / 2, startScaleFor(data.width));
+      this.mapScene.lookAt(data.width / 2, data.height / 2, startScaleFor(WORLD_BASE));
       return true;
     }
     if (kind === 'river') {

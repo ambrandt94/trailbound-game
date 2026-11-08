@@ -60,6 +60,7 @@ import {
   overlayGroup,
   tileSrc,
 } from '../../core/world/tileset';
+import { buildCoarseMap, type CoarseMap } from './coarse-map';
 import {
   bakeElevationOverlay,
   buildContours,
@@ -201,8 +202,9 @@ function cameraTransform(
   camera: CameraState,
   viewW: number,
   viewH: number,
+  snap = true,
 ): void {
-  const scale = pixelSnapScale(camera.scale);
+  const scale = snap ? pixelSnapScale(camera.scale) : camera.scale;
   const ox = Math.round(viewW / 2 - camera.x * TILE * scale);
   const oy = Math.round(viewH / 2 - camera.y * TILE * scale);
   ctx.setTransform(scale, 0, 0, scale, ox, oy);
@@ -395,9 +397,6 @@ function pathSeason(biome: Biome): number {
   return biomeSeason(biome);
 }
 
-/** Overworld bake budget: 384 cells × 16px ≈ 6k canvas (8-tile cells at 16×). */
-const WORLD_BAKE_MAX_CELLS = 384;
-
 type ChunkImage = CanvasImageSource & { width: number; height: number };
 
 interface ClassicBlock {
@@ -407,14 +406,6 @@ interface ClassicBlock {
   span: number;
   stamp: number;
   row: number;
-}
-
-function worldBakeStep(width: number, maxCells: number): number {
-  const minStep = Math.max(1, Math.ceil(width / maxCells));
-  for (let s = minStep; s <= width; s++) {
-    if (width % s === 0) return s;
-  }
-  return minStep;
 }
 
 function worldWrapShifts(
@@ -478,6 +469,11 @@ function drawBoatMarker(
 
 export class WorldRenderer {
   worldBake: CanvasImageSource | null = null;
+  /** Fine tiles per map tile. The sheet is this many times coarser than the world. */
+  mapStep = 1;
+  private mapWidth = 0;
+  private mapHeight = 0;
+  private coarseFeatures: WorldFeature[] | null = null;
   zoneBake: HTMLCanvasElement | null = null;
   cloudBake: HTMLCanvasElement | null = null;
   /** When false, chunk bakes omit tile roofs so Town Tale sprites can stand in. */
@@ -545,18 +541,100 @@ export class WorldRenderer {
     this.classicCache.clear();
     this.classicStamp = 0;
     this.paletteWorld = null;
-    if (this.terrain) {
-      this.terrain.frame = this.waterFrame;
-      const job = this.terrain.bakeFast(world);
-      this.worldBake = job.canvas;
-      this.overview = job;
-      this.terrain.buildCoarseMip(world);
-      this.bakeMs = performance.now() - started;
+    this.featureWorld = null;
+    this.featureBuckets = null;
+    const coarse = buildCoarseMap({
+      width: world.width,
+      height: world.height,
+      biomes: world.biomes,
+      paths: world.paths,
+      seed: world.seed,
+    });
+    this.mapStep = coarse.step;
+    this.mapWidth = coarse.width;
+    this.mapHeight = coarse.height;
+    const marks = coarse.features.slice();
+    for (const feature of world.features) {
+      if (feature.kind === 'landmark') marks.push(feature);
+    }
+    this.coarseFeatures = marks;
+    this.bakeCoarseSheet(coarse);
+    this.bakeMs = performance.now() - started;
+  }
+
+  /** One 16 px Pixel Kingdom tile per coarse cell. Built once; zoom never rebuilds it. */
+  private bakeCoarseSheet(coarse: CoarseMap): void {
+    const { width, height } = coarse;
+    const canvas = document.createElement('canvas');
+    canvas.width = width * TILE;
+    canvas.height = height * TILE;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || !this.assets.grasslands) {
+      this.worldBake = canvas;
       return;
     }
-    const step = worldBakeStep(world.width, WORLD_BAKE_MAX_CELLS);
-    this.bakeWorldTileset(world, step, TILE);
-    this.bakeMs = performance.now() - started;
+    ctx.imageSmoothingEnabled = false;
+    const g = this.assets.grasslands;
+    const at = (x: number, y: number): Biome => {
+      if (y < 0 || y >= height) return Biome.Water;
+      const wx = ((x % width) + width) % width;
+      return coarse.biomes[wx + y * width] as Biome;
+    };
+    const stamp = (sx: number, sy: number, cx: number, cy: number) => {
+      ctx.drawImage(g, sx, sy, TILE, TILE, cx * TILE, cy * TILE, TILE, TILE);
+    };
+    for (let cy = 0; cy < height; cy++) {
+      for (let cx = 0; cx < width; cx++) {
+        const biome = at(cx, cy);
+        const grass = grassSrc(biome);
+        stamp(grass.sx, grass.sy, cx, cy);
+        const group = overlayGroup(biome);
+        if (group !== null) {
+          const [lx, ly] = blobLocal(
+            at(cx, cy - 1) === biome,
+            at(cx + 1, cy) === biome,
+            at(cx, cy + 1) === biome,
+            at(cx - 1, cy) === biome,
+          );
+          const src = tileSrc(group, biomeSeason(biome), lx, ly);
+          stamp(src.sx, src.sy, cx, cy);
+        }
+        if (coarse.paths[cx + cy * width] && biome !== Biome.Water) {
+          const wrap = (ix: number) => ((ix % width) + width) % width;
+          const on = (x: number, y: number) =>
+            y >= 0 && y < height && coarse.paths[wrap(x) + y * width] === 1;
+          const [lx, ly] = blobLocal(
+            on(cx, cy - 1),
+            on(cx + 1, cy),
+            on(cx, cy + 1),
+            on(cx - 1, cy),
+          );
+          const src = tileSrc(GROUPS.path, pathSeason(biome), lx, ly);
+          stamp(src.sx, src.sy, cx, cy);
+        }
+        const deco = (cx * 17 + cy * 31 + biome * 7) % 23;
+        if ((biome === Biome.Plains || biome === Biome.Meadow) && deco === 0) {
+          const d = decoFor(biome, 'flower');
+          stamp(d.sx, d.sy, cx, cy);
+        } else if (biome === Biome.Meadow && deco === 4) {
+          const d = decoFor(biome, 'leaf');
+          stamp(d.sx, d.sy, cx, cy);
+        } else if (
+          (biome === Biome.Hills || biome === Biome.Heath || biome === Biome.Desert) &&
+          deco === 2
+        ) {
+          const d = decoFor(biome, 'pebble');
+          stamp(d.sx, d.sy, cx, cy);
+        } else if (biome === Biome.Water && deco === 5) {
+          const d = decoFor(biome, 'ripple');
+          stamp(d.sx, d.sy, cx, cy);
+        } else if ((biome === Biome.Marsh || biome === Biome.Jungle) && deco === 6) {
+          const d = decoFor(biome, 'lily');
+          stamp(d.sx, d.sy, cx, cy);
+        }
+      }
+    }
+    this.worldBake = canvas;
   }
 
   private bakeWorldTileset(world: WorldData, step: number, stamp: number): void {
@@ -1292,9 +1370,12 @@ export class WorldRenderer {
     }
 
     ctx.save();
-    cameraTransform(ctx, camera, viewW, viewH);
+    const sheet = this.mapWidth > 0;
+    cameraTransform(ctx, camera, viewW, viewH, !sheet);
+    const viewWTiles = sheet ? this.mapWidth : world.width;
+    const viewHTiles = sheet ? this.mapHeight : world.height;
 
-    if (this.terrain?.coarseMip) {
+    if (this.terrain?.coarseMip && !sheet) {
       this.terrain.frame = this.waterFrame;
       this.terrain.drawArtMips(
         ctx,
@@ -1308,14 +1389,14 @@ export class WorldRenderer {
       );
     } else if (this.worldBake) {
       ctx.imageSmoothingEnabled = false;
-      const wpx = world.width * TILE;
-      const hpx = world.height * TILE;
+      const wpx = viewWTiles * TILE;
+      const hpx = viewHTiles * TILE;
       ctx.drawImage(this.worldBake, 0, 0, wpx, hpx);
       const halfW = viewW / (2 * camera.scale) / TILE;
       const viewTilesX = viewW / (camera.scale * TILE);
-      if (viewTilesX < world.width * 0.92) {
+      if (viewTilesX < viewWTiles * 0.92) {
         if (camera.x - halfW < 0) ctx.drawImage(this.worldBake, -wpx, 0, wpx, hpx);
-        if (camera.x + halfW > world.width) ctx.drawImage(this.worldBake, wpx, 0, wpx, hpx);
+        if (camera.x + halfW > viewWTiles) ctx.drawImage(this.worldBake, wpx, 0, wpx, hpx);
       }
     }
     if (this.terrain && !this.terrain.coarseMip) {
@@ -1330,7 +1411,7 @@ export class WorldRenderer {
     const detailT = showChunks ? 1 : 0;
     const halfW = viewW / (2 * camera.scale) / TILE;
     const viewTilesX = viewW / (camera.scale * TILE);
-    const wrapShifts = worldWrapShifts(camera.x, halfW, world.width, viewTilesX);
+    const wrapShifts = worldWrapShifts(camera.x, halfW, viewWTiles, viewTilesX);
     if (featureAlpha > 0.02) {
       ctx.globalAlpha = featureAlpha;
       for (const shift of wrapShifts) {
@@ -1876,7 +1957,24 @@ export class WorldRenderer {
     ctx.restore();
   }
 
+  /** Fine world tiles → map tiles. The camera and the sheet share map tiles. */
+  private toMap(fine: number): number {
+    return this.mapStep > 1 ? fine / this.mapStep : fine;
+  }
+
   private addNodeTiles(ctx: CanvasRenderingContext2D, node: MapNode): void {
+    if (this.mapStep > 1) {
+      const b = nodeBounds(node);
+      const x = this.toMap(b.x0) * TILE;
+      const y = this.toMap(b.y0) * TILE;
+      ctx.rect(
+        x,
+        y,
+        Math.max(TILE, this.toMap(b.x1 - b.x0) * TILE),
+        Math.max(TILE, this.toMap(b.y1 - b.y0) * TILE),
+      );
+      return;
+    }
     const tiles = node.tiles;
     if (tiles?.length) {
       for (const t of tiles) {
@@ -1916,7 +2014,13 @@ export class WorldRenderer {
         const list = this.featureBuckets?.get(`${i},${j}`);
         if (!list) continue;
         for (const feature of list) {
-          if (feature.x < x0 || feature.x > x1 || feature.y < y0 || feature.y > y1) continue;
+          if (
+            this.toMap(feature.x) < x0 ||
+            this.toMap(feature.x) > x1 ||
+            this.toMap(feature.y) < y0 ||
+            this.toMap(feature.y) > y1
+          )
+            continue;
           if (
             alpha > 0.8 &&
             detailT > 0.2 &&
@@ -1930,7 +2034,9 @@ export class WorldRenderer {
           const screenH = Math.max(minScreen, worldH * camera.scale);
           const h = screenH / camera.scale;
           const w = (img.width / Math.max(1, img.height)) * h;
-          ctx.drawImage(img, feature.x * TILE - w / 2, feature.y * TILE - h, w, h);
+          const fx = this.toMap(feature.x);
+          const fy = this.toMap(feature.y);
+          ctx.drawImage(img, fx * TILE - w / 2, fy * TILE - h, w, h);
         }
       }
     }
@@ -1940,8 +2046,9 @@ export class WorldRenderer {
     if (this.featureWorld === world && this.featureBuckets) return;
     const cell = 48;
     const buckets = new Map<string, WorldFeature[]>();
-    for (const feature of world.features) {
-      const key = `${Math.floor(feature.x / cell)},${Math.floor(feature.y / cell)}`;
+    const source = this.coarseFeatures ?? world.features;
+    for (const feature of source) {
+      const key = `${Math.floor(this.toMap(feature.x) / cell)},${Math.floor(this.toMap(feature.y) / cell)}`;
       const list = buckets.get(key);
       if (list) list.push(feature);
       else buckets.set(key, [feature]);
@@ -1978,7 +2085,11 @@ export class WorldRenderer {
     for (const node of nodes) {
       if (Number.isFinite(camX) && Number.isFinite(camY)) {
         const margin = 96 / Math.max(0.04, scale);
-        if (Math.hypot(node.cx - camX, node.cy - camY) > node.radius + margin) continue;
+        if (
+          Math.hypot(this.toMap(node.cx) - camX, this.toMap(node.cy) - camY) >
+          this.toMap(node.radius) + margin
+        )
+          continue;
       }
       const hovered = node.id === hoveredId;
       const isActive = detailNode?.id === node.id;
@@ -2033,8 +2144,8 @@ export class WorldRenderer {
       if (showName) {
         const b = nodeBounds(node);
         ctx.setLineDash([]);
-        const lx = node.cx * TILE;
-        const ly = (b.y0 + (b.y1 - b.y0) * 0.42) * TILE;
+        const lx = this.toMap(node.cx) * TILE;
+        const ly = this.toMap(b.y0 + (b.y1 - b.y0) * 0.42) * TILE;
         const label = node.poiKind ? `${node.name} · ${POI_LABELS[node.poiKind]}` : node.name;
         drawNametag(ctx, label, lx, ly, scale, { screenPx: this.tagScreenPx });
       }
@@ -2044,6 +2155,18 @@ export class WorldRenderer {
 
   private traceNode(ctx: CanvasRenderingContext2D, node: MapNode): void {
     ctx.beginPath();
+    if (this.mapStep > 1) {
+      const b = nodeBounds(node);
+      const x = this.toMap(b.x0) * TILE;
+      const y = this.toMap(b.y0) * TILE;
+      ctx.rect(
+        x,
+        y,
+        Math.max(TILE, this.toMap(b.x1 - b.x0) * TILE),
+        Math.max(TILE, this.toMap(b.y1 - b.y0) * TILE),
+      );
+      return;
+    }
     const tiles = node.tiles;
     if (!tiles?.length) {
       const b = nodeBounds(node);
@@ -2090,8 +2213,8 @@ export class WorldRenderer {
       const instanced = world.nodes.some((n) => n.id === poi.id);
       if (!show && !revealed && !hovered && !isActive) continue;
       if (!hovered && !isActive && scale < 0.09) continue;
-      const px = poi.x * TILE;
-      const py = poi.y * TILE;
+      const px = this.toMap(poi.x) * TILE;
+      const py = this.toMap(poi.y) * TILE;
       const color = poiColor(poi.kind);
       const s = 15 / scale;
       ctx.save();
@@ -2223,27 +2346,42 @@ export class WorldRenderer {
     };
     const marks: Mark[] = showPlayer ? [{ y: player.y, kind: 'player' }] : [];
     for (const guest of remotePlayers) {
-      if (guest.x < x0 || guest.x > x1 || guest.y < y0 || guest.y > y1) continue;
-      marks.push({ y: guest.y, kind: 'guest', guest });
+      if (
+        this.toMap(guest.x) < x0 ||
+        this.toMap(guest.x) > x1 ||
+        this.toMap(guest.y) < y0 ||
+        this.toMap(guest.y) > y1
+      )
+        continue;
+      marks.push({ y: this.toMap(guest.y), kind: 'guest', guest });
     }
     for (const e of entities) {
       if (e.resident) continue;
-      if (e.x < x0 || e.x > x1 || e.y < y0 || e.y > y1) {
+      const ex = this.toMap(e.x);
+      const ey = this.toMap(e.y);
+      if (ex < x0 || ex > x1 || ey < y0 || ey > y1) {
         const vis =
-          !e.afloat && e.members.some((m) => m.x >= x0 && m.x <= x1 && m.y >= y0 && m.y <= y1);
+          !e.afloat &&
+          e.members.some(
+            (m) =>
+              this.toMap(m.x) >= x0 &&
+              this.toMap(m.x) <= x1 &&
+              this.toMap(m.y) >= y0 &&
+              this.toMap(m.y) <= y1,
+          );
         if (!vis) continue;
       }
       if (e.token === 'camp' || e.token === 'wagon-circle') {
-        marks.push({ y: e.y, kind: 'actor', e, mx: e.x, my: e.y, lead: true });
+        marks.push({ y: ey, kind: 'actor', e, mx: ex, my: ey, lead: true });
         continue;
       }
       if (e.afloat) {
         marks.push({
-          y: e.y,
+          y: ey,
           kind: 'actor',
           e,
-          mx: e.x,
-          my: e.y,
+          mx: ex,
+          my: ey,
           sheet: 'boat',
           char: boatChar(e.kind),
           facing: e.facing,
@@ -2253,11 +2391,11 @@ export class WorldRenderer {
         continue;
       }
       marks.push({
-        y: e.y,
+        y: ey,
         kind: 'actor',
         e,
-        mx: e.x,
-        my: e.y,
+        mx: ex,
+        my: ey,
         sheet: e.sheet,
         char: e.char,
         facing: e.facing,
@@ -2269,11 +2407,11 @@ export class WorldRenderer {
       for (let i = 0; i < followers; i++) {
         const m = e.members[i]!;
         marks.push({
-          y: m.y,
+          y: this.toMap(m.y),
           kind: 'actor',
           e,
-          mx: m.x,
-          my: m.y,
+          mx: this.toMap(m.x),
+          my: this.toMap(m.y),
           sheet: m.sheet,
           char: m.char,
           facing: m.facing,
@@ -2307,12 +2445,12 @@ export class WorldRenderer {
       if (mark.kind === 'player') {
         const spr = this.drawPlayer(ctx, player, scale, localPeerId);
         if (spr) occupied.push(spr);
-        const clearAbove = spr ? player.y * TILE - spr.y : 12 / scale;
-        const clearBelow = spr ? spr.y + spr.h - player.y * TILE : 4 / scale;
+        const clearAbove = spr ? this.toMap(player.y) * TILE - spr.y : 12 / scale;
+        const clearBelow = spr ? spr.y + spr.h - this.toMap(player.y) * TILE : 4 / scale;
         if (localPeerId) {
           anchorByPeer.set(localPeerId, {
-            x: player.x * TILE,
-            y: player.y * TILE,
+            x: this.toMap(player.x) * TILE,
+            y: this.toMap(player.y) * TILE,
             clearAbove: clearAbove + 10 / scale,
             clearBelow,
           });
@@ -2323,20 +2461,20 @@ export class WorldRenderer {
         const g = mark.guest;
         const spr = this.drawPlayer(ctx, g, scale, null);
         if (spr) occupied.push(spr);
-        const clearAbove = spr ? g.y * TILE - spr.y : 12 / scale;
-        const clearBelow = spr ? spr.y + spr.h - g.y * TILE : 4 / scale;
+        const clearAbove = spr ? this.toMap(g.y) * TILE - spr.y : 12 / scale;
+        const clearBelow = spr ? spr.y + spr.h - this.toMap(g.y) * TILE : 4 / scale;
         if (g.name && scale >= 2.8) {
           pending.push({
             text: g.name,
-            x: g.x * TILE,
-            y: g.y * TILE,
+            x: this.toMap(g.x) * TILE,
+            y: this.toMap(g.y) * TILE,
             clearAbove,
             clearBelow,
           });
         }
         anchorByPeer.set(g.id, {
-          x: g.x * TILE,
-          y: g.y * TILE,
+          x: this.toMap(g.x) * TILE,
+          y: this.toMap(g.y) * TILE,
           clearAbove: clearAbove + 10 / scale,
           clearBelow,
         });
@@ -2464,8 +2602,8 @@ export class WorldRenderer {
     scale: number,
     localPeerId: string | null,
   ): TagBox | null {
-    const px = player.x * TILE;
-    const py = player.y * TILE;
+    const px = this.toMap(player.x) * TILE;
+    const py = this.toMap(player.y) * TILE;
     const pinT = 1 - smoothstep(0.45, 2.4, scale);
     if (pinT > 0.04) {
       ctx.save();
