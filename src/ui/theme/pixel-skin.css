@@ -809,25 +809,44 @@
   }
 }
 
+#ui .tb-wardrobe {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#ui .tb-wardrobe-head,
+#ui .tb-wardrobe-foot {
+  flex: none;
+}
+
 #ui .tb-wardrobe-columns {
   display: grid;
+  flex: 1 1 auto;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   gap: 12px;
   min-height: 0;
   min-width: 0;
 }
 
+#ui .tb-wardrobe-layers,
+#ui .tb-wardrobe-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
 #ui .tb-wardrobe-layers {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 46vh;
-  overflow: auto;
-  min-width: 0;
 }
 
 #ui .tb-wardrobe-layers .action {
   display: flex;
+  flex: none;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
@@ -838,21 +857,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  max-height: 28vh;
-  overflow: auto;
-}
-
-#ui .tb-wardrobe-detail {
-  min-width: 0;
 }
 
 @media (max-width: 800px) {
   #ui .tb-wardrobe-columns {
     grid-template-columns: 1fr;
-  }
-
-  #ui .tb-wardrobe-layers,
-  #ui .tb-wardrobe-catalog {
-    max-height: 32vh;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 }

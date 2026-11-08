@@ -8,6 +8,7 @@ export {
   buildAvatar,
   forgeBuildError,
   forgeCatalog,
+  forgeEditCatalog,
   forgeReady,
   forgeStats,
   checkRecipeEdit,

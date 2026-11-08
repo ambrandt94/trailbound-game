@@ -5,41 +5,53 @@ function label(id: string): string {
   return id.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+const REGIONS = [
+  { id: 'full', label: 'All' },
+  { id: 'upper', label: 'Upper' },
+  { id: 'lower', label: 'Lower' },
+] as const;
+
 export function WardrobeScreen(props: { view: CreatorView; busy: boolean; confirmLabel: string }) {
   const view = props.view;
   const wornHere = view.garment.length > 0;
   return (
-    <section class="creator tb-scroll tb-wardrobe" data-surface="paperdoll">
-      <div class="creator-copy">
+    <section class="creator tb-wardrobe" data-surface="paperdoll" data-region={view.focus}>
+      <div class="tb-wardrobe-head">
         <p class="eyebrow tb-kicker">Character</p>
         <h2 class="tb-heading">Wardrobe</h2>
-        <p class="lede tight">
-          {skinText(
-            'Full, upper, and lower frame the body. Every slot stays listed until Forge publishes region groups.',
-          )}
-        </p>
-      </div>
-      <div class="preview-tools" role="group" aria-label="View">
-        {(['full', 'upper', 'lower'] as const).map((focus) => (
+        <div class="preview-tools" role="group" aria-label="Region">
+          {REGIONS.map((region) => {
+            const waiting = region.id !== 'full' && !view.regionsReady;
+            return (
+              <button
+                key={region.id}
+                type="button"
+                class={view.focus === region.id ? 'chip on' : 'chip'}
+                aria-pressed={view.focus === region.id}
+                disabled={waiting}
+                onClick={() => creatorCommands.setFocus(region.id)}
+              >
+                {region.label}
+              </button>
+            );
+          })}
           <button
-            key={focus}
             type="button"
-            class={view.focus === focus ? 'chip on' : 'chip'}
-            aria-pressed={view.focus === focus}
-            onClick={() => creatorCommands.setFocus(focus)}
+            class={view.turntable ? 'chip on' : 'chip'}
+            aria-pressed={view.turntable}
+            onClick={() => creatorCommands.setTurntable(!view.turntable)}
           >
-            {label(focus)}
+            Turn
           </button>
-        ))}
-        <button
-          type="button"
-          class={view.turntable ? 'chip on' : 'chip'}
-          aria-pressed={view.turntable}
-          onClick={() => creatorCommands.setTurntable(!view.turntable)}
-        >
-          Turn
-        </button>
-        {props.busy ? <span class="spinner" role="status" aria-label="Building avatar" /> : null}
+          {props.busy ? <span class="spinner" role="status" aria-label="Building avatar" /> : null}
+        </div>
+        <p class="tb-heading" data-selected-slot={view.slot}>
+          {label(view.slot)}
+          {wornHere ? ` · ${label(view.garment)}` : ' · Empty'}
+        </p>
+        {view.homes.length > 1 ? (
+          <p class="note">Occupies {view.homes.map(label).join(', ')}.</p>
+        ) : null}
       </div>
       <div class="tb-wardrobe-columns">
         <div class="tb-wardrobe-layers tb-scroll" role="listbox" aria-label="Layers">
@@ -56,11 +68,7 @@ export function WardrobeScreen(props: { view: CreatorView; busy: boolean; confir
             </button>
           ))}
         </div>
-        <div class="tb-wardrobe-detail">
-          <p class="tb-heading">{wornHere ? label(view.garment) : 'Empty'}</p>
-          {view.homes.length > 1 ? (
-            <p class="note">Occupies {view.homes.map(label).join(', ')}.</p>
-          ) : null}
+        <div class="tb-wardrobe-detail tb-scroll">
           {view.states.map((state) => (
             <label class="field" key={state.name}>
               <span>{label(state.name)}</span>
@@ -135,7 +143,7 @@ export function WardrobeScreen(props: { view: CreatorView; busy: boolean; confir
           ))}
         </div>
       </div>
-      <div class="actions">
+      <div class="actions tb-wardrobe-foot">
         <button
           type="button"
           class="action secondary"

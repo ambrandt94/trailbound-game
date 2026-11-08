@@ -7,16 +7,22 @@ import { manifestFor } from '../../src/platform/storage/slot';
 import { createMemorySettings } from '../../src/platform/settings';
 import { createFetchContentSource } from '../../src/platform/content-source';
 import type { PackedWorld, SaveManifest } from '../../src/core/save/types';
+import { characterForgePaths } from '../../src/render/characters/cf-pin';
 import { MapRenderer } from '../../src/render/map/map-renderer';
 import { describeRecipe, recipeFromStored, recipeHashOf } from '../../src/render/characters/forge';
-import { creatorCommands, creatorView, emptyCreatorView } from '../../src/ui/creator-state';
+import {
+  creatorBusy,
+  creatorCommands,
+  creatorView,
+  emptyCreatorView,
+} from '../../src/ui/creator-state';
 import { skinText } from '../../src/ui/glyphs';
 import { commands, screen } from '../../src/ui/state';
 import { WardrobeScreen } from '../../src/ui/wardrobe';
 import { Game } from '../../src/app/game';
 import type { SaveBackend } from '../../src/core/save/types';
 
-const vendor = path.resolve('public/vendor/character-forge/1.2.0');
+const vendor = path.resolve('public', characterForgePaths().base);
 
 vi.mock('../../src/render/characters/forge', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/render/characters/forge')>();
@@ -105,11 +111,24 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     );
     expect(creatorView.value.paperdoll).toBe(false);
     const rolled = creatorView.value.hash;
+    expect(creatorView.value.regionsReady).toBe(true);
     creatorCommands.setFocus('upper');
+    const upperSlots = [...creatorView.value.slots];
+    expect(creatorView.value.hash).toBe(rolled);
+    expect(upperSlots).toContain('chest');
+    expect(upperSlots).not.toContain('feet');
     creatorCommands.setFocus('lower');
+    const lowerSlots = [...creatorView.value.slots];
+    expect(creatorView.value.hash).toBe(rolled);
+    expect(lowerSlots).toContain('feet');
+    expect(lowerSlots).not.toContain('chest');
+    expect(new Set([...upperSlots, ...lowerSlots]).size).toBe(
+      upperSlots.length + lowerSlots.length,
+    );
     creatorCommands.setFocus('full');
     expect(creatorView.value.hash).toBe(rolled);
     expect(creatorView.value.focus).toBe('full');
+    expect(creatorView.value.slots).toHaveLength(upperSlots.length + lowerSlots.length);
 
     creatorCommands.openPaperdoll();
     const hashes = [creatorView.value.hash];
@@ -159,6 +178,33 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
       expect(creatorView.value.hash).toBe(hashes[index]);
     }
     expect(creatorView.value.hash).toBe(edited);
+    expect(creatorView.value.worn.chest).toBe('tunic');
+    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+
+    const wornBeforeUnequip = creatorView.value.hash;
+    creatorCommands.setSlot('chest');
+    creatorCommands.setGarment('');
+    expect(creatorView.value.errors).toEqual([]);
+    expect(creatorView.value.worn.chest).toBeFalsy();
+    expect(creatorView.value.worn.torso_mid).toBeFalsy();
+    creatorCommands.undo();
+    expect(creatorView.value.hash).toBe(wornBeforeUnequip);
+    expect(creatorView.value.worn.chest).toBe('tunic');
+    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+
+    creatorCommands.setSlot('chest');
+    const alternate = creatorView.value.garments.find(
+      (id) => id !== 'tunic' && id !== creatorView.value.garment,
+    );
+    expect(alternate).toBeTruthy();
+    creatorCommands.setGarment(alternate ?? '');
+    const firstLook = creatorView.value.hash;
+    creatorCommands.setGarment('tunic');
+    const latestLook = creatorView.value.hash;
+    expect(latestLook).not.toBe(firstLook);
+    await waitFor(() => creatorBusy.value === false);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(creatorView.value.hash).toBe(latestLook);
     expect(creatorView.value.worn.chest).toBe('tunic');
     expect(creatorView.value.worn.torso_mid).toBe('tunic');
 

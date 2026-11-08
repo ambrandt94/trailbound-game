@@ -3,21 +3,25 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
+import { readWardrobeCatalog } from '../../src/app/wardrobe-edit';
+import { characterForgePaths } from '../../src/render/characters/cf-pin';
 import {
   checkRecipeEdit,
   describeRecipe,
   editRecipe,
+  forgeEditCatalog,
   forgeStats,
   generateRecipe,
   initForge,
   optionsFor,
   packsForRecipe,
   placeholderAvatar,
+  recipeFromStored,
   recipeHashOf,
   validateGameProfile,
 } from '../../src/render/characters/forge';
 
-const vendor = path.resolve('public/vendor/character-forge/1.2.0');
+const vendor = path.resolve('public', characterForgePaths().base);
 const profile = JSON.parse(readFileSync('content/characters/trailbound.json', 'utf8')) as unknown;
 
 test('a disabled forge returns a placeholder pawn', async () => {
@@ -158,6 +162,42 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
     const hoodLook = describeRecipe(hoodDown);
     expect(hoodLook.outfit.neck_wrap).toMatchObject({ id: 'hood', states: { wear: 'down' } });
     expect(hoodLook.outfit.head_outer?.id).not.toBe('hood');
+
+    const catalog = readWardrobeCatalog(forgeEditCatalog());
+    expect(catalog.catalogVersion).toBe(1);
+    expect(catalog.slots).toEqual(slotOrder);
+    expect(catalog.slotRegions).not.toBeNull();
+    const upper = catalog.slotRegions?.upper ?? [];
+    const lower = catalog.slotRegions?.lower ?? [];
+    expect(catalog.slots.filter((slot) => upper.includes(slot))).toEqual(upper);
+    expect(catalog.slots.filter((slot) => lower.includes(slot))).toEqual(lower);
+    expect(new Set([...upper, ...lower])).toEqual(new Set(catalog.slots));
+    expect(upper.length + lower.length).toBe(catalog.slots.length);
+    expect(catalog.occupation.bandana).toEqual([
+      { when: { wear: 'head' }, slots: ['head_inner'] },
+      { when: { wear: 'mask' }, slots: ['face_lower'] },
+      { when: { wear: 'neck' }, slots: ['neck_wrap'] },
+    ]);
+    expect(catalog.occupation.hood).toEqual([
+      { when: { wear: 'up' }, slots: ['head_outer'] },
+      { when: { wear: 'down' }, slots: ['neck_wrap'] },
+    ]);
+    expect(catalog.occupation.tunic).toEqual([{ when: {}, slots: ['chest', 'torso_mid'] }]);
+    expect(catalog.occupation.riding_boots).toEqual([{ when: {}, slots: ['shins', 'feet'] }]);
+    const bareTunic = editRecipe(tunic, { outfit: { chest: null } });
+    expect(describeRecipe(bareTunic).outfit.chest).toBeNull();
+    expect(describeRecipe(bareTunic).outfit.torso_mid).toBeNull();
+    const bareBoots = editRecipe(boots, { outfit: { shins: null } });
+    expect(describeRecipe(bareBoots).outfit.feet).toBeNull();
+    expect(describeRecipe(bareBoots).outfit.shins).toBeNull();
+
+    const stored = JSON.parse(
+      readFileSync('tests/fixtures/cf-1.2.0-recipes.json', 'utf8'),
+    ) as Record<string, { hash: string; engine: unknown }>;
+    for (const row of Object.values(stored)) {
+      const loaded = recipeFromStored(row.engine, 0);
+      expect(recipeHashOf(loaded)).toBe(row.hash);
+    }
   } finally {
     restoreFetch();
   }

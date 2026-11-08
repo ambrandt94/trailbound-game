@@ -279,6 +279,16 @@ export function forgeCatalog(): ForgeCatalog | null {
   return catalog;
 }
 
+/** Live edit catalog, including slot regions and garment occupation when the pin provides them. */
+export function forgeEditCatalog(): unknown | null {
+  if (!cf?.editCatalog || !status.ok) return null;
+  try {
+    return cf.editCatalog();
+  } catch {
+    return null;
+  }
+}
+
 export function forgeTimings(): ForgeTimings {
   return { initMs: status.initMs, buildMs };
 }

@@ -77,6 +77,8 @@ export interface CreatorView {
   dyes: DyeView[];
   paperdoll: boolean;
   focus: 'full' | 'upper' | 'lower';
+  /** Upper and lower lists exist only when the edit catalog published slot regions. */
+  regionsReady: boolean;
   states: StateView[];
   homes: string[];
   notice: string;
@@ -221,6 +223,7 @@ export function emptyCreatorView(): CreatorView {
     dyes: [],
     paperdoll: false,
     focus: 'full',
+    regionsReady: false,
     states: [],
     homes: [],
     notice: '',
