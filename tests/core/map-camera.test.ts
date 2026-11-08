@@ -25,6 +25,15 @@ test('a free zoom eases and keeps the cursor point fixed', () => {
   expect(camera.scale).toBeGreaterThan(1.05);
 });
 
+test('a 16× continent is framed like the original 192-tile map', () => {
+  const camera = new MapCamera();
+  camera.frame(3072, 3072, 1600, 800);
+  expect(camera.step).toBe(16);
+  expect(camera.scale).toBeCloseTo(0.26, 5);
+  expect(camera.state().x).toBeCloseTo(100, 5);
+  expect(camera.state().y).toBeCloseTo(50, 5);
+});
+
 test('close zoom snaps a world pixel onto a whole screen pixel', () => {
   expect(pixelSnapScale(0.016)).toBeCloseTo(0.016, 5);
   expect(pixelSnapScale(3.6) * 16).toBe(58);

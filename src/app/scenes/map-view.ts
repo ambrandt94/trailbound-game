@@ -12,15 +12,11 @@ import {
 import {
   MAP_ZOOM_CAP,
   METERS_PER_WORLD_TILE,
-  TILE,
-  chunkKey,
   formatMapClockRate,
   mapClockHoursPerRealSec,
   travelChargePaceMps,
   travelSpeedTilesPerSec,
-  type ChunkData,
 } from '../../core/world/models';
-import { chunkDetailWanted } from '../../render/map/detail-lod';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
 import {
@@ -75,11 +71,12 @@ export class MapView implements Scene {
     const sprint =
       this.host.keyboard.isDown('ShiftLeft') || this.host.keyboard.isDown('ShiftRight');
     const move = this.host.keyboard.mapAxis();
-    const rate = mapClockHoursPerRealSec(this.camera.scale);
-    if (this.camera.scale < SETTLEMENT_STOP_SCALE) this.settlementHold = null;
+    const motionScale = this.camera.scale / this.camera.step;
+    const rate = mapClockHoursPerRealSec(motionScale);
+    if (motionScale < SETTLEMENT_STOP_SCALE) this.settlementHold = null;
     if ((move.x !== 0 || move.y !== 0) && world.data && !this.settlementHold) {
       this.camera.follow = true;
-      const speed = travelSpeedTilesPerSec('overworld', sprint, this.camera.scale);
+      const speed = travelSpeedTilesPerSec('overworld', sprint, motionScale);
       const dist = speed * dt;
       const len = Math.hypot(move.x, move.y);
       const step = clampStepToSettlement(
@@ -88,7 +85,7 @@ export class MapView implements Scene {
         world.hero.y,
         (move.x / len) * dist,
         (move.y / len) * dist,
-        this.camera.scale,
+        motionScale,
       );
       world.moveHero(step.dx, step.dy);
       const travelled = Math.hypot(step.dx, step.dy);
@@ -121,24 +118,6 @@ export class MapView implements Scene {
       this.diveShown = 0;
     }
     this.camera.update(dt, world.hero.x, world.hero.y);
-    if (world.data && chunkDetailWanted(this.camera.scale)) {
-      const canvas = this.host.mapCanvas;
-      const halfW = canvas.clientWidth / (2 * this.camera.scale) / TILE;
-      const halfH = canvas.clientHeight / (2 * this.camera.scale) / TILE;
-      const x0 = Math.max(0, Math.floor(this.camera.x - halfW - 1));
-      const y0 = Math.max(0, Math.floor(this.camera.y - halfH - 1));
-      const x1 = Math.min(world.data.width - 1, Math.ceil(this.camera.x + halfW + 1));
-      const y1 = Math.min(world.data.height - 1, Math.ceil(this.camera.y + halfH + 1));
-      world.ensureChunks(x0, y0, x1, y1, 8);
-      const visible: ChunkData[] = [];
-      for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
-          const chunk = world.chunks.get(chunkKey(x, y));
-          if (chunk) visible.push(chunk);
-        }
-      }
-      this.host.syncChunks(visible);
-    }
     if (this.host.keyboard.consumePress('Enter')) this.host.enterArea();
   }
 
@@ -160,7 +139,7 @@ export class MapView implements Scene {
       placeName.value = stand.name;
       placeTier.value = stand.tier;
       placeKind.value = stand.kind;
-      clockRate.value = formatMapClockRate(this.camera.scale);
+      clockRate.value = formatMapClockRate(this.camera.scale / this.camera.step);
       const shown = stand.canEnter ? Math.max(this.dive.intent, this.diveShown) : 0;
       diveIntent.value = shown;
       diveCue.value = diveCueAmount(this.camera.scale, shown, stand.canEnter);

@@ -105,29 +105,8 @@ export class MapRenderer {
     }
     if (this.bakedFor !== world) this.bake(world);
     const paintStarted = performance.now();
-    const drawnEarly = this.skinId === 'trailbound48' ? crispCamera(camera) : camera;
+    const drawnEarly = camera;
     this.worldRenderer.chunkDestPx = Math.max(1, TILE * drawnEarly.scale);
-    if (this.skinId === 'trailbound48' && this.trailbound?.coarseMip) {
-      this.trailbound.stepViewMips(
-        world,
-        drawnEarly.x,
-        drawnEarly.y,
-        drawnEarly.scale,
-        cssW,
-        cssH,
-        40,
-      );
-    } else if (this.skinId === 'trailbound48') {
-      this.worldRenderer.stepFarSheet(world, drawnEarly.x, drawnEarly.y, 4);
-      if (!this.detailDone) {
-        const done = this.worldRenderer.stepOverview(world, 8);
-        if (done) {
-          this.detailDone = true;
-          this.detailMs = now - this.overviewStarted;
-          this.worldRenderer.detailMs = this.detailMs;
-        }
-      }
-    }
     const frame = Math.floor(now / 220) % 4;
     if (frame !== this.waterStamp) {
       this.waterStamp = frame;
@@ -258,7 +237,7 @@ export class MapRenderer {
   }
 
   private bake(world: WorldData): void {
-    this.worldRenderer.terrain = this.skinId === 'trailbound48' ? this.trailbound : null;
+    this.worldRenderer.terrain = null;
     this.overviewStarted = performance.now();
     this.detailDone = this.skinId !== 'trailbound48';
     this.regionCache.clear();
@@ -267,22 +246,4 @@ export class MapRenderer {
     this.bakeMs = this.worldRenderer.bakeMs;
     this.detailMs = 0;
   }
-}
-
-/** Screen pixels per world tile land on a divisor of the 48 px art when zoomed in. */
-function crispCamera(camera: CameraState): CameraState {
-  const px = TILE * camera.scale;
-  if (px < 8) return camera;
-  // 12, 24 and 48 keep the 48 px tiles on whole source pixels. 16 px would throw away the shore curves.
-  const steps = [12, 24, 48, 96, 144];
-  let best = steps[0] ?? 24;
-  let bestDistance = Infinity;
-  for (const step of steps) {
-    const distance = Math.abs(step - px);
-    if (distance < bestDistance || (distance === bestDistance && step > best)) {
-      best = step;
-      bestDistance = distance;
-    }
-  }
-  return { ...camera, scale: best / TILE, targetScale: best / TILE };
 }
