@@ -151,14 +151,42 @@ function landMask(
   seed: number,
   sketch: Float32Array | null,
 ): number {
-  if (style !== 'custom') return styleMask(nx, ny, style, seed);
-  if (!sketch) return styleMask(nx, ny, 'continent', seed);
-  const warp = (fbm(nx * 3.1, ny * 2.9, seed + 71, 3) - 0.5) * 0.04;
-  const warpY = (fbm(ny * 2.9, nx * 3.0, seed + 88, 3) - 0.5) * 0.04;
-  const drawn = sampleLandSketch(sketch, nx + warp, ny + warpY);
-  if (drawn < 0.08) return 0;
-  const nibble = (fbm(nx * 11, ny * 11, seed + 19, 2) - 0.5) * 0.1 * drawn;
-  return clamp(drawn * 0.96 + nibble, 0, 1);
+  if (style === 'custom') {
+    if (!sketch) return sampleLandMask(nx, ny, 'continent', seed);
+    const warp = (fbm(nx * 3.1, ny * 2.9, seed + 71, 3) - 0.5) * 0.04;
+    const warpY = (fbm(ny * 2.9, nx * 3.0, seed + 88, 3) - 0.5) * 0.04;
+    const drawn = sampleLandSketch(sketch, nx + warp, ny + warpY);
+    if (drawn < 0.08) return 0;
+    const nibble = (fbm(nx * 11, ny * 11, seed + 19, 2) - 0.5) * 0.1 * drawn;
+    return clamp(drawn * 0.96 + nibble, 0, 1);
+  }
+  return sampleLandMask(nx, ny, style, seed);
+}
+
+/**
+ * Pull every coastline inside an ocean margin of about 6%. The margin line is
+ * warped, so land does not end on a straight cut. Lakes and highlands stay
+ * full-frame on purpose.
+ */
+export function sampleLandMask(nx: number, ny: number, style: MapStyle, seed: number): number {
+  const mask = styleMask(nx, ny, style, seed);
+  if (style === 'lakes' || style === 'highlands') return mask;
+  return applyOceanMargin(mask, nx, ny, seed);
+}
+
+function applyOceanMargin(mask: number, nx: number, ny: number, seed: number): number {
+  const raw = Math.min(nx, ny, 1 - nx, 1 - ny);
+  if (raw < 0.025) return 0;
+  const wx = (fbm(nx * 2.4, ny * 2.05, seed + 801, 3) - 0.5) * 0.16;
+  const wy = (fbm(ny * 2.25, nx * 2.1, seed + 823, 3) - 0.5) * 0.16;
+  const x = nx + wx;
+  const y = ny + wy;
+  const edge = Math.min(x, y, 1 - x, 1 - y);
+  const wander = (fbm(nx * 6.4, ny * 5.8, seed + 847, 3) - 0.5) * 0.07;
+  const shore = 0.06 + wander;
+  if (edge >= shore + 0.045) return mask;
+  const t = (edge - (shore - 0.03)) / 0.075;
+  return mask * clamp(t, 0, 1);
 }
 
 /** Authored land styles. `random` is resolved from the seed before the mask is built. */
@@ -209,17 +237,13 @@ export function continentMask(nx: number, ny: number, seed: number): number {
   const islands = Math.floor(hash2(12, 13, seed) * 3);
   for (let i = 0; i < islands; i++) {
     const ang = hash2(140 + i, 5, seed) * Math.PI * 2;
-    const dist = 0.26 + hash2(160 + i, 6, seed) * 0.1;
+    const dist = 0.22 + hash2(160 + i, 6, seed) * 0.08;
     const ix = cx + Math.cos(ang) * dist;
     const iy = cy + Math.sin(ang) * dist;
-    const tight = 7.2 + hash2(180 + i, 7, seed) * 3.2;
-    mask = Math.max(mask, bump(wx, wy, ix, iy, tight, tight * 1.12) * 0.78);
+    const tight = 8.4 + hash2(180 + i, 7, seed) * 2.4;
+    mask = Math.max(mask, bump(wx, wy, ix, iy, tight, tight * 1.12) * 0.72);
   }
-  const edge = Math.min(nx, ny, 1 - nx, 1 - ny);
-  const margin = 0.06;
-  if (edge < margin) return 0;
-  const gate = Math.min(1, (edge - margin) / 0.035);
-  return clamp(mask * gate, 0, 1);
+  return clamp(mask, 0, 1);
 }
 
 function styleMask(nx: number, ny: number, style: MapStyle, seed: number): number {

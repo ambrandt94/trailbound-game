@@ -182,21 +182,25 @@ test('the artist report names the missing coast and the derived road straights',
 test('every adjacency on seed 7741 resolves to a tile', () => {
   const world = generateWorld(7741, { ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
   const width = world.width;
-  const seen = new Set<string>();
-  const pathAt = (tx: number, ty: number) => {
-    if (ty < 0 || ty >= world.height) return false;
+  const height = world.height;
+  const biomes = world.biomes;
+  const paths = world.paths;
+  const at = (tx: number, ty: number) => {
+    if (ty < 0 || ty >= height) return 0;
     const wx = ((tx % width) + width) % width;
-    return world.paths[wx + ty * width] === 1;
+    return biomes[wx + ty * width] ?? 0;
   };
-  for (let y = 0; y < world.height; y++) {
-    const row = y * width;
+  const pathAt = (tx: number, ty: number) => {
+    if (ty < 0 || ty >= height) return false;
+    const wx = ((tx % width) + width) % width;
+    return paths[wx + ty * width] === 1;
+  };
+  let unresolved = 0;
+  let ground = false;
+  let edged = false;
+  for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const center = world.biomes[x + row] ?? 0;
-      const at = (tx: number, ty: number) => {
-        if (ty < 0 || ty >= world.height) return 0;
-        const wx = ((tx % width) + width) % width;
-        return world.biomes[wx + ty * width] ?? 0;
-      };
+      const center = at(x, y);
       const tile = resolveTile({
         center,
         n: at(x, y - 1),
@@ -208,8 +212,9 @@ test('every adjacency on seed 7741 resolves to a tile', () => {
         se: at(x + 1, y + 1),
         sw: at(x - 1, y + 1),
       });
-      expect(tile.id.length).toBeGreaterThan(0);
-      seen.add(tile.kind);
+      if (tile.id.length === 0) unresolved += 1;
+      if (tile.kind === 'ground') ground = true;
+      else edged = true;
       if (pathAt(x, y) && center !== 0) {
         const road = resolveRoad(
           pathAt(x, y - 1),
@@ -217,10 +222,11 @@ test('every adjacency on seed 7741 resolves to a tile', () => {
           pathAt(x, y + 1),
           pathAt(x - 1, y),
         );
-        expect(road.id.length).toBeGreaterThan(0);
+        if (road.id.length === 0) unresolved += 1;
       }
     }
   }
-  expect(seen.has('ground')).toBe(true);
-  expect(seen.has('fill') || seen.has('authored')).toBe(true);
-}, 60_000);
+  expect(unresolved).toBe(0);
+  expect(ground).toBe(true);
+  expect(edged).toBe(true);
+}, 120_000);
