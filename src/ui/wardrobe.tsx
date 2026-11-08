@@ -123,6 +123,11 @@ export function WardrobeScreen(props: { view: CreatorView; busy: boolean; confir
             </button>
           </div>
           {view.notice ? <p class="note">{skinText(view.notice)}</p> : null}
+          {view.warnings.map((warning) => (
+            <p class="note" key={warning}>
+              {skinText(warning)}
+            </p>
+          ))}
           {view.errors.map((error) => (
             <p class="note warn" key={error}>
               {skinText(error)}
