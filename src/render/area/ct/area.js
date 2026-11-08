@@ -9,6 +9,7 @@ import {
   stepEdgeLeave,
   clampClearance,
 } from '../../../core/area/edge-leave.ts';
+import { useOakSeed } from '../oak-batch.ts';
 /* AreaExport v0.1–v0.4 → a smooth heightmapped level.
    Schema: world-map src/app/engine/area-export.ts (types win over the field guide).
    Loaded by ?area=, a dropped JSON file, or postMessage {type:'tb-area', payload}.
@@ -1976,6 +1977,10 @@ if(typeof console!=="undefined")console.info("tb weld",root.userData.tbWeld);
 function disposeGroup(){
 if(!group)return;
 group.traverse(function(o){
+if(o.isInstancedMesh&&o.userData&&o.userData.tbOak){
+if(o.morphTexture&&o.morphTexture.dispose)o.morphTexture.dispose();
+if(o.instanceMatrix&&o.instanceMatrix.dispose)o.instanceMatrix.dispose();
+}
 if(o.geometry&&o.geometry.dispose&&!(o.geometry.userData&&o.geometry.userData.tbKeep))o.geometry.dispose();
 if(o.userData&&o.userData.tbOwnMat&&o.material&&o.material.dispose&&!(o.material.userData&&o.material.userData.tbKeep))o.material.dispose();
 });
@@ -2049,7 +2054,15 @@ else go();
 function primeCharacters(){
 try{if(window.TBCharacters&&TBCharacters.init)TBCharacters.init();}catch(e){}
 }
+function areaSeedOf(p){
+const place=p&&p.area&&p.area.placeSeed;
+if(typeof place==="number"&&isFinite(place))return place;
+const world=p&&p.source&&p.source.seed;
+if(typeof world==="number"&&isFinite(world))return world;
+return 1;
+}
 function build(p){
+useOakSeed(areaSeedOf(p));
 window.__tbEntry={t0:(typeof performance!=="undefined"?performance.now():Date.now()),sceneMs:0,firstBodyMs:0,allBodiesMs:0,count:0,charInitMs:window.__tbCharInitMs||0,packsMs:0};
 if(!ctx||!ctx.scene)throw new Error("scene not ready");
 if(typeof THREE==="undefined")throw new Error("THREE missing");

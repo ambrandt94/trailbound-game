@@ -3,6 +3,8 @@
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
 import { THREE } from './three-runtime.js';
+import { acceptsOak, bootOaks, scatterOaks } from '../oak-batch.ts';
+bootOaks();
 /* AreaExport props, wagon-yard slots and host_* markers.
    Kit name → placeholder (bbox, pivot, family colour, flat bands). One
    InstancedMesh per kit part, so a later GLB can replace `model` on the
@@ -592,8 +594,18 @@ return keepT.concat(keepC,other.slice(0,600));
 }
 function scatter(group,items,groundY){
 if(typeof THREE==="undefined"||!items.length)return;
+/* Broadleaf kits draw as authored oaks. Conifers and the rest stay placeholders. */
+const rest=[];
+const oaks=[];
+for(let i=0;i<items.length;i++){
+const it=items[i];
+if(acceptsOak(it.kit))oaks.push(it);
+else rest.push(it);
+}
+if(oaks.length)scatterOaks(group,oaks,groundY);
+if(!rest.length)return;
 const bins={};
-items.forEach(function(it){(bins[it.kit]||(bins[it.kit]=[])).push(it);});
+rest.forEach(function(it){(bins[it.kit]||(bins[it.kit]=[])).push(it);});
 Object.keys(bins).forEach(function(kit){
 const list=bins[kit],spec=specOf(kit);
 if(!spec)return;
