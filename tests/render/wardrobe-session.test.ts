@@ -192,6 +192,21 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     expect(creatorView.value.worn.chest).toBe('tunic');
     expect(creatorView.value.worn.torso_mid).toBe('tunic');
 
+    creatorCommands.setFocus('upper');
+    expect(creatorView.value.hash).toBe(wornBeforeUnequip);
+    expect(creatorView.value.slots).toContain('torso_mid');
+    creatorCommands.setSlot('torso_mid');
+    expect(creatorView.value.slot).toBe('torso_mid');
+    creatorCommands.setGarment('');
+    expect(creatorView.value.errors, creatorView.value.errors.join('; ')).toEqual([]);
+    expect(creatorView.value.worn.chest).toBeFalsy();
+    expect(creatorView.value.worn.torso_mid).toBeFalsy();
+    creatorCommands.undo();
+    expect(creatorView.value.hash).toBe(wornBeforeUnequip);
+    expect(creatorView.value.worn.chest).toBe('tunic');
+    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+    creatorCommands.setFocus('full');
+
     creatorCommands.setSlot('chest');
     const alternate = creatorView.value.garments.find(
       (id) => id !== 'tunic' && id !== creatorView.value.garment,
@@ -239,6 +254,21 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     expect(savedHash.startsWith('ph:')).toBe(false);
     expect(creatorView.value.worn.feet).toBe('riding_boots');
     expect(creatorView.value.worn.shins).toBe('riding_boots');
+
+    creatorCommands.setFocus('lower');
+    expect(creatorView.value.hash).toBe(savedHash);
+    expect(creatorView.value.slots).toContain('feet');
+    creatorCommands.setSlot('feet');
+    expect(creatorView.value.slot).toBe('feet');
+    creatorCommands.setGarment('');
+    expect(creatorView.value.errors, creatorView.value.errors.join('; ')).toEqual([]);
+    expect(creatorView.value.worn.feet).toBeFalsy();
+    expect(creatorView.value.worn.shins).toBeFalsy();
+    creatorCommands.undo();
+    expect(creatorView.value.hash).toBe(savedHash);
+    expect(creatorView.value.worn.feet).toBe('riding_boots');
+    expect(creatorView.value.worn.shins).toBe('riding_boots');
+    creatorCommands.setFocus('full');
 
     creatorCommands.confirm();
     await waitFor(() => saves.writes === 1 && screen.value === 'title');
