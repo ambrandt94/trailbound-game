@@ -66,7 +66,13 @@ return SUN0.clone().applyQuaternion(_q);
 function warmColor(w){
 const c=new THREE.Color(0xfff0c8);
 if(w>0)c.lerp(new THREE.Color(0xffb060), Math.min(1,w));
-else if(w<0)c.lerp(new THREE.Color(0xd0e6ff), Math.min(1,-w));
+else if(w<0)c.lerp(new THREE.Color(0x6a8ee0), Math.min(1,-w));
+return c;
+}
+function hemiSky(w){
+const c=new THREE.Color(0xbfe6ff);
+if(w>0.2)c.lerp(new THREE.Color(0xffc090), Math.min(1,(w-0.2)/0.8));
+else if(w<-0.2)c.lerp(new THREE.Color(0x4a68b0), Math.min(1,(-w-0.2)/0.8));
 return c;
 }
 function coolGround(c){
@@ -161,6 +167,7 @@ const legacy=Math.PI;
 ctx.sun.intensity=(+v.sunIntensity)*legacy;
 ctx.sun.color.copy(warmColor(+v.sunWarmth||0));
 ctx.hemi.intensity=(+v.hemi)*legacy;
+ctx.hemi.color.copy(hemiSky(+v.sunWarmth||0));
 if(window.TBTiles&&TBTiles.shade){
 const sc=ctx.sun.color,mx=Math.max(sc.r,sc.g,sc.b,1e-4);
 TBTiles.shade.uSunCol.value.set(sc.r/mx,sc.g/mx,sc.b/mx);

@@ -31,20 +31,29 @@ test('lighting bands follow TU, and night stays a readable blue', () => {
   expect(dayBand(75)).toBe('night');
   expect(dayBand(99)).toBe('night');
   const day = dayLightAt(12);
-  const night = dayLightAt(21);
+  const dusk = dayLightAt(16.8);
+  const night = dayLightAt(22);
   expect(day.band).toBe('day');
+  expect(dusk.band).toBe('dusk');
   expect(night.band).toBe('night');
-  expect(night.sunIntensity).toBeGreaterThan(0.2);
-  expect(night.sunIntensity).toBeLessThan(day.sunIntensity);
+  expect(dusk.sunWarmth).toBeGreaterThan(0.7);
+  expect(dusk.sunIntensity).toBeLessThan(day.sunIntensity);
+  expect(dusk.sunIntensity).toBeGreaterThan(night.sunIntensity);
+  expect(night.sunIntensity).toBeGreaterThan(0.12);
+  expect(night.sunIntensity).toBeLessThan(0.4);
+  expect(night.hemi).toBeLessThan(day.hemi * 0.6);
+  expect(night.sunWarmth).toBeLessThan(-0.7);
+  expect(night.shadeCool).toBeGreaterThan(1.4);
+  expect(night.shadowSoft).toBeGreaterThan(2);
   expect(night.skyTop).not.toBe('#000000');
+  const nightSky = Number.parseInt(night.skyTop.slice(5, 7), 16);
+  const nightRed = Number.parseInt(night.skyTop.slice(1, 3), 16);
+  expect(nightSky).toBeGreaterThan(nightRed);
   expect(night.mapNight).toBeGreaterThan(day.mapNight);
   const edge = dayLightAt((10 / 100) * 24);
   expect(edge.band).toBe('day');
   expect(edge.sunHour).toBeGreaterThan(dayLightAt(1).sunHour);
-  const deep = dayLightAt(22);
-  expect(deep.band).toBe('night');
-  expect(deep.sunHour).toBeLessThan(6);
-  expect(deep.sunIntensity).toBeLessThan(0.7);
+  expect(night.sunHour).toBeLessThan(6);
 });
 
 test('areas run at about a third of the map clock', () => {
