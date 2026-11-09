@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import type { PlayerProfileEntry } from '../../core/people/avatar';
+import { CF_PIN, characterForgePaths } from './cf-pin';
 
 export interface ForgeStatus {
   ok: boolean;
@@ -84,10 +85,17 @@ export interface SliderSpec {
   group?: string;
 }
 
+export interface GarmentStateSpec {
+  options: string[];
+  default: string;
+}
+
 export interface GarmentOption {
   id: string;
   dyeRegions: string[];
   hairStates: Record<string, string> | null;
+  /** State names and legal values from CF.options. Empty when the garment has none. */
+  states: Record<string, GarmentStateSpec>;
 }
 
 export interface EditOptions {
@@ -269,6 +277,16 @@ export function forgeReady(): ForgeStatus {
 
 export function forgeCatalog(): ForgeCatalog | null {
   return catalog;
+}
+
+/** Live edit catalog, including slot regions and garment occupation when the pin provides them. */
+export function forgeEditCatalog(): unknown | null {
+  if (!cf?.editCatalog || !status.ok) return null;
+  try {
+    return cf.editCatalog();
+  } catch {
+    return null;
+  }
 }
 
 export function forgeTimings(): ForgeTimings {
@@ -486,6 +504,14 @@ async function runInit(options: InitOptions): Promise<ForgeStatus> {
       throw new Error('character runtime api mismatch');
     }
     await api.init({ THREE, baseUrl: options.baseUrl ?? defaultBaseUrl() });
+    const runtimeVersion = api.bundle?.engine?.version ?? api.version ?? '';
+    const generatorVersion = api.bundle?.generator?.version;
+    if (runtimeVersion !== CF_PIN.version || generatorVersion !== Number(CF_PIN.generatorVersion)) {
+      throw new Error(
+        `character runtime ${runtimeVersion} generator ${String(generatorVersion)} does not match pin ${CF_PIN.version} generator ${CF_PIN.generatorVersion}`,
+      );
+    }
+    if (api.api !== 1) throw new Error('character runtime api mismatch');
     cf = api;
     pixelSun = typeof api.pixelSun === 'function' ? api.pixelSun.bind(api) : null;
     catalog = readCatalog(api);
@@ -680,14 +706,14 @@ function normalizeOptions(value: unknown): EditOptions {
       if (!Array.isArray(list)) continue;
       slots[slot] = list
         .map((item) => {
-          if (typeof item === 'string') return { id: item, dyeRegions: [], hairStates: null };
+          if (typeof item === 'string')
+            return { id: item, dyeRegions: [], hairStates: null, states: {} };
           const record = isRecord(item) ? item : {};
           return {
             id: typeof record.id === 'string' ? record.id : '',
-            dyeRegions: Array.isArray(record.dyeRegions)
-              ? record.dyeRegions.filter((region): region is string => typeof region === 'string')
-              : [],
+            dyeRegions: dyeNames(record.dyeRegions),
             hairStates: isRecord(record.hairStates) ? stringMap(record.hairStates) : null,
+            states: stateSpecs(record.states),
           };
         })
         .filter((item) => item.id);
@@ -762,10 +788,9 @@ function offlineOptions(
       const regions = Array.isArray(row.dyeRegions) ? row.dyeRegions : [];
       return {
         id,
-        dyeRegions: regions
-          .map((region) => (isRecord(region) && typeof region.name === 'string' ? region.name : ''))
-          .filter((name) => name.length > 0),
+        dyeRegions: dyeNames(regions),
         hairStates: isRecord(row.hairStates) ? stringMap(row.hairStates) : null,
+        states: stateSpecs(row.states),
       };
     });
   }
@@ -911,6 +936,30 @@ function strings(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
+function dyeNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((region) => {
+      if (typeof region === 'string') return region;
+      return isRecord(region) && typeof region.name === 'string' ? region.name : '';
+    })
+    .filter((name) => name.length > 0);
+}
+
+function stateSpecs(value: unknown): Record<string, GarmentStateSpec> {
+  if (!isRecord(value)) return {};
+  const specs: Record<string, GarmentStateSpec> = {};
+  for (const [name, spec] of Object.entries(value)) {
+    if (!isRecord(spec)) continue;
+    const options = strings(spec.options);
+    if (options.length === 0) continue;
+    const fallback = options[0] ?? '';
+    const preferred = typeof spec.default === 'string' ? spec.default : fallback;
+    specs[name] = { options, default: options.includes(preferred) ? preferred : fallback };
+  }
+  return specs;
+}
+
 function stringMap(value: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, item] of Object.entries(value)) {
@@ -954,11 +1003,11 @@ function queryDisablesForge(): boolean {
 }
 
 function defaultRuntimeUrl(): string {
-  return resolvePublic('vendor/character-forge/1.2.0/cf-runtime.mjs');
+  return resolvePublic(characterForgePaths().runtime);
 }
 
 function defaultBaseUrl(): string {
-  return resolvePublic('vendor/character-forge/1.2.0/');
+  return resolvePublic(characterForgePaths().base);
 }
 
 function resolvePublic(path: string): string {

@@ -512,6 +512,7 @@ export class Game implements GameHost {
       new CharacterCreatorScene(this, {
         intent,
         initial: this.world.avatar,
+        paperdoll: intent === 'edit',
         onConfirm: async (avatar) => {
           this.world.setAvatar(avatar);
           await this.persist();

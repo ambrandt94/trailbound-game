@@ -58,6 +58,9 @@ test('schema 3 gains a player avatar and keeps the hero', () => {
   expect(result.core?.player.avatar?.name).toBe('Mara');
   expect(result.core?.player.mapY).toBe(2);
   expect(result.core?.clockHours).toBe(8);
+  expect(result.manifest.player.avatar?.recipe).toBeUndefined();
+  expect(result.core?.player.avatar?.recipe).toBeUndefined();
+  expect(result.core?.player.avatar?.recipeHash).toBe('');
 });
 
 test('schemas other than 3 and 4 are rejected', () => {

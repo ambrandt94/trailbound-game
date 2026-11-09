@@ -6,12 +6,12 @@ import {
   creatorSource,
   creatorView,
   newWorldLand,
-  type DyeView,
   type PartView,
   type SliderView,
   type SwatchView,
 } from './creator-state';
 import { skinText } from './glyphs';
+import { WardrobeScreen } from './wardrobe';
 
 function pretty(id: string): string {
   const bare = id
@@ -105,31 +105,14 @@ function PartSelect(props: { part: PartView }) {
   );
 }
 
-function DyeRow(props: { dye: DyeView }) {
-  return (
-    <div class="field">
-      <span>{pretty(props.dye.region)}</span>
-      <div class="swatches" aria-label={`${props.dye.region} dye`}>
-        {props.dye.swatches.map((channels, index) => (
-          <button
-            key={`${props.dye.region}-${index}`}
-            type="button"
-            class="swatch"
-            style={{ background: rgb(channels) }}
-            aria-label={`${pretty(props.dye.region)} ${rgb(channels)}`}
-            onClick={() => creatorCommands.setDye(props.dye.region, channels)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function CreatorScreen() {
   const view = creatorView.value;
   const busy = creatorBusy.value;
   const source = creatorSource.value;
   const confirmLabel = view.intent === 'edit' ? 'Save avatar' : 'Take the road';
+  if (view.paperdoll) {
+    return <WardrobeScreen view={view} busy={busy} confirmLabel={confirmLabel} />;
+  }
   return (
     <section class="creator tb-scroll">
       <div class="creator-copy">
@@ -415,48 +398,10 @@ export function CreatorScreen() {
         />
       ))}
 
-      <div class="slot-block wardrobe-selection" data-surface="wardrobe">
-        <p class="slot-title">Clothes</p>
-        <div class="slot-grid">
-          <label class="field">
-            <span>Slot</span>
-            <select
-              aria-label="Garment slot"
-              value={view.slot}
-              onChange={(event) => {
-                const target = event.currentTarget;
-                if (target instanceof HTMLSelectElement) creatorCommands.setSlot(target.value);
-              }}
-            >
-              {view.slots.map((slot) => (
-                <option key={slot} value={slot}>
-                  {pretty(slot)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label class="field">
-            <span>Garment</span>
-            <select
-              aria-label="Garment"
-              value={view.garment}
-              onChange={(event) => {
-                const target = event.currentTarget;
-                if (target instanceof HTMLSelectElement) creatorCommands.setGarment(target.value);
-              }}
-            >
-              <option value="">None</option>
-              {view.garments.map((garment) => (
-                <option key={garment} value={garment}>
-                  {pretty(garment)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {view.dyes.map((dye) => (
-          <DyeRow key={dye.region} dye={dye} />
-        ))}
+      <div class="actions">
+        <button type="button" class="action" onClick={() => creatorCommands.openPaperdoll()}>
+          Wardrobe
+        </button>
       </div>
 
       {view.intent === 'new' ? (

@@ -96,9 +96,7 @@ export class AvatarPreview {
   }
 
   frameBody(): void {
-    this.distance = 2.45;
-    this.pitch = 0.26;
-    this.target.set(0, 0.95, 0);
+    this.frameFocus('full');
   }
 
   frameFace(): void {
@@ -106,6 +104,41 @@ export class AvatarPreview {
     this.distance = 1.65;
     this.pitch = 0.08;
     this.target.set(0, top - 0.08, 0);
+  }
+
+  /** Full, upper, or lower view from the live mesh bounds. Does not change a recipe. */
+  frameFocus(part: 'full' | 'upper' | 'lower'): void {
+    const box = this.bodyBox();
+    if (!box) {
+      this.distance = 2.45;
+      this.pitch = 0.26;
+      this.target.set(0, 0.95, 0);
+      return;
+    }
+    const span = Math.max(0.4, box.max.y - box.min.y);
+    const mid = box.min.y + span * 0.5;
+    if (part === 'upper') {
+      this.distance = clamp(Math.max(1.15, span * 0.85), 1.05, 4);
+      this.pitch = 0.1;
+      this.target.set(0, mid + span * 0.22, 0);
+      return;
+    }
+    if (part === 'lower') {
+      this.distance = clamp(Math.max(1.2, span * 0.9), 1.05, 4.5);
+      this.pitch = 0.32;
+      this.target.set(0, box.min.y + span * 0.22, 0);
+      return;
+    }
+    this.distance = clamp(Math.max(2.1, span * 1.35), 1.6, 6);
+    this.pitch = 0.22;
+    this.target.set(0, box.min.y + span * 0.55, 0);
+  }
+
+  private bodyBox(): THREE.Box3 | null {
+    if (!this.body) return null;
+    const box = new THREE.Box3().setFromObject(this.body);
+    if (!Number.isFinite(box.max.y) || box.max.y - box.min.y < 0.2) return null;
+    return box;
   }
 
   update(dt: number): void {

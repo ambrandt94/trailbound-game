@@ -13,6 +13,7 @@ import {
   editRecipe,
   forgeBuildError,
   forgeCatalog,
+  forgeEditCatalog,
   forgeReady,
   generateRecipe,
   initForge,
@@ -40,6 +41,17 @@ import {
 } from '../../ui/creator-state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
+import {
+  chooseStatePatch,
+  diffOutfit,
+  matchOccupation,
+  readWardrobeCatalog,
+  removedPieces,
+  slotsInRegion,
+  type OccupationRow,
+  type SlotRegions,
+  type WardrobeOutfit,
+} from '../wardrobe-edit';
 
 const DEBOUNCE_SECONDS = 0.16;
 const HISTORY_LIMIT = 12;
@@ -50,6 +62,8 @@ export interface CreatorOptions {
   initial: PlayerAvatar;
   onConfirm(avatar: PlayerAvatar): Promise<void> | void;
   onCancel(): Promise<void> | void;
+  /** Edit avatar opens the paperdoll. A new traveller starts on the body page. */
+  paperdoll?: boolean;
 }
 
 interface LookSnap {
@@ -72,6 +86,12 @@ export class CharacterCreatorScene implements Scene {
   private past: LookSnap[] = [];
   private future: LookSnap[] = [];
   private slot = 'head_outer';
+  private paperdoll: boolean;
+  private focus: 'full' | 'upper' | 'lower' = 'full';
+  private slotRegions: SlotRegions | null = null;
+  private occupation: Record<string, OccupationRow[]> = {};
+  private notice = '';
+  private noticeKept = '';
   private facePreset = 'race';
   private warnings: string[] = [];
   private errors: string[] = [];
@@ -103,6 +123,7 @@ export class CharacterCreatorScene implements Scene {
     this.seed = optionsIn.initial.seed >>> 0;
     this.race = optionsIn.initial.race || 'human';
     this.gender = optionsIn.initial.gender === 'f' ? 'f' : 'm';
+    this.paperdoll = optionsIn.paperdoll === true;
   }
 
   async enter(): Promise<void> {
@@ -118,6 +139,7 @@ export class CharacterCreatorScene implements Scene {
       this.profile = null;
     }
     const ready = await initForge({ profile: this.profile });
+    this.readCatalog();
     const catalog = forgeCatalog();
     if (catalog) {
       this.flyerRaces = catalog.flyerRaces;
@@ -210,12 +232,35 @@ export class CharacterCreatorScene implements Scene {
         this.slot = slot;
         this.publish();
       },
-      setGarment: (id) => this.apply({ outfit: { [this.slot]: id || null } }, true),
+      setGarment: (id) => {
+        this.noticeKept = id;
+        this.apply({ outfit: { [this.slot]: id || null } }, true);
+      },
       setDye: (region, rgb) => {
         const worn = this.snap?.outfit[this.slot];
         if (!worn) return;
         this.apply({ dye: { [worn.id]: { [region]: rgb } } }, true);
       },
+      openPaperdoll: () => {
+        this.paperdoll = true;
+        this.focus = 'full';
+        this.preview?.frameFocus('full');
+        this.publish();
+      },
+      closePaperdoll: () => {
+        this.paperdoll = false;
+        this.preview?.frameBody();
+        this.publish();
+      },
+      setFocus: (focus) => {
+        if (focus !== 'full' && !this.slotRegions) return;
+        this.focus = focus;
+        const listed = this.listedSlots();
+        if (listed.length > 0 && !listed.includes(this.slot)) this.slot = listed[0] ?? this.slot;
+        this.preview?.frameFocus(focus);
+        this.publish();
+      },
+      setGarmentState: (name, value) => this.changeState(name, value),
       setClip: (clip) => {
         this.clip = clip;
         this.working?.play(clip);
@@ -279,6 +324,7 @@ export class CharacterCreatorScene implements Scene {
       this.snap = describeRecipe(this.recipe);
       this.errors = [];
       this.warnings = [];
+      this.notice = '';
       this.hash = recipeHashOf(this.recipe);
       if (!this.options.slots[this.slot])
         this.slot = Object.keys(this.options.slots)[0] ?? this.slot;
@@ -287,6 +333,29 @@ export class CharacterCreatorScene implements Scene {
       this.errors = [error instanceof Error ? error.message : 'Could not roll this look'];
       this.publish();
     }
+  }
+
+  private changeState(name: string, value: string): void {
+    const worn = this.snap?.outfit[this.slot];
+    if (!this.recipe || !this.snap || !this.options || !worn) return;
+    const spec = this.options.slots[this.slot]?.find((item) => item.id === worn.id);
+    const states = completeStates(worn.states, spec?.states);
+    states[name] = value;
+    const choice = chooseStatePatch({
+      states,
+      slotOrder: Object.keys(this.options.slots),
+      occupation: this.occupation[worn.id] ?? null,
+      accept: (slot, next) =>
+        checkRecipeEdit(this.recipe!, { outfit: { [slot]: { id: worn.id, states: next } } }).ok,
+    });
+    if (!choice) {
+      this.errors = ['Forge has no accepted occupation for that state.'];
+      this.publish();
+      return;
+    }
+    this.slot = choice.slot;
+    this.noticeKept = worn.id;
+    this.apply({ outfit: { [choice.slot]: { id: worn.id, states: choice.states } } }, true);
   }
 
   private apply(patch: EditPatch, record: boolean): void {
@@ -318,7 +387,15 @@ export class CharacterCreatorScene implements Scene {
     }
     if (record && this.recipe) this.remember();
     this.recipe = next;
+    const previous = this.snap?.outfit;
     this.snap = describeRecipe(next);
+    if (previous && isOutfitPatch(patch)) {
+      this.notice = displacementNote(
+        diffOutfit(wardrobeOutfit(previous), wardrobeOutfit(this.snap.outfit)),
+        this.noticeKept,
+      );
+    }
+    this.noticeKept = '';
     this.errors = [];
     this.warnings = check.warnings.map((issue) => issue.msg);
     this.hash = recipeHashOf(next);
@@ -423,14 +500,15 @@ export class CharacterCreatorScene implements Scene {
         this.note = 'This look could not be built. Showing a stand-in.';
       } else if (body.source === 'forge' && forgeReady().ok) {
         this.note = '';
+        this.hash = body.recipeHash;
       }
       body.play(this.clip);
       const previous = this.working;
       this.working = body;
-      this.hash = body.recipeHash;
       creatorSource.value = body.source;
       creatorSerial.value += 1;
       this.preview?.setBody(body.object3D);
+      if (this.paperdoll) this.preview?.frameFocus(this.focus);
       if (previous && previous !== body) previous.dispose();
     } catch (error) {
       this.note = error instanceof Error ? error.message : 'Could not build this look.';
@@ -447,6 +525,31 @@ export class CharacterCreatorScene implements Scene {
     this.dirty = true;
     this.wait = 0;
     this.publish();
+  }
+
+  private readCatalog(): void {
+    const parsed = readWardrobeCatalog(forgeEditCatalog());
+    this.slotRegions = parsed.slotRegions;
+    this.occupation = parsed.occupation;
+  }
+
+  private listedSlots(): string[] {
+    return slotsInRegion(Object.keys(this.options?.slots ?? {}), this.focus, this.slotRegions);
+  }
+
+  private homesFor(
+    worn: { id: string; states?: Record<string, string> } | null,
+    option: { states: Record<string, { default: string }> } | undefined,
+  ): string[] {
+    if (!worn) return [];
+    const row = matchOccupation(
+      this.occupation[worn.id] ?? [],
+      completeStates(worn.states, option?.states),
+    );
+    if (row) return [...row.slots];
+    return Object.keys(this.snap?.outfit ?? {}).filter(
+      (slot) => this.snap?.outfit[slot]?.id === worn.id,
+    );
   }
 
   private publish(): void {
@@ -504,15 +607,28 @@ export class CharacterCreatorScene implements Scene {
         step: spec.step,
         value: snap?.face.params[spec.id] ?? spec.default,
       })),
-      slots: Object.keys(options?.slots ?? {}),
+      slots: this.listedSlots(),
       slot: this.slot,
       garment: worn?.id ?? '',
       garments: garments.map((item) => item.id),
+      worn: Object.fromEntries(
+        Object.entries(snap?.outfit ?? {}).map(([slot, piece]) => [slot, piece?.id ?? '']),
+      ),
       dyes: (wornOption?.dyeRegions ?? []).map((region) => ({
         region,
         rgb: snap?.dye[worn?.id ?? '']?.[region] ?? [],
         swatches: dyeSwatches(region, options?.palettes ?? {}),
       })),
+      paperdoll: this.paperdoll,
+      focus: this.focus,
+      regionsReady: this.slotRegions !== null,
+      states: Object.entries(wornOption?.states ?? {}).map(([name, spec]) => ({
+        name,
+        value: worn?.states?.[name] ?? spec.default,
+        options: spec.options,
+      })),
+      homes: this.homesFor(worn, wornOption),
+      notice: this.notice,
       warnings: this.warnings,
       errors: this.errors,
       note: this.note,
@@ -666,6 +782,35 @@ function racesInProfile(profile: unknown): string[] {
 
 function pretty(id: string): string {
   return id.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function completeStates(
+  current: Record<string, string> | undefined,
+  specs: Record<string, { default: string }> | undefined,
+): Record<string, string> {
+  const states = { ...(current ?? {}) };
+  for (const [key, row] of Object.entries(specs ?? {})) {
+    if (!(key in states)) states[key] = row.default;
+  }
+  return states;
+}
+
+function wardrobeOutfit(outfit: EditSnapshot['outfit']): WardrobeOutfit {
+  const next: WardrobeOutfit = {};
+  for (const [slot, piece] of Object.entries(outfit)) {
+    next[slot] = piece ? { id: piece.id, states: { ...(piece.states ?? {}) } } : null;
+  }
+  return next;
+}
+
+function isOutfitPatch(patch: EditPatch): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, 'outfit');
+}
+
+function displacementNote(changes: ReturnType<typeof diffOutfit>, keptId: string): string {
+  return removedPieces(changes, keptId)
+    .map((change) => `${pretty(change.from?.id ?? '')} left ${pretty(change.slot)}`)
+    .join('. ');
 }
 
 function silentCommands(): CreatorCommands {

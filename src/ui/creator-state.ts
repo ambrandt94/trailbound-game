@@ -30,6 +30,12 @@ export interface DyeView {
   swatches: number[][];
 }
 
+export interface StateView {
+  name: string;
+  value: string;
+  options: string[];
+}
+
 export interface CreatorView {
   intent: 'new' | 'edit';
   name: string;
@@ -67,7 +73,15 @@ export interface CreatorView {
   slot: string;
   garment: string;
   garments: string[];
+  worn: Record<string, string>;
   dyes: DyeView[];
+  paperdoll: boolean;
+  focus: 'full' | 'upper' | 'lower';
+  /** Upper and lower lists exist only when the edit catalog published slot regions. */
+  regionsReady: boolean;
+  states: StateView[];
+  homes: string[];
+  notice: string;
   warnings: string[];
   errors: string[];
   note: string;
@@ -112,6 +126,10 @@ export interface CreatorCommands {
   setSlot(slot: string): void;
   setGarment(id: string): void;
   setDye(region: string, rgb: number[]): void;
+  openPaperdoll(): void;
+  closePaperdoll(): void;
+  setFocus(focus: 'full' | 'upper' | 'lower'): void;
+  setGarmentState(name: string, value: string): void;
   setClip(clip: 'Idle' | 'Walk'): void;
   setTurntable(on: boolean): void;
   frame(mode: 'face' | 'body'): void;
@@ -148,6 +166,10 @@ export const creatorCommands: CreatorCommands = {
   setSlot: noop,
   setGarment: noop,
   setDye: noop,
+  openPaperdoll: noop,
+  closePaperdoll: noop,
+  setFocus: noop,
+  setGarmentState: noop,
   setClip: noop,
   setTurntable: noop,
   frame: noop,
@@ -197,7 +219,14 @@ export function emptyCreatorView(): CreatorView {
     slot: '',
     garment: '',
     garments: [],
+    worn: {},
     dyes: [],
+    paperdoll: false,
+    focus: 'full',
+    regionsReady: false,
+    states: [],
+    homes: [],
+    notice: '',
     warnings: [],
     errors: [],
     note: '',
