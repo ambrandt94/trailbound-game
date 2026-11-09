@@ -1,22 +1,42 @@
 /**
  * Party wagon in a 3D area. The GLB path is `PARTY_WAGON_ASSET`.
- * The mesh sits on clear ground beside the spawn and blocks with a box.
+ * The mesh is metres already: wheels on y = 0, tongue along +Z.
+ * It is not scaled or recentred. The solid box is the body; parking
+ * keeps the whole tongue clear of roads, doors, buildings, and trees.
+ * The pack ox stands just ahead of that tongue and idles until the wagon moves.
  */
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { Box3, BoxGeometry, Group, Mesh, MeshLambertMaterial, Vector3 } from 'three';
+import {
+  Box3,
+  BoxGeometry,
+  Color,
+  Group,
+  Mesh,
+  MeshLambertMaterial,
+  NearestFilter,
+  SRGBColorSpace,
+  Texture,
+  type Material,
+  type Object3D,
+} from 'three';
+import { oakTrunkRadius } from '../../core/world/oak-dress';
 import { hitchPackOx, tickPackOx } from './pack-ox';
 import {
   WAGON_BOX,
+  WAGON_USE_RADIUS_M,
   chooseWagonSpot,
+  wagonCandidates,
   groundBlocksWagon,
   partyWagonUrl,
-  wagonCandidates,
+  wagonBodyAabb,
+  wagonFootSamples,
   wagonHitsBlock,
   wagonNearPoint,
   wagonSpotClear,
   type WagonBlock,
   type WagonCandidate,
 } from '../../core/world/wagon';
+import { oakInstances } from './oak-batch';
 
 export interface WagonMount {
   scene: { add(object: unknown): void };
@@ -47,6 +67,15 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   const wagonFrontZ = new Box3().setFromObject(model).max.z;
   group.add(model);
   mount.scene.add(group);
+  const body = wagonBodyAabb(spot);
+  mount.blocks.push({
+    x: body.x,
+    z: body.z,
+    w: body.w,
+    d: body.d,
+    h: y + body.h,
+    y0: y,
+  } as WagonBlock & { h: number; y0: number });
   try {
     await hitchPackOx({
       group,
@@ -58,15 +87,6 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   } catch (error) {
     console.warn('pack ox', error);
   }
-  const span = Math.max(WAGON_BOX.w, WAGON_BOX.d);
-  mount.blocks.push({
-    x: spot.x,
-    z: spot.z,
-    w: span,
-    d: span,
-    h: y + WAGON_BOX.h,
-    y0: y,
-  } as WagonBlock & { h: number; y0: number });
   const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
   posted.__tbWagon = { x: spot.x, z: spot.z, y };
   mount.things.push({
@@ -75,8 +95,8 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
     x: spot.x,
     z: spot.z,
     y,
-    r: 3.2,
-    hy: 2.2,
+    r: WAGON_USE_RADIUS_M,
+    hy: 3,
     use: () => {
       mount.onOpen();
       return '';
@@ -91,9 +111,11 @@ export function tickPartyWagon(dt: number): void {
 }
 
 function clearance(mount: WagonMount, spot: WagonCandidate) {
-  const clamped = mount.clamp(spot.x, spot.z);
-  const inside = Math.hypot(clamped.x - spot.x, clamped.z - spot.z) < 0.75;
-  const blocked = mount.blocks.some((block) => wagonHitsBlock(spot, block));
+  const inside = wagonFootSamples(spot).every((sample) => {
+    const clamped = mount.clamp(sample.x, sample.z);
+    return Math.hypot(clamped.x - sample.x, clamped.z - sample.z) < 0.75;
+  });
+  const blocked = obstacleBlocks(mount).some((block) => wagonHitsBlock(spot, block));
   const road = wagonFootSamples(spot).some((sample) =>
     groundBlocksWagon(mount.groundName(sample.x, sample.z)),
   );
@@ -101,37 +123,19 @@ function clearance(mount: WagonMount, spot: WagonCandidate) {
   return { inside, blocked, road, door };
 }
 
-function wagonFootSamples(spot: WagonCandidate): Array<{ x: number; z: number }> {
-  const hx = WAGON_BOX.w / 2;
-  const hz = WAGON_BOX.d / 2;
-  const fx = Math.sin(spot.yaw);
-  const fz = Math.cos(spot.yaw);
-  const rx = Math.cos(spot.yaw);
-  const rz = -Math.sin(spot.yaw);
-  const corners = [
-    [0, 0],
-    [hx, hz],
-    [-hx, hz],
-    [hx, -hz],
-    [-hx, -hz],
-  ] as const;
-  return corners.map(([side, back]) => ({
-    x: spot.x + rx * side + fx * back,
-    z: spot.z + rz * side + fz * back,
-  }));
+function obstacleBlocks(mount: WagonMount): WagonBlock[] {
+  const trees = oakInstances().map((oak) => {
+    const diameter = oakTrunkRadius(oak.scale) * 2;
+    return { x: oak.x, z: oak.z, w: diameter, d: diameter };
+  });
+  return mount.blocks.concat(trees);
 }
 
 async function loadWagon(): Promise<Group | Mesh> {
   try {
     const gltf = await new GLTFLoader().loadAsync(partyWagonUrl('./'));
     const model = gltf.scene;
-    model.traverse((child) => {
-      const mesh = child as Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-    });
-    fitWagon(model);
+    prepareWagonModel(model);
     return model;
   } catch (error) {
     console.warn('party wagon model', error);
@@ -139,18 +143,62 @@ async function loadWagon(): Promise<Group | Mesh> {
   }
 }
 
-/** Scale the GLB so its longest horizontal side is about 3.8 m, feet on y = 0. */
-function fitWagon(model: Group): void {
-  const box = new Box3().setFromObject(model);
-  const size = box.getSize(new Vector3());
-  const span = Math.max(size.x, size.z, 0.001);
-  const scale = 3.8 / span;
-  model.scale.multiplyScalar(scale);
-  const fitted = new Box3().setFromObject(model);
-  const center = fitted.getCenter(new Vector3());
-  model.position.x -= center.x;
-  model.position.z -= center.z;
-  model.position.y -= fitted.min.y;
+/**
+ * Crisp colour maps, same as the oaks: nearest, no mipmaps, sRGB.
+ * Position, rotation, and scale stay at the authored identity.
+ */
+export function prepareWagonModel(root: Object3D): void {
+  root.traverse((child) => {
+    const mesh = child as Mesh;
+    if (!mesh.isMesh || !mesh.material) return;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    const source = mesh.material;
+    const list = (Array.isArray(source) ? source : [source]).map((material) => toLambert(material));
+    const first = list[0];
+    if (!first) return;
+    mesh.material = Array.isArray(source) ? list : first;
+  });
+}
+
+function mapOf(material: Material): Texture | null {
+  if ('map' in material && material.map instanceof Texture) return material.map;
+  return null;
+}
+
+function colorOf(material: Material): Color {
+  if ('color' in material && material.color instanceof Color) return material.color.clone();
+  return new Color(0xffffff);
+}
+
+function toLambert(material: Material): MeshLambertMaterial {
+  if ((material as MeshLambertMaterial).isMeshLambertMaterial) {
+    const lambert = material as MeshLambertMaterial;
+    crispColorMap(lambert.map);
+    lambert.toneMapped = false;
+    return lambert;
+  }
+  const lambert = new MeshLambertMaterial({
+    name: material.name,
+    map: mapOf(material),
+    color: colorOf(material),
+    transparent: material.transparent,
+    opacity: material.opacity,
+    alphaTest: material.alphaTest,
+    side: material.side,
+  });
+  lambert.toneMapped = false;
+  crispColorMap(lambert.map);
+  return lambert;
+}
+
+function crispColorMap(texture: Texture | null): void {
+  if (!texture) return;
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
+  texture.colorSpace = SRGBColorSpace;
+  texture.needsUpdate = true;
 }
 
 function fallbackWagon(): Mesh {
@@ -158,7 +206,7 @@ function fallbackWagon(): Mesh {
     new BoxGeometry(WAGON_BOX.w, WAGON_BOX.h, WAGON_BOX.d),
     new MeshLambertMaterial({ color: 0x8a5a32 }),
   );
-  mesh.position.y = WAGON_BOX.h / 2;
+  mesh.position.set(0, WAGON_BOX.h / 2, (WAGON_BOX.minZ + WAGON_BOX.maxZ) / 2);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
