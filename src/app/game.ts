@@ -21,9 +21,10 @@ import {
 import { resolveLandStyle } from '../core/world/world-gen';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
-import { formatPartyReadout, wagonMenuRows } from '../core/sim/party';
+import { formatPartyReadout, wagonMenuRows, wagonRefusal } from '../core/sim/party';
+import { getMinigame, MinigameHost, registerWagonMinigames } from '../minigames';
 import { dayLightAt, tuOfDay } from '../core/sim/time';
-import { Keyboard } from '../input/keyboard';
+import { Keyboard, type AreaActionSnapshot } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
 import { loadTownFixture, townFixtureId } from '../render/area/area-from-export';
 import { AreaRenderer } from '../render/area/area-renderer';
@@ -70,6 +71,7 @@ import { FrameClock } from './fixed-step';
 import type { AppMode, GameHost } from './host';
 import { SceneStack } from './scene-stack';
 import { AreaView } from './scenes/area-view';
+import { MinigameScene } from './scenes/minigame-scene';
 import { BootScene } from './scenes/boot';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
@@ -93,6 +95,7 @@ export interface GameOptions {
 export class Game implements GameHost {
   readonly stack: SceneStack;
   readonly keyboard = new Keyboard();
+  readonly minigames: MinigameHost;
   world: WorldState;
   place: PlaceContent | null = null;
   view: 'map' | 'area' = 'map';
@@ -124,6 +127,16 @@ export class Game implements GameHost {
     this.world = createWorld({ id: 'waystead', name: 'Waystead', x: 8, y: 8 });
     this.mapRenderer = new MapRenderer(options.mapCanvas);
     settings.value = normalizeSettings(options.settings.load());
+    this.minigames = new MinigameHost({
+      root: options.root,
+      source: this.keyboard,
+      readParty: () => this.world.party,
+      apply: (result) => this.world.applyMinigameResult(result),
+      onApplied: () => {
+        void this.persist();
+      },
+    });
+    registerWagonMinigames();
     this.bindUi();
     this.setMode('boot');
     this.setFade(0);
@@ -220,6 +233,23 @@ export class Game implements GameHost {
     void this.stack.push(new TransitionScene(this, 'to-area'));
   }
 
+  /** Open a registered minigame. Instance games pause the area on the scene stack. */
+  openMinigame(id: string): boolean {
+    const def = getMinigame(id);
+    if (!def || this.minigames.isOpen()) return false;
+    wagonOpen.value = false;
+    settingsOpen.value = false;
+    this.minigames.arm(def);
+    if (def.type === 'inst') void this.stack.push(new MinigameScene(this));
+    return true;
+  }
+
+  /** Open the wagon menu. Used by the screenshot harness. */
+  showWagon(): void {
+    this.refreshWagon();
+    wagonOpen.value = true;
+  }
+
   /** Point the map camera at a settlement. Used by the screenshot harness. */
   lookAt(name: string, scale?: number): boolean {
     const node = this.world.data?.nodes.find((item) => item.name === name || item.id === name);
@@ -312,7 +342,8 @@ export class Game implements GameHost {
           : null;
       if (!areaExport) throw new Error('Open water. Walk ashore to enter.');
       const renderer = new AreaRenderer(this.options.areaCanvas, {
-        getActions: () => this.keyboard.areaActions(),
+        getActions: () =>
+          this.minigames.locksAreaInput() ? lockedAreaActions() : this.keyboard.areaActions(),
         onExit: (info) => {
           view?.leaveFromController(info);
         },
@@ -425,9 +456,24 @@ export class Game implements GameHost {
         this.enterArea();
       },
       wagonAct: (id) => {
-        notice.value = this.world.useWagon(id);
-        this.refreshWagon();
-        this.armNotice();
+        if (id === 'sleep') {
+          notice.value = this.world.useWagon(id);
+          wagonOpen.value = false;
+          this.refreshWagon();
+          this.armNotice();
+          return;
+        }
+        const refusal = wagonRefusal(this.world.party, id, tuOfDay(this.world.clockHours));
+        if (refusal) {
+          notice.value = refusal;
+          this.armNotice();
+          return;
+        }
+        const opened = this.openMinigame(wagonGameId(id));
+        if (!opened) {
+          notice.value = 'Not now.';
+          this.armNotice();
+        }
       },
       closeWagon: () => {
         wagonOpen.value = false;
@@ -698,6 +744,36 @@ export class Game implements GameHost {
       },
     );
     this.raf = requestAnimationFrame(this.onFrame);
+  };
+}
+
+function wagonGameId(id: 'hunt' | 'cook' | 'eat' | 'wash'): string {
+  if (id === 'hunt') return 'wagon_hunt';
+  if (id === 'cook') return 'wagon_cook';
+  if (id === 'eat') return 'wagon_eat';
+  return 'wagon_wash';
+}
+
+function lockedAreaActions(): AreaActionSnapshot {
+  const pad = {
+    x: 0,
+    z: 0,
+    jump: false,
+    sprint: false,
+    sneak: false,
+    roll: false,
+    use: false,
+    emote: false,
+  };
+  return {
+    p1: { ...pad },
+    p2: { ...pad },
+    camLeft: false,
+    camRight: false,
+    camUp: false,
+    camDown: false,
+    view: false,
+    mode: false,
   };
 }
 

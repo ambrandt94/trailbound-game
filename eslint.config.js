@@ -2,7 +2,7 @@ import boundaries from 'eslint-plugin-boundaries';
 import prettier from 'eslint-config-prettier';
 import tseslint from 'typescript-eslint';
 
-const layers = ['core', 'platform', 'render', 'audio', 'input', 'ui', 'app'];
+const layers = ['core', 'platform', 'render', 'audio', 'input', 'ui', 'minigames', 'app'];
 
 /** Local layers a folder may import. Only `app` may reach every layer. */
 const allowTypes = {
@@ -12,6 +12,7 @@ const allowTypes = {
   audio: ['core', 'audio'],
   input: ['core', 'input'],
   ui: ['core', 'ui'],
+  minigames: ['core', 'minigames'],
   app: layers,
 };
 

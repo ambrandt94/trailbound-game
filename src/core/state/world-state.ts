@@ -9,8 +9,11 @@ import {
   applyWagonAction,
   createParty,
   normalizeParty,
+  resolveMinigame,
   sleepHours,
+  type MinigameResult,
   type PartyState,
+  type ResolvedMinigame,
   type WagonActionId,
 } from '../sim/party';
 import { hoursForTu, tuOfDay } from '../sim/time';
@@ -265,7 +268,7 @@ export class WorldState {
     this.record({ type: 'area-exit', rev: this.bump(), exit: { ...exit } });
   }
 
-  /** Spend TU or sleep from the wagon. Returns the line the toast shows. */
+  /** Spend TU or sleep from the wagon. Play activities open a minigame instead. */
   useWagon(id: WagonActionId): string {
     const result = applyWagonAction(this.party, id, tuOfDay(this.clockHours));
     this.party = result.party;
@@ -276,6 +279,17 @@ export class WorldState {
       this.addHours(Math.max(sleepHours(this.clockHours), target - this.clockHours));
     }
     return result.message;
+  }
+
+  /**
+   * One place for a finished minigame: party, purse, and clock.
+   * The save writes this same party the next time the game persists.
+   */
+  applyMinigameResult(result: MinigameResult): ResolvedMinigame {
+    const resolved = resolveMinigame(this.party, result);
+    this.party = resolved.party;
+    if (resolved.tu > 0) this.addHours(hoursForTu(resolved.tu));
+    return resolved;
   }
 
   load(core: PackedWorld): void {
@@ -551,6 +565,8 @@ function partySave(party: PartyState): PartySave {
     meals: party.meals,
     morale: party.morale,
     hungry: party.hungry,
+    dirtyDishes: party.dirtyDishes,
+    coins: party.coins,
   };
 }
 
