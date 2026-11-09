@@ -9,6 +9,11 @@ export interface GameSettings {
   voices: number;
   muteVoices: boolean;
   mapSkin: MapSkinId;
+  /**
+   * When set, the sun slider holds the time of day.
+   * Otherwise the shared clock drives sun, sky, and fog.
+   */
+  lockTimeOfDay: boolean;
   /** 3D area look, camera, and controller feel. Lives with the other preferences. */
   look: AreaLook;
 }
@@ -20,6 +25,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   voices: 40,
   muteVoices: false,
   mapSkin: 'classic',
+  lockTimeOfDay: false,
   look: DEFAULT_AREA_LOOK,
 };
 
@@ -42,6 +48,7 @@ export function normalizeSettings(value: unknown): GameSettings {
     muteVoices:
       typeof record.muteVoices === 'boolean' ? record.muteVoices : DEFAULT_SETTINGS.muteVoices,
     mapSkin: record.mapSkin === 'trailbound48' ? 'trailbound48' : 'classic',
+    lockTimeOfDay: record.lockTimeOfDay === true,
     look: normalizeAreaLook(record.look),
   };
 }

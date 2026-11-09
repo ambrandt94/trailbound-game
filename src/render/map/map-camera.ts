@@ -17,7 +17,7 @@ import {
  * keeps the tick responsive. While the scale is moving, the world point
  * under the cursor (or pinch) stays fixed. Follow mode keeps the hero centred.
  * A future 2D settlement view would be a separate mode; this camera only
- * frames the world map, and the dive past the cap enters 3D.
+ * frames the world map. Zoom stops at the cap; Enter opens the 3D area.
  */
 const ZOOM_FOLLOW = 14;
 const ZOOM_CATCH = 0.18;
@@ -88,6 +88,11 @@ export class MapCamera {
     this.y = clampLatY(this.y - tilesY, this.height);
     this.targetX = this.x;
     this.targetY = this.y;
+  }
+
+  /** Ease toward a scale. The current scale catches up in `update`. */
+  easeScale(scale: number): void {
+    this.targetScale = clamp(scale, minScaleFor(this.width), MAP_ZOOM_CAP);
   }
 
   lookAt(x: number, y: number, scale?: number): void {

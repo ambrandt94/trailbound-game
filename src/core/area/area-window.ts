@@ -5,16 +5,20 @@
  * The window seed mixes the world seed with that origin.
  */
 import { tierForKind } from '../world/settlement-tiers';
+import { NEAR_POI_TILES } from '../world/map-grid';
 import {
   BIOME_LABELS,
   Biome,
   biomeAt,
   boundsFromTiles,
   nodeContaining,
+  POI_LABELS,
+  poiCovering,
   waterAt,
   wrapDeltaX,
   wrapX,
   type MapNode,
+  type PointOfInterest,
   type Vec2,
   type WorldData,
 } from '../world/models';
@@ -58,6 +62,10 @@ export interface MapStand {
   tier: string;
   kind: string;
   blockedReason: 'deep-water' | null;
+  /** Place the traveller is standing in, or the biome when they are not. */
+  standLine: string;
+  /** Nearest POI when it is not the place underfoot. Empty when there is none nearby. */
+  nearestLine: string;
 }
 
 export function settlementNodeAt(world: WorldData, x: number, y: number): MapNode | null {
@@ -129,6 +137,8 @@ export function resolveAreaAt(world: WorldData, x: number, y: number): ResolvedA
 /** Place-panel copy for the tile under the traveller. */
 export function describeMapStand(world: WorldData, x: number, y: number): MapStand {
   const settlement = settlementNodeAt(world, x, y);
+  const poi = poiCovering(world.pois, x, y, world);
+  const near = nearestPoi(world, x, y, poi);
   if (settlement) {
     return {
       canEnter: true,
@@ -136,6 +146,8 @@ export function describeMapStand(world: WorldData, x: number, y: number): MapSta
       tier: tierForKind(settlement.kind) ?? '',
       kind: settlement.kind,
       blockedReason: null,
+      standLine: `In ${settlement.name}`,
+      nearestLine: near ? `Nearest: ${near.name}` : '',
     };
   }
   const stand = landStand(world, x, y);
@@ -146,16 +158,52 @@ export function describeMapStand(world: WorldData, x: number, y: number): MapSta
       tier: 'Water',
       kind: 'water',
       blockedReason: 'deep-water',
+      standLine: 'Open sea',
+      nearestLine: '',
+    };
+  }
+  if (poi) {
+    return {
+      canEnter: true,
+      name: poi.name,
+      tier: POI_LABELS[poi.kind],
+      kind: poi.kind,
+      blockedReason: null,
+      standLine: `In ${poi.name}`,
+      nearestLine: '',
     };
   }
   const biome = biomeAt(world, stand.x, stand.y);
+  const name = BIOME_LABELS[biome] ?? 'Wilderness';
   return {
     canEnter: true,
-    name: BIOME_LABELS[biome] ?? 'Wilderness',
+    name,
     tier: 'Wilderness',
     kind: 'wilderness',
     blockedReason: null,
+    standLine: name,
+    nearestLine: near ? `Nearest: ${near.name}` : '',
   };
+}
+
+/** Closest POI within `NEAR_POI_TILES`, skipping the one the traveller is inside. */
+function nearestPoi(
+  world: WorldData,
+  x: number,
+  y: number,
+  here: PointOfInterest | null,
+): PointOfInterest | null {
+  let best: PointOfInterest | null = null;
+  let bestD = NEAR_POI_TILES;
+  for (const poi of world.pois) {
+    if (here && poi.id === here.id) continue;
+    const d = Math.hypot(poi.x - x, poi.y - y);
+    if (d < bestD) {
+      best = poi;
+      bestD = d;
+    }
+  }
+  return best;
 }
 
 export interface SettlementStep {

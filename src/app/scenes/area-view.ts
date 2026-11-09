@@ -1,4 +1,6 @@
 import { music } from '../../audio/music';
+import { GAME_HOURS_PER_REAL_SECOND } from '../../core/sim/clock';
+import { areaHoursPerRealSec } from '../../core/sim/time';
 import type { AreaHandoff } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
 import { AreaRenderer } from '../../render/area/area-renderer';
@@ -57,7 +59,7 @@ export class AreaView implements Scene {
   update(dt: number): void {
     if (this.leaving || !this.renderer) return;
     this.renderer.step(dt);
-    this.host.world.advanceClock(dt);
+    this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
     if (this.host.keyboard.consumePress('Escape')) {
       if (settingsOpen.value) {
         settingsOpen.value = false;

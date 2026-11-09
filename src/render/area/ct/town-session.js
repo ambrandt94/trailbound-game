@@ -18,6 +18,7 @@ import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
 import { oakLoadMs, oakReady } from '../oak-batch.ts';
+import { mountPartyWagon } from '../party-wagon.ts';
 
 const DEF = {
   maxSpeed: 5.5,
@@ -1166,6 +1167,22 @@ export async function createTownSession(canvas, hooks) {
         window.__tbEntry.oakLoadMs = oakLoadMs();
       }
       if (entry) applyEntry(entry);
+      const spawn = window.TBArea && TBArea.spawn ? TBArea.spawn() : { x: PLS[0].x, z: PLS[0].z, yaw: PLS[0].yaw };
+      try {
+        await mountPartyWagon({
+          scene,
+          blocks: BX,
+          things: TH,
+          spawn,
+          groundY: (x, z) => (window.TBArea && TBArea.groundY ? TBArea.groundY(x, z) : 0),
+          clamp: (x, z) => (window.TBArea && TBArea.walkClamp ? TBArea.walkClamp(x, z) : { x, z }),
+          groundName: (x, z) => (window.TBArea && TBArea.groundName ? TBArea.groundName(x, z) : 'grass'),
+          doors: wagonDoors(),
+          onOpen: () => hooks.onWagon?.(),
+        });
+      } catch (error) {
+        console.warn('party wagon', error);
+      }
       applyExternalLook();
       if (!hooks.getLook) goView(0);
       started = true;
@@ -1285,6 +1302,17 @@ export async function createTownSession(canvas, hooks) {
       if (window.__tb && window.__tb.session === session) window.__tb = null;
     },
   };
+
+  function wagonDoors() {
+    const rows = (window.TBBuildings && TBBuildings.rows) || [];
+    const doors = [];
+    for (const row of rows) {
+      const door = row && row.door;
+      if (!door) continue;
+      doors.push({ x: +door.outX || 0, z: +door.outZ || 0 });
+    }
+    return doors;
+  }
 
   function applyEntry(entry) {
     const p = PLS[0];

@@ -15,8 +15,8 @@ export const MAX_SCALE = 160;
  * so a 1400 px view shows about 24 tiles across: tree and building footprints
  * are readable, and a town still sits in a district rather than filling the
  * screen. The old street zoom (scale 10, 160 px per tile) is past the point
- * where the 3D area shows more than a larger sprite. Zooming in at this cap
- * dives into that area.
+ * where the 3D area shows more than a larger sprite. Zoom stops here.
+ * Entering the 3D area is the Enter key or the on-screen button.
  */
 export const MAP_ZOOM_CAP = 3.6;
 /** Adventure / Start adventure camera: Close band, not Person (160). */

@@ -21,6 +21,8 @@ import {
 import { resolveLandStyle } from '../core/world/world-gen';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
+import { formatPartyReadout, wagonMenuRows } from '../core/sim/party';
+import { dayLightAt, tuOfDay } from '../core/sim/time';
 import { Keyboard } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
 import { loadTownFixture, townFixtureId } from '../render/area/area-from-export';
@@ -40,11 +42,14 @@ import {
   canContinue,
   clockRate,
   clockText,
-  diveCue,
   generating,
   hint,
   nearTown,
+  notice,
+  partyHud,
   savedFlash,
+  wagonOpen,
+  wagonRows,
   screen,
   settings,
   settingsOpen,
@@ -109,6 +114,7 @@ export class Game implements GameHost {
   private townFixture: string | null = null;
   private detachTouch: (() => void) | null = null;
   private readonly jobs: Array<() => void> = [];
+  private noticeTimer = 0;
 
   constructor(options: GameOptions) {
     this.options = options;
@@ -204,6 +210,7 @@ export class Game implements GameHost {
 
   enterArea(): void {
     if (this.stack.current()?.id !== 'map') return;
+    if (this.mapScene && !this.mapScene.allowEnter()) return;
     const handoff = this.world.buildHandoffHere();
     if (!handoff) {
       hint.value = 'Open water. Walk ashore to enter.';
@@ -309,9 +316,12 @@ export class Game implements GameHost {
         onExit: (info) => {
           view?.leaveFromController(info);
         },
-        getLook: () => settings.value.look,
+        getLook: () => this.areaLook(),
         onLook: (patch) => {
           this.applyLook(patch);
+        },
+        onWagon: () => {
+          this.openWagon();
         },
       });
       await renderer.start(areaExport);
@@ -331,6 +341,8 @@ export class Game implements GameHost {
       this.areaScene = null;
     }
     if (exit) this.world.placeHeroOutside(exit);
+    this.mapScene?.noteAreaReturn();
+    wagonOpen.value = false;
     this.setView('map');
     this.setFade(1);
     void this.persist();
@@ -346,6 +358,41 @@ export class Game implements GameHost {
     settings.value = next;
     this.options.settings.save(next);
     if (partial.mapSkin) void this.mapRenderer.setSkin(next.mapSkin, this.world.data);
+  }
+
+  /** Clock-driven sun, unless the settings lock holds the slider. */
+  private areaLook(): AreaLook {
+    const look = settings.value.look;
+    if (settings.value.lockTimeOfDay) return look;
+    const light = dayLightAt(this.world.clockHours);
+    return {
+      ...look,
+      sunHour: light.sunHour,
+      sunIntensity: light.sunIntensity,
+      sunWarmth: light.sunWarmth,
+      hemi: light.hemi,
+      haze: light.haze,
+      skyTop: light.skyTop,
+      skyHor: light.skyHor,
+      fog: light.fog,
+    };
+  }
+
+  private openWagon(): void {
+    wagonOpen.value = !wagonOpen.value;
+    if (wagonOpen.value) this.refreshWagon();
+  }
+
+  private refreshWagon(): void {
+    wagonRows.value = wagonMenuRows(tuOfDay(this.world.clockHours));
+  }
+
+  private armNotice(): void {
+    this.noticeTimer += 1;
+    const token = this.noticeTimer;
+    setTimeout(() => {
+      if (token === this.noticeTimer) notice.value = '';
+    }, 2800);
   }
 
   private applyLook(patch: unknown): void {
@@ -373,6 +420,14 @@ export class Game implements GameHost {
       },
       enterPlace: () => {
         this.enterArea();
+      },
+      wagonAct: (id) => {
+        notice.value = this.world.useWagon(id);
+        this.refreshWagon();
+        this.armNotice();
+      },
+      closeWagon: () => {
+        wagonOpen.value = false;
       },
       save: () => {
         void this.save();
@@ -603,7 +658,18 @@ export class Game implements GameHost {
     const text = formatClock(this.world.clockHours);
     root.dataset.clock = text;
     root.dataset.clockRate = clockRate.value;
-    root.dataset.dive = diveCue.value.toFixed(3);
+    const readout = formatPartyReadout(this.world.clockHours, this.world.party);
+    if (partyHud.value !== readout) partyHud.value = readout;
+    if (wagonOpen.value) {
+      const rows = wagonMenuRows(tuOfDay(this.world.clockHours));
+      const shown = wagonRows.value;
+      const same =
+        rows.length === shown.length && rows.every((row, index) => row.id === shown[index]?.id);
+      if (!same) wagonRows.value = rows;
+    }
+    root.dataset.party = readout;
+    root.dataset.tu = tuOfDay(this.world.clockHours).toFixed(2);
+    if (this.mapScene) root.dataset.enterCooldown = this.mapScene.allowEnter() ? '0' : '1';
     root.dataset.bakeMs = this.mapRenderer.bakeMs.toFixed(1);
     root.dataset.detailMs = this.mapRenderer.detailMs.toFixed(1);
     root.dataset.drawMs = this.mapRenderer.drawMs.toFixed(2);
