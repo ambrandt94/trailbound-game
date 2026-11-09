@@ -21,8 +21,16 @@ import {
   isInstancedZone,
   lerp,
   nodeBounds,
+  poiFootprintTiles,
   smoothstep,
 } from '../../core/world/models';
+import {
+  CLOSE_MARKER_SCALE,
+  NEAR_POI_TILES,
+  fineToDisplay,
+  markerDisplay,
+  wagonTrailFine,
+} from '../../core/world/map-grid';
 import { type ChatBubble, peerMarkerColor } from './markers';
 import { LOCAL_PLAYER_ID } from '../../core/sim/player';
 import { pixelSnapScale } from './map-camera';
@@ -526,6 +534,7 @@ export class WorldRenderer {
       foam: readonly [CanvasImageSource, CanvasImageSource] | null;
     }>;
   }> = [];
+  private heroYaw = 0;
   private featureBuckets: Map<string, WorldFeature[]> | null = null;
   private featureWorld: WorldData | null = null;
   /** Last overworld bake, in milliseconds. First paint is the flat pass. */
@@ -1232,10 +1241,13 @@ export class WorldRenderer {
       interior?: InteriorPlan | null;
       /** Town Tale PNGs instead of tile roofs. Yards stay either way. */
       spriteBuildings?: boolean;
+      /** Hero facing, radians. The wagon trails behind this yaw. */
+      heroYaw?: number;
     },
   ): void {
     this.chunkDestPx = Math.max(1, camera.scale * TILE);
     this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2.5, 0.5, 4.5);
+    this.heroYaw = opts.heroYaw ?? 0;
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#151b22';
     ctx.fillRect(0, 0, viewW, viewH);
@@ -1354,6 +1366,7 @@ export class WorldRenderer {
         opts.showPois,
         opts.hoveredPoiId,
         opts.detailNode,
+        player,
         opts.visiblePoiIds,
       );
       lctx.restore();
@@ -1501,6 +1514,7 @@ export class WorldRenderer {
         opts.showPois,
         opts.hoveredPoiId,
         opts.detailNode,
+        player,
         opts.visiblePoiIds,
       );
       ctx.restore();
@@ -1959,10 +1973,17 @@ export class WorldRenderer {
 
   /** Fine world tiles → map tiles. The camera and the sheet share map tiles. */
   private toMap(fine: number): number {
-    return this.mapStep > 1 ? fine / this.mapStep : fine;
+    return fineToDisplay(fine, this.mapStep);
   }
 
-  private addNodeTiles(ctx: CanvasRenderingContext2D, node: MapNode): void {
+  private addNodeTiles(ctx: CanvasRenderingContext2D, node: MapNode, exact = false): void {
+    if (exact && node.tiles?.length) {
+      const cell = Math.max(0.35, this.toMap(1) * TILE);
+      for (const t of node.tiles) {
+        ctx.rect(this.toMap(t.x) * TILE, this.toMap(t.y) * TILE, cell, cell);
+      }
+      return;
+    }
     if (this.mapStep > 1) {
       const b = nodeBounds(node);
       const x = this.toMap(b.x0) * TILE;
@@ -2106,17 +2127,21 @@ export class WorldRenderer {
       )
         continue;
       ctx.save();
+      const close = scale >= CLOSE_MARKER_SCALE;
       const rgb = countyRgb(node);
       const streetFade = context ? 1 : 1 - smoothstep(0.45, 1, detailT) * 0.82;
-      const fillA =
-        overlay * streetFade * (hovered ? 0.28 + political * 0.62 : 0.16 + political * 0.72);
-      if (hovered || instanced || overlay > 0.04 || context) {
+      const fillA = close
+        ? hovered
+          ? 0.66
+          : 0.5
+        : overlay * streetFade * (hovered ? 0.28 + political * 0.62 : 0.16 + political * 0.72);
+      if (hovered || instanced || overlay > 0.04 || context || close) {
         ctx.beginPath();
-        this.addNodeTiles(ctx, node);
+        this.addNodeTiles(ctx, node, close);
         ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${fillA})`;
         ctx.fill();
       }
-      this.traceNode(ctx, node);
+      this.traceNode(ctx, node, close);
       const strokeA = 0.12 + overlay * 0.88;
       ctx.lineJoin = 'miter';
       ctx.miterLimit = 2.4;
@@ -2147,14 +2172,36 @@ export class WorldRenderer {
         const lx = this.toMap(node.cx) * TILE;
         const ly = this.toMap(b.y0 + (b.y1 - b.y0) * 0.42) * TILE;
         const label = node.poiKind ? `${node.name} · ${POI_LABELS[node.poiKind]}` : node.name;
-        drawNametag(ctx, label, lx, ly, scale, { screenPx: this.tagScreenPx });
+        drawNametag(ctx, label, lx, ly, scale, {
+          screenPx: this.tagScreenPx * (close ? 1.3 : 1),
+        });
+      }
+      if (close && !node.poiKind) {
+        this.drawMapPin(
+          ctx,
+          markerDisplay(node.cx, this.mapStep) * TILE,
+          markerDisplay(node.cy, this.mapStep) * TILE,
+          scale,
+          `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+          true,
+        );
       }
       ctx.restore();
     }
   }
 
-  private traceNode(ctx: CanvasRenderingContext2D, node: MapNode): void {
+  private traceNode(ctx: CanvasRenderingContext2D, node: MapNode, exact = false): void {
     ctx.beginPath();
+    if (exact) {
+      const b = nodeBounds(node);
+      ctx.rect(
+        this.toMap(b.x0) * TILE,
+        this.toMap(b.y0) * TILE,
+        Math.max(0.35, this.toMap(b.x1 - b.x0) * TILE),
+        Math.max(0.35, this.toMap(b.y1 - b.y0) * TILE),
+      );
+      return;
+    }
     if (this.mapStep > 1) {
       const b = nodeBounds(node);
       const x = this.toMap(b.x0) * TILE;
@@ -2203,9 +2250,11 @@ export class WorldRenderer {
     show: boolean,
     hoveredPoiId: string | null,
     detailNode: MapNode | null,
+    player: PlayerState,
     visibleIds?: Set<string> | null,
   ): void {
     if (!show && !hoveredPoiId && !visibleIds?.size) return;
+    const close = scale >= CLOSE_MARKER_SCALE;
     for (const poi of world.pois) {
       const hovered = poi.id === hoveredPoiId;
       const isActive = detailNode?.id === poi.id;
@@ -2213,39 +2262,65 @@ export class WorldRenderer {
       const instanced = world.nodes.some((n) => n.id === poi.id);
       if (!show && !revealed && !hovered && !isActive) continue;
       if (!hovered && !isActive && scale < 0.09) continue;
-      const px = this.toMap(poi.x) * TILE;
-      const py = this.toMap(poi.y) * TILE;
+      const nearHero = Math.hypot(poi.x - player.x, poi.y - player.y) <= NEAR_POI_TILES;
+      const px = markerDisplay(poi.x, this.mapStep) * TILE;
+      const py = markerDisplay(poi.y, this.mapStep) * TILE;
       const color = poiColor(poi.kind);
-      const s = 15 / scale;
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(px, py, s * 1.15, 0, Math.PI * 2);
-      ctx.fillStyle = instanced ? 'rgba(18, 14, 10, 0.42)' : 'rgba(18, 14, 10, 0.28)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2.4 / scale;
-      ctx.stroke();
-      ctx.translate(px, py);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = color;
-      ctx.strokeStyle = '#1a120c';
-      ctx.lineWidth = 1.5 / scale;
-      ctx.fillRect(-s / 2, -s / 2, s, s);
-      ctx.strokeRect(-s / 2, -s / 2, s, s);
-      ctx.restore();
+      if (close && (nearHero || scale >= 2.2)) {
+        const cell = Math.max(0.35, this.toMap(1) * TILE);
+        ctx.beginPath();
+        for (const tile of poiFootprintTiles(poi, world)) {
+          ctx.rect(this.toMap(tile.x) * TILE, this.toMap(tile.y) * TILE, cell, cell);
+        }
+        ctx.fillStyle = color.replace(', 1)', ', 0.42)');
+        ctx.fill();
+      }
+      const prominent = close || nearHero;
+      this.drawMapPin(ctx, px, py, scale, color, prominent);
+      const screen = prominent ? 34 : 22;
+      const s = screen / scale;
       const pin = { x: px - s * 1.2, y: py - s * 1.2, w: s * 2.4, h: s * 2.4 };
-      if (hovered || isActive || scale >= 0.45) {
+      if (hovered || isActive || scale >= 0.45 || nearHero) {
         const label =
-          hovered || isActive || scale >= 0.7 || instanced
+          hovered || isActive || scale >= 0.7 || instanced || nearHero
             ? `${poi.name} · ${POI_LABELS[poi.kind]}`
             : poi.name;
         drawNametag(ctx, label, px, py, scale, {
           clearAbove: s * 1.35,
           avoid: [pin],
-          screenPx: this.tagScreenPx,
+          screenPx: this.tagScreenPx * (prominent ? 1.35 : 1),
         });
       }
     }
+  }
+
+  /** Diamond pin. `prominent` keeps it readable at the close map zoom. */
+  private drawMapPin(
+    ctx: CanvasRenderingContext2D,
+    px: number,
+    py: number,
+    scale: number,
+    color: string,
+    prominent: boolean,
+  ): void {
+    const screen = prominent ? 34 : 22;
+    const s = screen / scale;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(px, py, s * 0.72, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(246, 241, 230, 0.92)';
+    ctx.fill();
+    ctx.lineWidth = (prominent ? 3.2 : 2.2) / scale;
+    ctx.strokeStyle = '#1a120c';
+    ctx.stroke();
+    ctx.translate(px, py);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = '#1a120c';
+    ctx.lineWidth = (prominent ? 2.2 : 1.5) / scale;
+    ctx.fillRect(-s / 2, -s / 2, s, s);
+    ctx.strokeRect(-s / 2, -s / 2, s, s);
+    ctx.restore();
   }
 
   /** Map pins only — used for groups outside the isolated place / fog mask. */
@@ -2455,6 +2530,7 @@ export class WorldRenderer {
             clearBelow,
           });
         }
+        this.drawWagon(ctx, player, scale);
         continue;
       }
       if (mark.kind === 'guest' && mark.guest) {
@@ -2594,6 +2670,27 @@ export class WorldRenderer {
         screenPx: this.tagScreenPx,
       });
     }
+  }
+
+  /** Pixel cart trailing the hero. 16 px tile language, sized in screen pixels. */
+  private drawWagon(ctx: CanvasRenderingContext2D, player: PlayerState, scale: number): void {
+    const trail = wagonTrailFine(player.x, player.y, this.heroYaw, this.mapStep, scale);
+    const px = this.toMap(trail.x) * TILE;
+    const py = this.toMap(trail.y) * TILE;
+    const s = 18 / Math.max(scale, 0.05);
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.fillStyle = '#6b3d18';
+    ctx.fillRect(-s * 0.55, -s * 0.15, s * 1.1, s * 0.55);
+    ctx.fillStyle = '#e6d3a1';
+    ctx.fillRect(-s * 0.42, -s * 0.55, s * 0.84, s * 0.42);
+    ctx.fillStyle = '#2a1810';
+    ctx.fillRect(-s * 0.62, s * 0.28, s * 0.28, s * 0.28);
+    ctx.fillRect(s * 0.34, s * 0.28, s * 0.28, s * 0.28);
+    ctx.strokeStyle = '#1a120c';
+    ctx.lineWidth = Math.max(1, 1.4 / scale);
+    ctx.strokeRect(-s * 0.55, -s * 0.15, s * 1.1, s * 0.55);
+    ctx.restore();
   }
 
   private drawPlayer(

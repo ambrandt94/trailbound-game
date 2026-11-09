@@ -36,6 +36,8 @@ export interface AreaHooks {
   /** Persisted 3D look. Absent in harnesses that only want the town defaults. */
   getLook?(): unknown;
   onLook?(patch: unknown): void;
+  /** F on the party wagon. The shell opens the activity menu. */
+  onWagon?(): void;
 }
 
 export class AreaRenderer {
@@ -95,6 +97,7 @@ export class AreaRenderer {
       onExit: (info) => this.hooks.onExit(info),
       getLook: () => this.hooks.getLook?.(),
       onLook: (patch: unknown) => this.hooks.onLook?.(patch),
+      onWagon: () => this.hooks.onWagon?.(),
     });
     if (this.disposed) {
       session.dispose();

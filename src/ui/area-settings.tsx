@@ -196,6 +196,17 @@ export function SettingsPanel(props: { dock?: boolean }) {
           />
           Mute voices
         </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            checked={current.lockTimeOfDay}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) change({ lockTimeOfDay: target.checked });
+            }}
+          />
+          Lock time of day
+        </label>
         <p class="lede tight">
           {skinText(
             'The 3D view uses the same look, camera, and feel as the controller demo. Fog density also sets how far the town draws. Changes apply immediately.',

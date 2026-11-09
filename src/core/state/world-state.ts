@@ -2,8 +2,18 @@ import { buildAreaExport, type AreaExport } from '../area/build-area';
 import { resolveAreaAt } from '../area/area-window';
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
-import type { CfPin, PackedWorld, PlayerSave } from '../save/types';
+import type { CfPin, PackedWorld, PlayerSave, PartySave } from '../save/types';
 import { GAME_HOURS_PER_REAL_SECOND, START_HOUR } from '../sim/clock';
+import {
+  applyOvernight,
+  applyWagonAction,
+  createParty,
+  normalizeParty,
+  sleepHours,
+  type PartyState,
+  type WagonActionId,
+} from '../sim/party';
+import { hoursForTu, tuOfDay } from '../sim/time';
 import { exploredTileKeys, tileExplored } from '../sim/fog';
 import { defaultPlayerState } from '../sim/player';
 import { Rng } from '../world/noise';
@@ -86,6 +96,8 @@ export const HERO_OUTSIDE_TOWN = 1.9;
 
 export class WorldState {
   clockHours = START_HOUR;
+  /** Party supplies. The wagon flag stays true so a later save can keep it. */
+  party: PartyState = createParty();
   rev = 0;
   readonly events: WorldEvent[] = [];
   seed = DEFAULT_WORLD_SEED;
@@ -122,6 +134,7 @@ export class WorldState {
     this.explored = exploredTileKeys(this.data, this.visited);
     if (!options?.keepHero) {
       this.clockHours = START_HOUR;
+      this.party = createParty();
       const start = defaultPlayerStart(this.data);
       this.hero = { x: start.x, y: start.y, yaw: 0 };
       const home = this.data.nodes.find((node) => node.id === 'ashfen') ?? this.data.nodes[0];
@@ -252,8 +265,22 @@ export class WorldState {
     this.record({ type: 'area-exit', rev: this.bump(), exit: { ...exit } });
   }
 
+  /** Spend TU or sleep from the wagon. Returns the line the toast shows. */
+  useWagon(id: WagonActionId): string {
+    const result = applyWagonAction(this.party, id, tuOfDay(this.clockHours));
+    this.party = result.party;
+    if (result.tu > 0) this.addHours(hoursForTu(result.tu));
+    if (result.sleep) {
+      const day = Math.floor(this.clockHours / 24);
+      const target = (day + 1) * 24;
+      this.addHours(Math.max(sleepHours(this.clockHours), target - this.clockHours));
+    }
+    return result.message;
+  }
+
   load(core: PackedWorld): void {
     this.clockHours = core.clockHours;
+    this.party = normalizeParty(core.party);
     this.seed = core.worldSeed;
     this.hero = {
       x: core.player.mapX,
@@ -290,6 +317,7 @@ export class WorldState {
       clockHours: this.clockHours,
       worldSeed: this.seed,
       player,
+      party: partySave(this.party),
       gameVersion: meta.gameVersion,
       cfPin: { ...meta.cfPin },
     };
@@ -297,8 +325,12 @@ export class WorldState {
 
   private addHours(hours: number): void {
     if (!(hours > 0)) return;
+    const beforeDay = Math.floor(this.clockHours / 24 + 1e-9);
     const before = Math.floor(this.clockHours * 60);
     this.clockHours += hours;
+    const afterDay = Math.floor((this.clockHours + 1e-6) / 24);
+    const nights = Math.min(30, Math.max(0, afterDay - beforeDay));
+    for (let i = 0; i < nights; i++) this.party = applyOvernight(this.party);
     const after = Math.floor(this.clockHours * 60);
     if (after !== before) this.record({ type: 'clock-tick', rev: this.bump() });
   }
@@ -509,6 +541,16 @@ function copyAvatar(avatar: PlayerAvatar | undefined, name: string): PlayerAvata
     recipe: avatar.recipe
       ? (JSON.parse(JSON.stringify(avatar.recipe)) as PlayerAvatar['recipe'])
       : undefined,
+  };
+}
+
+function partySave(party: PartyState): PartySave {
+  return {
+    hasWagon: party.hasWagon,
+    rawFood: party.rawFood,
+    meals: party.meals,
+    morale: party.morale,
+    hungry: party.hungry,
   };
 }
 

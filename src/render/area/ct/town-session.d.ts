@@ -51,5 +51,6 @@ export function createTownSession(
     onExit: (info: TownExitInfo) => void;
     getLook?: () => unknown;
     onLook?: (patch: unknown) => void;
+    onWagon?: () => void;
   },
 ): Promise<TownSession>;

@@ -4,13 +4,11 @@ import {
   describeMapStand,
 } from '../../core/area/area-window';
 import {
-  diveCueAmount,
-  emptyDiveIntent,
-  stepDiveIntent,
-  type DiveIntentState,
+  MAP_ENTRY_COOLDOWN_SEC,
+  stepEntryCooldown,
+  zoomAfterArea,
 } from '../../core/world/map-zoom';
 import {
-  MAP_ZOOM_CAP,
   METERS_PER_WORLD_TILE,
   formatMapClockRate,
   mapClockHoursPerRealSec,
@@ -19,16 +17,18 @@ import {
 } from '../../core/world/models';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
+import { dayLightAt } from '../../core/sim/time';
 import {
   canEnter,
   clockRate,
-  diveCue,
-  diveIntent,
   hint,
+  mapNight,
   nearTown,
+  nearestLine,
   placeKind,
   placeName,
   placeTier,
+  standLine,
 } from '../../ui/state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
@@ -40,11 +40,8 @@ export class MapView implements Scene {
   private framed = false;
   /** Settlement id the walker just stepped onto. Held until the keys are released. */
   private settlementHold: string | null = null;
-  private dive: DiveIntentState = emptyDiveIntent();
-  /** Holds the full ring while the fade into 3D is starting. */
-  private diveShown = 0;
-  /** Zoom-in events that hit the cap this frame. Consumed in update. */
-  private zoomInNotches = 0;
+  /** Seconds left before Enter can open 3D again after a return. */
+  private entryCooldown = 0;
 
   constructor(private readonly host: GameHost) {}
 
@@ -104,21 +101,28 @@ export class MapView implements Scene {
     ) {
       this.zoom(1 / 1.12);
     }
-    const canDive = world.data
-      ? describeMapStand(world.data, world.hero.x, world.hero.y).canEnter
-      : false;
-    const atCap = this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3;
-    const stepped = stepDiveIntent(this.dive, dt, this.zoomInNotches, atCap, canDive);
-    this.zoomInNotches = 0;
-    this.dive = stepped.state;
-    if (stepped.dive) {
-      this.diveShown = 1;
-      this.host.enterArea();
-    } else if (this.dive.intent <= 0) {
-      this.diveShown = 0;
-    }
+    this.entryCooldown = stepEntryCooldown(this.entryCooldown, dt);
     this.camera.update(dt, world.hero.x, world.hero.y);
-    if (this.host.keyboard.consumePress('Enter')) this.host.enterArea();
+    if (this.entryCooldown > 0) {
+      this.host.keyboard.consumePress('Enter');
+    } else if (this.host.keyboard.consumePress('Enter')) {
+      this.host.enterArea();
+    }
+  }
+
+  /** True once the post-exit cooldown has elapsed. */
+  allowEnter(): boolean {
+    return this.entryCooldown <= 0;
+  }
+
+  /**
+   * Called when 3D hands back to the map. Ease off the zoom cap and ignore
+   * Enter until the cooldown elapses, so the leaving key cannot re-enter.
+   */
+  noteAreaReturn(): void {
+    this.entryCooldown = MAP_ENTRY_COOLDOWN_SEC;
+    this.camera.easeScale(zoomAfterArea(this.camera.targetScale));
+    this.host.keyboard.clearPresses();
   }
 
   render(_alpha: number): void {
@@ -128,10 +132,10 @@ export class MapView implements Scene {
       nearTown.value = false;
       canEnter.value = false;
       placeName.value = '';
+      standLine.value = '';
+      nearestLine.value = '';
       clockRate.value = '';
-      diveIntent.value = 0;
-      diveCue.value = 0;
-      this.diveShown = 0;
+      mapNight.value = 0;
     } else {
       const stand = describeMapStand(data, world.hero.x, world.hero.y);
       nearTown.value = stand.kind !== 'wilderness' && stand.kind !== 'water' && !!stand.tier;
@@ -139,17 +143,13 @@ export class MapView implements Scene {
       placeName.value = stand.name;
       placeTier.value = stand.tier;
       placeKind.value = stand.kind;
+      standLine.value = stand.standLine;
+      nearestLine.value = stand.nearestLine;
       clockRate.value = formatMapClockRate(this.camera.scale / this.camera.step);
-      const shown = stand.canEnter ? Math.max(this.dive.intent, this.diveShown) : 0;
-      diveIntent.value = shown;
-      diveCue.value = diveCueAmount(this.camera.scale, shown, stand.canEnter);
+      mapNight.value = dayLightAt(world.clockHours).mapNight;
       hint.value = stand.blockedReason
         ? 'Open water. Walk ashore to enter.'
-        : shown > 0.04
-          ? 'Keep zooming to step into 3D.'
-          : stand.tier === 'Wilderness'
-            ? 'Enter walks this ground in 3D. Scroll in at the closest zoom to step through.'
-            : '';
+        : 'Enter walks this ground in 3D.';
     }
     this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(3);
     this.host.paintMap({
@@ -183,10 +183,8 @@ export class MapView implements Scene {
   }
 
   private applyZoom(sx: number, sy: number, factor: number): void {
+    if (this.host.view !== 'map') return;
     const canvas = this.host.mapCanvas;
     this.camera.zoomAt(sx, sy, factor, canvas.clientWidth, canvas.clientHeight);
-    if (factor > 1.001 && this.camera.targetScale >= MAP_ZOOM_CAP - 1e-3) {
-      this.zoomInNotches += 1;
-    }
   }
 }

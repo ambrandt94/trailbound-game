@@ -2489,7 +2489,7 @@ window.TBArea={
 attach:attach,receive:receive,groundY:groundY,active:function(){return active;},
 players:function(){return ctx?ctx.players:[];},
 setView:function(i){if(ctx&&typeof ctx.goView==="function")ctx.goView(i);},
-walkClamp:walkClamp,spawn:spawn,name:function(){return areaName;},requested:requested,heightSpan:function(){return heightSpan;},
+walkClamp:walkClamp,spawn:spawn,groundName:function(x,z){return groundNameAt(x,z);},name:function(){return areaName;},requested:requested,heightSpan:function(){return heightSpan;},
 ownsExit:true,edgeProbe:edgeProbe,edgeFrame:edgeFrame,
 decodeU8:decodeU8,prepare:prepare,validate:validate,payloadHash:payloadHash,sampleGrid:sampleGrid,maskClamp:maskClamp,readyWanted:readyWanted,ribbonCover:ribbonCover,roadCover:roadCover,isDryBiome:isDryBiome,ringDressFor:ringDressFor,readHooks:readHooks,
 minigameSlots:function(){return minigameSlots;},respawnAnchor:function(){return respawnAnchor;},settlement:function(){return settlementInfo;},

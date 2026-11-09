@@ -242,6 +242,22 @@ input:focus-visible {
   font-size: 0.85em;
 }
 
+.clock .party {
+  display: block;
+  margin-top: 0.15rem;
+  color: #3d4338;
+  font-size: 0.82rem;
+}
+
+.night-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: #1a2744;
+  mix-blend-mode: multiply;
+  opacity: 0;
+}
+
 .save {
   right: 1rem;
   pointer-events: auto;
@@ -590,7 +606,84 @@ input:focus-visible {
 }
 
 .place h2 {
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.place .stand,
+.place .nearest {
+  margin: 0 0 0.45rem;
+  color: #3d4338;
+}
+
+.enter-place {
+  display: block;
+  width: 100%;
+  min-height: 3.1rem;
+  margin-top: 0.35rem;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  background: #c65a24;
+  border-color: #8a3412;
+}
+
+.enter-place:disabled {
+  background: #8d8478;
+  border-color: #6d6458;
+}
+
+.notice {
+  position: absolute;
+  left: 50%;
+  top: 5.4rem;
+  z-index: 3;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.55rem 0.9rem;
+  background: rgba(246, 241, 230, 0.96);
+  border: 2px solid #1f6a56;
+  border-radius: 0.8rem;
+  color: #1f3d32;
+  pointer-events: none;
+}
+
+.wagon-menu {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(22rem, calc(100% - 2rem));
+  padding: 1rem 1rem 1.1rem;
+  background: rgba(246, 241, 230, 0.97);
+  border: 2px solid #2c261f;
+  border-radius: 1rem;
+  pointer-events: auto;
+}
+
+.wagon-menu h2 {
+  margin-bottom: 0.7rem;
+}
+
+.wagon-rows {
+  display: grid;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.wagon-row {
+  display: flex;
+  width: 100%;
+  min-height: 3.2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  text-align: left;
+}
+
+.wagon-row small {
+  color: #f6f1e6;
+  font-size: 0.82rem;
+  opacity: 0.9;
 }
 
 .screen .field {

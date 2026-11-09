@@ -129,6 +129,7 @@ export class MapRenderer {
       showPlayer: true,
       spriteBuildings: true,
       cloudAmt: 0,
+      heroYaw: state.heroYaw,
     });
     const paintMs = performance.now() - paintStarted;
     this.drawMs = this.drawMs === 0 ? paintMs : this.drawMs * 0.8 + paintMs * 0.2;

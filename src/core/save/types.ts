@@ -29,10 +29,20 @@ export interface SaveManifest {
 }
 
 /** People core, parties, camps, wallets, and clock. G0 stores the hero and the clock. */
+/** Party supplies. Missing on older saves; the loader fills the draft defaults. */
+export interface PartySave {
+  hasWagon: boolean;
+  rawFood: number;
+  meals: number;
+  morale: number;
+  hungry: boolean;
+}
+
 export interface PackedWorld {
   clockHours: number;
   worldSeed: number;
   player: PlayerSave;
+  party?: PartySave;
   gameVersion: string;
   cfPin: CfPin;
 }

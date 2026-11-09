@@ -39,3 +39,34 @@ test('leaving an area lands the hero just outside the town on that side', () => 
 test('formatClock rolls the day after 24 game hours', () => {
   expect(formatClock(26.5)).toBe('Day 2  02:30');
 });
+
+test('a new day consumes overnight food and a save keeps the party', () => {
+  const world = new WorldState();
+  world.clockHours = 23;
+  world.party.rawFood = 12;
+  world.advanceClock(2 / (8 / 60));
+  expect(world.clockHours).toBeGreaterThan(24);
+  expect(world.party.rawFood).toBe(2);
+  expect(world.party.hungry).toBe(false);
+  const packed = world.toPacked({
+    gameVersion: '0',
+    cfPin: { version: '0', generatorVersion: '0' },
+  });
+  expect(packed.party?.rawFood).toBe(2);
+  const loaded = new WorldState();
+  loaded.load(packed);
+  expect(loaded.party.rawFood).toBe(2);
+  expect(loaded.party.hasWagon).toBe(true);
+});
+
+test('sleeping at the wagon skips to dawn and can leave the party hungry', () => {
+  const world = new WorldState();
+  world.clockHours = 22;
+  world.party.rawFood = 4;
+  const message = world.useWagon('sleep');
+  expect(message).toContain('dawn');
+  expect(world.clockHours).toBeCloseTo(24, 4);
+  expect(world.party.rawFood).toBe(0);
+  expect(world.party.hungry).toBe(true);
+  expect(world.party.morale).toBe(-10);
+});
