@@ -3,9 +3,11 @@
  * The mesh is metres already: wheels on y = 0, tongue along +Z.
  * It is not scaled or recentred. The solid box is the body; parking
  * keeps the whole tongue clear of roads, doors, buildings, and trees.
+ * The pack ox stands just ahead of that tongue and idles until the wagon moves.
  */
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
+  Box3,
   BoxGeometry,
   Color,
   Group,
@@ -18,6 +20,7 @@ import {
   type Object3D,
 } from 'three';
 import { oakTrunkRadius } from '../../core/world/oak-dress';
+import { hitchPackOx, tickPackOx } from './pack-ox';
 import {
   WAGON_BOX,
   WAGON_USE_RADIUS_M,
@@ -61,6 +64,7 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   group.position.set(spot.x, y, spot.z);
   group.rotation.y = spot.yaw;
   const model = await loadWagon();
+  const wagonFrontZ = new Box3().setFromObject(model).max.z;
   group.add(model);
   mount.scene.add(group);
   const body = wagonBodyAabb(spot);
@@ -72,6 +76,17 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
     h: y + body.h,
     y0: y,
   } as WagonBlock & { h: number; y0: number });
+  try {
+    await hitchPackOx({
+      group,
+      wagonFrontZ,
+      spot,
+      blocks: mount.blocks,
+      groundY: mount.groundY,
+    });
+  } catch (error) {
+    console.warn('pack ox', error);
+  }
   const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
   posted.__tbWagon = { x: spot.x, z: spot.z, y };
   mount.things.push({
@@ -88,6 +103,11 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
     },
   });
   return spot;
+}
+
+/** Advance the hitched ox. Stopped wagons idle; a moving wagon uses PullWalk. */
+export function tickPartyWagon(dt: number): void {
+  tickPackOx(dt);
 }
 
 function clearance(mount: WagonMount, spot: WagonCandidate) {
