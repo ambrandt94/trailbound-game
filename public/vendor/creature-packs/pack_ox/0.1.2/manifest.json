@@ -1,0 +1,71 @@
+{
+  "format": "cf.creature_pack",
+  "version": "0.1.2",
+  "status": "approved_by_alex_2026-11-09",
+  "note": "Approved by Alex Nov 9 2026 as T1 wagon pack ox placeholder for trailbound-game.",
+  "engine": {
+    "name": "cf-runtime",
+    "api": 1,
+    "compatibleBundle": "1.2.1"
+  },
+  "textureFilter": "nearest",
+  "units": "meters",
+  "up": "+Y",
+  "forward": "+Z",
+  "origin": "ground between hooves",
+  "creatures": [
+    {
+      "id": "pack_ox",
+      "name": "Pack Ox",
+      "role": "tier1_wagon_draft",
+      "file": "packs/pack_ox.glb",
+      "sha256": "e3ac943c9e8dbf942e30c8fcabefc7d3405625a58d984d0ceba68209a2b67558",
+      "bytes": 594868,
+      "triangles": 4601,
+      "texture": {
+        "size": [
+          256,
+          256
+        ],
+        "filter": "nearest"
+      },
+      "clips": {
+        "Idle": {
+          "duration": 3.233,
+          "speed_mps": 0.0
+        },
+        "Walk": {
+          "duration": 0.933,
+          "speed_mps": 0.41,
+          "gait": "lateral-sequence"
+        },
+        "PullWalk": {
+          "duration": 0.933,
+          "speed_mps": 0.32,
+          "gait": "lateral-sequence"
+        }
+      },
+      "sockets": {
+        "Socket_Yoke": {
+          "parent": "Chest",
+          "rest_gltf": {
+            "x": 0.0,
+            "y": 0.932,
+            "z": 0.52
+          },
+          "follows": "animation (shoulder/chest)"
+        },
+        "Socket_Hitch": {
+          "parent": "Root",
+          "rest_gltf": {
+            "x": 0.0,
+            "y": 0.932,
+            "z": 0.52
+          },
+          "follows": "root only; rest-pose hitch for wagon placement"
+        }
+      },
+      "preview": "preview/pack_ox_three_quarter.png"
+    }
+  ]
+}

@@ -4,6 +4,7 @@
  */
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Box3, BoxGeometry, Group, Mesh, MeshLambertMaterial, Vector3 } from 'three';
+import { hitchPackOx, tickPackOx } from './pack-ox';
 import {
   WAGON_BOX,
   chooseWagonSpot,
@@ -43,8 +44,20 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   group.position.set(spot.x, y, spot.z);
   group.rotation.y = spot.yaw;
   const model = await loadWagon();
+  const wagonFrontZ = new Box3().setFromObject(model).max.z;
   group.add(model);
   mount.scene.add(group);
+  try {
+    await hitchPackOx({
+      group,
+      wagonFrontZ,
+      spot,
+      blocks: mount.blocks,
+      groundY: mount.groundY,
+    });
+  } catch (error) {
+    console.warn('pack ox', error);
+  }
   const span = Math.max(WAGON_BOX.w, WAGON_BOX.d);
   mount.blocks.push({
     x: spot.x,
@@ -70,6 +83,11 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
     },
   });
   return spot;
+}
+
+/** Advance the hitched ox. Stopped wagons idle; a moving wagon uses PullWalk. */
+export function tickPartyWagon(dt: number): void {
+  tickPackOx(dt);
 }
 
 function clearance(mount: WagonMount, spot: WagonCandidate) {

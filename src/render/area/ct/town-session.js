@@ -18,7 +18,7 @@ import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
 import { oakLoadMs, oakReady } from '../oak-batch.ts';
-import { mountPartyWagon } from '../party-wagon.ts';
+import { mountPartyWagon, tickPartyWagon } from '../party-wagon.ts';
 
 const DEF = {
   maxSpeed: 5.5,
@@ -1234,6 +1234,7 @@ export async function createTownSession(canvas, hooks) {
       RIGS[1].root.visible = RIGS[1].sh.visible = NP > 1;
       if (forgePawn) RIGS[0].root.visible = false;
       tickPlayerBody(fdt);
+      tickPartyWagon(fdt);
       if (window.TBTiles && TBTiles.tick) TBTiles.tick(fdt);
       if (window.TBLive && TBLive.update) TBLive.update(fdt);
       if (window.TBNpcs && TBNpcs.update) TBNpcs.update(fdt);
