@@ -2,6 +2,7 @@
    Not typechecked: a full TS conversion of these files would stall the port.
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
+import { SHADE_VALUE_FLOOR } from '../shade-floor.ts';
 import { THREE } from './three-runtime.js';
 /* Hand-drawn tiles_v3 plus the authored building set.
    Terrain is 48 px over 3 m (16 texels/m). The atlas is nearest and unmipped
@@ -222,7 +223,7 @@ const CEL=[
 "_col+=_alb*uHemi*0.18;",
 "_col=min(_col,vec3(0.96));",
 "float _mx=max(_col.r,max(_col.g,_col.b));",
-"if(_mx<0.08)_col*=0.08/max(_mx,0.001);",
+`if(_mx<${SHADE_VALUE_FLOOR})_col*=${SHADE_VALUE_FLOOR}/max(_mx,0.001);`,
 "reflectedLight.indirectDiffuse=vec3(0.0);",
 "reflectedLight.directDiffuse=_col;"
 ].join("\n");

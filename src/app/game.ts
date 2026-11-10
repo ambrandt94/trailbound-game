@@ -429,6 +429,7 @@ export class Game implements GameHost {
       skyTop: light.skyTop,
       skyHor: light.skyHor,
       fog: light.fog,
+      bright: light.bright,
     };
   }
 
