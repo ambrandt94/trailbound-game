@@ -46,8 +46,11 @@ export function WardrobeScreen(props: { view: CreatorView; busy: boolean; confir
           {props.busy ? <span class="spinner" role="status" aria-label="Building avatar" /> : null}
         </div>
         <p class="tb-heading" data-selected-slot={view.slot}>
-          {label(view.slot)}
-          {wornHere ? ` · ${label(view.garment)}` : ' · Empty'}
+          {skinText(
+            wornHere
+              ? `${label(view.slot)} | ${label(view.garment)}`
+              : `${label(view.slot)} | Empty`,
+          )}
         </p>
         {view.homes.length > 1 ? (
           <p class="note">Occupies {view.homes.map(label).join(', ')}.</p>
@@ -64,7 +67,7 @@ export function WardrobeScreen(props: { view: CreatorView; busy: boolean; confir
               onClick={() => creatorCommands.setSlot(slot)}
             >
               <span>{label(slot)}</span>
-              <span>{view.worn[slot] ? label(view.worn[slot]) : 'empty'}</span>
+              <span class="slot-value">{view.worn[slot] ? label(view.worn[slot]) : 'empty'}</span>
             </button>
           ))}
         </div>

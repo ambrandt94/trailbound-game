@@ -61,7 +61,7 @@ export const stackGame: MinigameDef = {
     base.position.y = -2;
     scene.add(base);
     spawn(g);
-    if (g.hud) g.hud.innerHTML = 'Space / F to drop the block · overhangs get cut off';
+    if (g.hud) g.hud.innerHTML = 'Space / F to drop the block | overhangs get cut off';
   },
   update(g, dt) {
     const current = state.current;

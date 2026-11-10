@@ -145,7 +145,7 @@ export const caveGame: MinigameDef = {
       } else if (left <= 0) {
         g.done({
           ok: found >= 3,
-          message: `The torch went out…\nFound ${found} of ${total}`,
+          message: `The torch went out...\nFound ${found} of ${total}`,
           coins: found >= 3 ? CAVE_PARTIAL_COINS : 0,
         });
       }
@@ -165,7 +165,7 @@ export const caveGame: MinigameDef = {
       torch.position.set(avatar.x, avatar.y + 1.6, avatar.z);
     }
     if (g.hud) {
-      g.hud.innerHTML = `crystals ${found}/${total} &nbsp; torch ${Math.ceil(Math.max(0, left))}s<br><small>walk into the crystals (drag or stick) · Space / F / tap to jump</small>`;
+      g.hud.innerHTML = `crystals ${found}/${total} &nbsp; torch ${Math.ceil(Math.max(0, left))}s<br><small>walk into the crystals (drag or stick) | Space / F / tap to jump</small>`;
     }
     follow(g.camera, avatar, 13, 55, camYaw);
   },

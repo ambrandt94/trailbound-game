@@ -10,7 +10,13 @@ export const BERRY = '#c45c32';
 export const CREAM = '#fff8ec';
 export const WATER = '#4a9eb2';
 
-const FONT = '16px "Trailbound Pixel", ui-monospace, monospace';
+/** Softball Gold is drawn on its 16px grid. Sizes snap to multiples of 16. */
+const SOFTBALL = '"Softball Gold", ui-monospace, monospace';
+
+function softballFont(size: number): string {
+  const snapped = Math.max(16, Math.round(size / 16) * 16);
+  return `${snapped}px ${SOFTBALL}`;
+}
 
 export function paintField(ctx: CanvasRenderingContext2D, width: number, height: number): void {
   const sky = ctx.createLinearGradient(0, 0, 0, height);
@@ -31,11 +37,12 @@ export function drawLabel(
   size = 16,
   color = INK,
 ): void {
+  const snapped = Math.max(16, Math.round(size / 16) * 16);
   ctx.fillStyle = color;
-  ctx.font = `${size}px "Trailbound Pixel", ui-monospace, monospace`;
+  ctx.font = softballFont(size);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, x, y - snapped * (3 / 16));
 }
 
 export function drawCenter(
@@ -46,11 +53,12 @@ export function drawCenter(
   size = 16,
   color = INK,
 ): void {
+  const snapped = Math.max(16, Math.round(size / 16) * 16);
   ctx.fillStyle = color;
-  ctx.font = FONT.replace('16px', `${size}px`);
+  ctx.font = softballFont(snapped);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x, y);
+  ctx.fillText(text, x, y + snapped / 32);
 }
 
 /** Sweep track. The notch is the strike window. `phase` is 0..1. */
