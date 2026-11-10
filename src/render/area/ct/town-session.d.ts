@@ -11,6 +11,11 @@ export interface TownSession {
   step(dt: number): void;
   frame(): void;
   prompt(): string;
+  worldView(): {
+    scene: import('three').Scene;
+    pose: { x: number; y: number; z: number; yaw: number };
+    draw(scene: import('three').Scene, camera: import('three').Camera): void;
+  };
   indoors(): boolean;
   bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null;
   stats(): { fps: number; calls: number; triangles: number; view: string; name: string };
@@ -52,5 +57,6 @@ export function createTownSession(
     getLook?: () => unknown;
     onLook?: (patch: unknown) => void;
     onWagon?: () => void;
+    onMinigame?: (id: string) => void;
   },
 ): Promise<TownSession>;

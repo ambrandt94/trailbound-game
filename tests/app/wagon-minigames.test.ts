@@ -105,7 +105,18 @@ function playWash(rubs: number): MinigameResult | null {
   const run = harness(wagonWash);
   for (let i = 0; i < rubs; i++) {
     run.step(0.05, {
-      pointer: { x: 0.5, y: 0.5, down: true, dx: 1, dy: 0, tap: false },
+      pointer: {
+        x: 0.5,
+        y: 0.5,
+        down: true,
+        dx: 1,
+        dy: 0,
+        tap: false,
+        press: false,
+        dragX: 0,
+        dragY: 0,
+        moved: false,
+      },
     });
     if (run.result) return run.result;
   }
@@ -120,14 +131,36 @@ function harness(def: MinigameDef): {
   let result: MinigameResult | null = null;
   const context: MinigameContext = {
     in: { x: 0, y: 0, hold: false },
-    pointer: { x: 0.5, y: 0.5, down: false, dx: 0, dy: 0, tap: false },
+    pointer: {
+      x: 0.5,
+      y: 0.5,
+      down: false,
+      dx: 0,
+      dy: 0,
+      tap: false,
+      press: false,
+      dragX: 0,
+      dragY: 0,
+      moved: false,
+    },
     act: false,
     quit: false,
     canvas: null,
+    gfx: null,
     scene: null,
     camera: null,
+    worldScene: null,
+    pose: null,
+    A: null,
+    camYaw: 45,
+    hud: null,
+    side: null,
     width: 480,
     height: 320,
+    W: 480,
+    H: 320,
+    t: 0,
+    over: false,
     supplies: createParty(),
     helpers: minigameHelpers,
     done: (next) => {
@@ -141,6 +174,7 @@ function harness(def: MinigameDef): {
       context.act = false;
       context.quit = false;
       context.pointer = { ...context.pointer, dx: 0, dy: 0, tap: false };
+      context.t += dt;
       Object.assign(context, patch);
       def.update(context, dt);
     },

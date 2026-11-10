@@ -10,6 +10,8 @@ export interface MinigameActionSource {
     p2: { jump: boolean; roll: boolean; use: boolean };
   };
   consumePress(code: string): boolean;
+  /** Space held. Reel and other holds read this; pulses stay on areaActions. */
+  isDown?(code: string): boolean;
 }
 
 export interface PointerSample {
@@ -19,6 +21,12 @@ export interface PointerSample {
   dx: number;
   dy: number;
   tap: boolean;
+  /** Set the frame the finger goes down. Non-drag games treat it as the action. */
+  press: boolean;
+  /** Pixel offset from the pointer-down point. Drag games turn this into the stick. */
+  dragX: number;
+  dragY: number;
+  moved: boolean;
 }
 
 export class PointerTracker {
@@ -28,8 +36,13 @@ export class PointerTracker {
   private dx = 0;
   private dy = 0;
   private tap = false;
+  private press = false;
   private originX = 0;
   private originY = 0;
+  private downClientX = 0;
+  private downClientY = 0;
+  private dragX = 0;
+  private dragY = 0;
   private moved = false;
   private element: HTMLElement | null = null;
 
@@ -55,18 +68,36 @@ export class PointerTracker {
 
   sample(): PointerSample {
     const tap = this.tap;
+    const press = this.press;
     const dx = this.dx;
     const dy = this.dy;
     this.tap = false;
+    this.press = false;
     this.dx = 0;
     this.dy = 0;
-    return { x: this.x, y: this.y, down: this.down, dx, dy, tap };
+    return {
+      x: this.x,
+      y: this.y,
+      down: this.down,
+      dx,
+      dy,
+      tap,
+      press,
+      dragX: this.dragX,
+      dragY: this.dragY,
+      moved: this.moved,
+    };
   }
 
   private readonly onDown = (event: PointerEvent): void => {
     const point = this.local(event);
     this.down = true;
     this.moved = false;
+    this.press = true;
+    this.dragX = 0;
+    this.dragY = 0;
+    this.downClientX = event.clientX;
+    this.downClientY = event.clientY;
     this.originX = point.x;
     this.originY = point.y;
     this.x = point.x;
@@ -79,7 +110,9 @@ export class PointerTracker {
     const point = this.local(event);
     this.dx += point.x - this.x;
     this.dy += point.y - this.y;
-    if (Math.hypot(point.x - this.originX, point.y - this.originY) > 0.03) this.moved = true;
+    this.dragX = event.clientX - this.downClientX;
+    this.dragY = event.clientY - this.downClientY;
+    if (Math.hypot(this.dragX, this.dragY) > 12) this.moved = true;
     this.x = point.x;
     this.y = point.y;
   };
@@ -92,6 +125,8 @@ export class PointerTracker {
     this.x = point.x;
     this.y = point.y;
     this.down = false;
+    this.dragX = 0;
+    this.dragY = 0;
     if (!this.moved) this.tap = true;
   };
 
@@ -123,13 +158,20 @@ export function readMinigameInput(
 ): BridgedInput {
   const actions = source.areaActions();
   const pad = actions.p1;
-  const x = clampAxis(pad.x);
-  const y = clampAxis(pad.z);
-  const tap = pointer.tap;
-  const act = pad.jump || pad.use || actions.p2.jump || actions.p2.use || (!drag && tap);
+  const dragX = drag && pointer.moved ? clampAxis(pointer.dragX / 50) : 0;
+  const dragY = drag && pointer.moved ? clampAxis(-pointer.dragY / 50) : 0;
+  const x = clampAxis(pad.x + dragX);
+  const y = clampAxis(pad.z + dragY);
+  const act =
+    pad.jump ||
+    pad.use ||
+    actions.p2.jump ||
+    actions.p2.use ||
+    (drag ? pointer.tap : pointer.press);
   const quit = quitButton || pad.roll || actions.p2.roll || source.consumePress('Escape');
+  const hold = (source.isDown?.('Space') ?? false) || pointer.down;
   return {
-    in: { x, y, hold: Math.hypot(x, y) > 0.2 || pointer.down },
+    in: { x, y, hold },
     pointer: { ...pointer },
     act,
     quit,

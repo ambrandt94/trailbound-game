@@ -19,6 +19,7 @@ import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
 import { oakLoadMs, oakReady } from '../oak-batch.ts';
 import { mountPartyWagon, tickPartyWagon } from '../party-wagon.ts';
+import { signPlacement } from '../../../core/world/minigame-play.ts';
 
 const DEF = {
   maxSpeed: 5.5,
@@ -315,6 +316,7 @@ export async function createTownSession(canvas, hooks) {
   }
   const PLS = [mkP(0, 0), mkP(1, 1.2)];
   const RIGS = [createBlockRig(scene, M), createBlockRig(scene, M2)];
+  if (window.TBAvatar) TBAvatar.claim(RIGS[0]);
   RIGS[1].root.visible = false;
   RIGS[1].sh.visible = false;
   /* Confirmed Character Forge look. Null keeps the block rig (CF off, ?cf=0, or still loading). */
@@ -1183,6 +1185,7 @@ export async function createTownSession(canvas, hooks) {
       } catch (error) {
         console.warn('party wagon', error);
       }
+      mountMinigameSigns();
       applyExternalLook();
       if (!hooks.getLook) goView(0);
       started = true;
@@ -1255,6 +1258,27 @@ export async function createTownSession(canvas, hooks) {
         fpsN = 0;
       }
     },
+    worldView() {
+      const p = PLS[0];
+      return {
+        scene,
+        pose: { x: p.x, y: p.y, z: p.z, yaw: p.yaw },
+        draw(nextScene, nextCamera) {
+          const w = Math.max(1, renderer.domElement.width);
+          const h = Math.max(1, renderer.domElement.height);
+          nextCamera.aspect = w / h;
+          nextCamera.updateProjectionMatrix();
+          const target = renderer.getRenderTarget();
+          const clear = renderer.autoClear;
+          renderer.setRenderTarget(null);
+          renderer.autoClear = true;
+          aimForgeSun(nextCamera);
+          renderer.render(nextScene, nextCamera);
+          renderer.setRenderTarget(target);
+          renderer.autoClear = clear;
+        },
+      };
+    },
     prompt() {
       const p = PLS[0];
       const t = target(p);
@@ -1298,11 +1322,58 @@ export async function createTownSession(canvas, hooks) {
       canvas.removeEventListener('pointerup', onUp);
       canvas.removeEventListener('pointercancel', onUp);
       travelFade.remove();
+      for (const group of signGroups) {
+        group.traverse((node) => {
+          if (node.geometry) node.geometry.dispose();
+          if (node.material && node.material.dispose) node.material.dispose();
+        });
+        group.removeFromParent();
+      }
       renderer.dispose();
       if (window.TBRenderer === renderer) window.TBRenderer = null;
       if (window.__tb && window.__tb.session === session) window.__tb = null;
     },
   };
+
+  const signGroups = [];
+  function mountMinigameSigns() {
+    const slots = window.TBArea && TBArea.minigameSlots ? TBArea.minigameSlots() : [];
+    const payload = window.TBArea && TBArea.payload ? TBArea.payload() : null;
+    const origin = (payload && payload.area && payload.area.innerOrigin) || { x: 0, y: 0 };
+    const meters = (payload && payload.units && +payload.units.metersPerTile) || 1;
+    const groundY = (x, z) => (window.TBArea && TBArea.groundY ? TBArea.groundY(x, z) : 0);
+    for (const slot of slots) {
+      const place = signPlacement(slot, origin, meters);
+      if (!place) continue;
+      const y = groundY(place.x, place.z);
+      const group = new THREE.Group();
+      group.name = 'mg-sign';
+      group.userData.mg = place.id;
+      group.userData.tbKeep = 1;
+      group.position.set(place.x, y, place.z);
+      const wood = new THREE.MeshLambertMaterial({ color: 0x8d5a32 });
+      const boardMat = new THREE.MeshLambertMaterial({ color: 0xf4e2c4 });
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.35, 0.12), wood);
+      post.position.y = 0.68;
+      const board = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.42, 0.06), boardMat);
+      board.position.y = 1.35;
+      group.add(post, board);
+      scene.add(group);
+      signGroups.push(group);
+      TH.push({
+        k: 'fn',
+        x: place.x,
+        z: place.z,
+        y,
+        r: 2.2,
+        label: place.label,
+        use: () => {
+          hooks.onMinigame?.(place.id);
+          return '';
+        },
+      });
+    }
+  }
 
   function wagonDoors() {
     const rows = (window.TBBuildings && TBBuildings.rows) || [];

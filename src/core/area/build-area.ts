@@ -1201,7 +1201,26 @@ function emitMinigames(
       }
       const x = originX + ix + 0.5;
       const y = originY + iy + 0.5;
-      if (water && landNeighbor && fish.length < 4) fish.push({ x, y });
+      if (water && landNeighbor && fish.length < 4) {
+        let shore: { x: number; y: number } | null = null;
+        for (const [dx, dy] of [
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+        ] as const) {
+          const nx = ix + dx;
+          const ny = iy + dy;
+          if (nx < 0 || ny < 0 || nx >= gw || ny >= gh) continue;
+          const ngi = nx + ny * gw;
+          if (ground[ngi] === GROUND.water) continue;
+          if (!(mask[ngi] || borderMask[ngi])) continue;
+          shore = { x: originX + nx + 0.5, y: originY + ny + 0.5 };
+          break;
+        }
+        if (shore && !fish.some((spot) => Math.hypot(spot.x - shore.x, spot.y - shore.y) < 1.2))
+          fish.push(shore);
+      }
       if (!water && roadHere && waterNeighbor && ford.length < 2) ford.push({ x, y });
     }
   }

@@ -32,13 +32,17 @@ export class MinigameScene implements Scene {
     }
     if (this.phase === 'play') {
       this.host.minigames.tick(step);
-      this.host.minigames.setCover(1);
-      if (this.host.minigames.wantsExit) this.phase = 'out';
+      this.fade = Math.max(0, this.fade - step / FADE);
+      this.host.minigames.setCover(this.fade);
+      if (this.host.minigames.wantsExit) {
+        this.phase = 'out';
+        this.fade = 0;
+      }
       return;
     }
-    this.fade = Math.max(0, this.fade - step / FADE);
+    this.fade = Math.min(1, this.fade + step / FADE);
     this.host.minigames.setCover(this.fade);
-    if (this.fade <= 0 && !this.popped) {
+    if (this.fade >= 1 && !this.popped) {
       this.popped = true;
       this.host.minigames.finishExit();
       this.host.enqueue(() => {

@@ -709,12 +709,21 @@ input:focus-visible {
   background: rgba(58, 42, 28, 0.28);
 }
 
+#mg.inst {
+  background: transparent;
+}
+
+#app:has(#mg.inst.open) .hud {
+  visibility: hidden;
+}
+
 #mgfade {
   position: absolute;
   inset: 0;
-  background: #c4a27a;
+  background: #000;
   opacity: 0;
   pointer-events: none;
+  z-index: 4;
 }
 
 #mg .mg-frame {
@@ -747,7 +756,7 @@ input:focus-visible {
 
 #mg.world .mg-frame {
   top: auto;
-  bottom: 1rem;
+  bottom: 4.4rem;
   transform: translateX(-50%);
   width: min(40rem, calc(100% - 1.5rem));
   height: 15rem;
@@ -825,6 +834,149 @@ input:focus-visible {
 #mg .mg-close {
   margin-top: 0.45rem;
   color: #6b4124;
+}
+
+#mg.demo .mg-frame {
+  color: #e8e0cc;
+  background: #2a1c1c;
+  border: 3px solid #e8e0cc;
+  box-shadow: 0 0 0 3px #2a1c1c;
+}
+
+#mg.demo .mg-quit {
+  background: #5a4020;
+  border-color: #e8e0cc;
+}
+
+#mg.demo .mg-hud {
+  margin: 0 0 0.35rem;
+  padding: 0.2rem 0.45rem;
+  background: #2a1c1c;
+  color: #fff;
+  text-align: center;
+  font:
+    12px/1.45 ui-monospace,
+    monospace;
+}
+
+#mg.demo .mg-hud small {
+  opacity: 0.8;
+}
+
+#mg .mg-side {
+  position: absolute;
+  left: 62%;
+  top: 46%;
+  z-index: 3;
+  transform: translateY(-50%);
+  padding: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+#mg.demo .mg-side canvas,
+#mg.demo .mg-hud canvas.px {
+  display: block;
+  image-rendering: pixelated;
+}
+
+#mg.demo .mg-hud canvas.px {
+  width: 240px;
+  height: 28px;
+  margin: 6px auto 2px;
+}
+
+#mg.demo .mg-side canvas {
+  width: 60px;
+  height: 180px;
+}
+
+#mg.demo.world {
+  background: transparent;
+  pointer-events: auto;
+}
+
+#mg.demo.world .mg-frame {
+  top: 7.1rem;
+  bottom: auto;
+  left: 50%;
+  width: min(36rem, calc(100% - 2rem));
+  height: auto;
+  transform: translateX(-50%);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+#mg.demo.world .mg-stage,
+#mg.demo.world .mg-foot,
+#mg.demo.world .mg-bar strong {
+  display: none;
+}
+
+#mg.demo.world .mg-bar {
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin: 0 0 0.35rem;
+}
+
+#mg.demo.world .mg-hud {
+  pointer-events: none;
+  width: 100%;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  padding: 6px 12px;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+#mg.demo .mg-card {
+  color: #2a1c1c;
+  background: #fffdf2;
+  border: 3px solid #2a1c1c;
+  white-space: pre-wrap;
+  text-align: center;
+  font-weight: bold;
+}
+
+#mg.inst .mg-frame {
+  inset: 0;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  transform: none;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+#mg.inst .mg-stage {
+  border: 0;
+  background: transparent;
+}
+
+#mg.inst .mg-bar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+}
+
+#mg.inst .mg-hud {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
 }
 
 .screen .field {

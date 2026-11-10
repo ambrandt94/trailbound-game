@@ -1,8 +1,5 @@
 import {
-  AmbientLight,
   Color,
-  DirectionalLight,
-  HemisphereLight,
   Mesh,
   NearestFilter,
   PerspectiveCamera,
@@ -15,23 +12,25 @@ import {
 } from 'three';
 
 /** Physical-light rig for pop3d and instanced games. Intensities are r187-scale. */
-export function createStage(canvas: HTMLCanvasElement, background: string) {
+export function createStage(
+  canvas: HTMLCanvasElement,
+  background: string,
+  mode: 'pop' | 'inst' = 'pop',
+) {
   const renderer = new WebGLRenderer({ canvas, antialias: false, alpha: false });
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.setPixelRatio(1);
   const scene = new Scene();
   scene.background = new Color(background);
-  const camera = new PerspectiveCamera(42, 1, 0.1, 80);
-  camera.position.set(0, 3.4, 6.8);
-  camera.lookAt(0, 0.7, 0);
-  const hemi = new HemisphereLight(0xfff6e4, 0x8d6a42, 0.62);
-  const sun = new DirectionalLight(0xfff1d0, 2.6);
-  sun.position.set(4.5, 8, 3);
-  const fill = new AmbientLight(0xfff8ee, 0.38);
-  scene.add(hemi, sun, fill);
+  const inst = mode === 'inst';
+  const camera = new PerspectiveCamera(inst ? 35 : 40, 1, inst ? 0.5 : 0.1, inst ? 300 : 200);
+  camera.position.set(0, 8, 12);
+  camera.lookAt(0, 0.8, 0);
   const resize = (width: number, height: number) => {
-    renderer.setSize(width, height, false);
-    camera.aspect = width / Math.max(1, height);
+    const w = Math.max(2, Math.ceil(width / 2));
+    const h = Math.max(2, Math.ceil(height / 2));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
   };
   return { renderer, scene, camera, resize };
@@ -50,6 +49,11 @@ export function pixelTexture(texture: Texture): Texture {
 export function disposeObject(root: Object3D): void {
   const materials: Material[] = [];
   root.traverse((node) => {
+    let shared: Object3D | null = node;
+    while (shared) {
+      if (shared.userData?.sharedAsset) return;
+      shared = shared.parent;
+    }
     const mesh = node as Mesh;
     if (mesh.geometry) mesh.geometry.dispose();
     const material = mesh.material;
@@ -66,5 +70,4 @@ export function disposeObject(root: Object3D): void {
 export function disposeStage(stage: Stage): void {
   disposeObject(stage.scene);
   stage.renderer.dispose();
-  stage.renderer.forceContextLoss();
 }

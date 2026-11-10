@@ -22,7 +22,14 @@ import { resolveLandStyle } from '../core/world/world-gen';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { formatPartyReadout, wagonMenuRows, wagonRefusal } from '../core/sim/party';
-import { getMinigame, MinigameHost, registerWagonMinigames } from '../minigames';
+import {
+  getMinigame,
+  listMinigames,
+  MinigameHost,
+  registerDemoMinigames,
+  registerWagonMinigames,
+} from '../minigames';
+import type { SimAvatar } from '../minigames/helpers/runtime';
 import { dayLightAt, tuOfDay } from '../core/sim/time';
 import { Keyboard, type AreaActionSnapshot } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
@@ -46,6 +53,7 @@ import {
   generating,
   hint,
   nearTown,
+  minigameCatalog,
   notice,
   partyHud,
   savedFlash,
@@ -58,6 +66,7 @@ import {
 import {
   adoptPlayerBody,
   buildAvatar,
+  getPlayerBody,
   forgeReady,
   forgeTimings,
   generateRecipe,
@@ -118,6 +127,8 @@ export class Game implements GameHost {
   private detachTouch: (() => void) | null = null;
   private readonly jobs: Array<() => void> = [];
   private noticeTimer = 0;
+  private avatarRestore: (() => void) | null = null;
+  private instanceRig: SimAvatar['rig'] | null = null;
 
   constructor(options: GameOptions) {
     this.options = options;
@@ -135,8 +146,14 @@ export class Game implements GameHost {
       onApplied: () => {
         void this.persist();
       },
+      world: () => this.areaScene?.worldView() ?? null,
+      camYaw: () => settings.value.look.camYaw,
+      syncAvatar: (avatar, dt) => this.syncInstanceAvatar(avatar, dt),
+      releaseAvatar: () => this.releaseInstanceAvatar(),
     });
     registerWagonMinigames();
+    registerDemoMinigames();
+    minigameCatalog.value = listMinigames().map((game) => ({ id: game.id, name: game.name }));
     this.bindUi();
     this.setMode('boot');
     this.setFade(0);
@@ -354,6 +371,9 @@ export class Game implements GameHost {
         onWagon: () => {
           this.openWagon();
         },
+        onMinigame: (id: string) => {
+          this.openMinigame(id);
+        },
       });
       await renderer.start(areaExport);
       view = new AreaView(this, renderer, this.pendingArea);
@@ -410,6 +430,68 @@ export class Game implements GameHost {
       skyHor: light.skyHor,
       fog: light.fog,
     };
+  }
+
+  private syncInstanceAvatar(avatar: SimAvatar, dt: number): void {
+    const rig = avatar.rig;
+    if (!rig) return;
+    this.instanceRig = rig;
+    if (this.useForgeBody(avatar, dt)) return;
+    const hero = (
+      globalThis as {
+        TBAvatar?: {
+          dressHero?: (target: SimAvatar['rig']) => boolean;
+          drive?: (target: SimAvatar['rig'], pawn: SimAvatar, dt: number) => boolean;
+        };
+      }
+    ).TBAvatar;
+    if (!hero?.dressHero || !hero.drive) return;
+    if (!hero.dressHero(rig)) return;
+    hero.drive(rig, avatar, dt);
+  }
+
+  /** Forge body when the area has one. Otherwise the caller dresses the area hero. */
+  private useForgeBody(avatar: SimAvatar, dt: number): boolean {
+    const body = getPlayerBody();
+    const rig = avatar.rig?.root ?? null;
+    const scene = rig?.parent ?? null;
+    if (!body || body.source !== 'forge' || !rig || !scene) return false;
+    let meshes = 0;
+    body.object3D.traverse((node) => {
+      if ((node as { isMesh?: boolean }).isMesh) meshes += 1;
+    });
+    if (meshes < 1) return false;
+    if (!this.avatarRestore) {
+      const parent = body.object3D.parent;
+      scene.add(body.object3D);
+      rig.visible = false;
+      this.avatarRestore = () => {
+        rig.visible = true;
+        if (parent) parent.add(body.object3D);
+        else body.object3D.removeFromParent();
+      };
+    }
+    body.object3D.visible = true;
+    body.object3D.position.set(avatar.x, avatar.y, avatar.z);
+    body.object3D.rotation.y = avatar.yaw;
+    body.object3D.scale.setScalar(1);
+    const speed = Math.hypot(avatar.vx, avatar.vz);
+    body.present({
+      clip: speed > 0.4 ? 'Walk' : 'Idle',
+      timeScale: speed > 0.4 ? Math.max(0.6, speed / 1.4) : 1,
+      fade: 0.12,
+    });
+    body.update(dt);
+    return true;
+  }
+
+  private releaseInstanceAvatar(): void {
+    const heroRoot = (this.instanceRig as { heroRoot?: { removeFromParent(): void } } | null)
+      ?.heroRoot;
+    heroRoot?.removeFromParent();
+    this.instanceRig = null;
+    this.avatarRestore?.();
+    this.avatarRestore = null;
   }
 
   private openWagon(): void {
@@ -477,6 +559,13 @@ export class Game implements GameHost {
       },
       closeWagon: () => {
         wagonOpen.value = false;
+      },
+      launchMinigame: (id) => {
+        settingsOpen.value = false;
+        if (!this.openMinigame(id)) {
+          notice.value = this.minigames.isOpen() ? 'Finish this one first.' : 'Not now.';
+          this.armNotice();
+        }
       },
       save: () => {
         void this.save();
@@ -737,6 +826,10 @@ export class Game implements GameHost {
     this.clockLoop.frame(
       (dt) => {
         this.stack.update(dt);
+        const top = this.stack.current();
+        if (this.minigames.isOpen() && this.minigames.kind !== 'inst' && top?.id !== 'area') {
+          this.minigames.tick(dt);
+        }
         this.flushJobs();
       },
       (alpha) => {

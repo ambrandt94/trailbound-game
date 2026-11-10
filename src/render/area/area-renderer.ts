@@ -38,6 +38,8 @@ export interface AreaHooks {
   onLook?(patch: unknown): void;
   /** F on the party wagon. The shell opens the activity menu. */
   onWagon?(): void;
+  /** F on a fish or chop sign. */
+  onMinigame?(id: string): void;
 }
 
 export class AreaRenderer {
@@ -72,6 +74,10 @@ export class AreaRenderer {
     return this.session?.prompt() ?? '';
   }
 
+  worldView(): ReturnType<TownSession['worldView']> | null {
+    return this.session?.worldView() ?? null;
+  }
+
   indoors(): boolean {
     return this.session?.indoors() ?? false;
   }
@@ -98,6 +104,7 @@ export class AreaRenderer {
       getLook: () => this.hooks.getLook?.(),
       onLook: (patch: unknown) => this.hooks.onLook?.(patch),
       onWagon: () => this.hooks.onWagon?.(),
+      onMinigame: (id: string) => this.hooks.onMinigame?.(id),
     });
     if (this.disposed) {
       session.dispose();

@@ -17,7 +17,7 @@ import {
   type LookField,
 } from '../core/state/area-look';
 import { skinText } from './glyphs';
-import { commands, settings } from './state';
+import { commands, minigameCatalog, settings } from './state';
 
 function trim(value: number): string {
   if (Math.abs(value - Math.round(value)) < 1e-6) return String(Math.round(value));
@@ -283,6 +283,21 @@ export function SettingsPanel(props: { dock?: boolean }) {
             ))}
           </details>
         ))}
+        <details class="look-group" open>
+          <summary>Minigames</summary>
+          <div class="wagon-rows">
+            {minigameCatalog.value.map((game) => (
+              <button
+                key={game.id}
+                type="button"
+                class="action secondary"
+                onClick={() => commands.launchMinigame(game.id)}
+              >
+                {skinText(game.name)}
+              </button>
+            ))}
+          </div>
+        </details>
         <div class="actions">
           <button type="button" class="action secondary" onClick={() => commands.editAvatar()}>
             Edit avatar

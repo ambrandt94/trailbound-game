@@ -33,17 +33,19 @@ next.reset().fadeIn(.16).play();
 prev.fadeOut(.16);
 rig.clip=name;
 }
-function dress(rig){
+function dress(rig, url){
 if(rig.mixer)return true;
-const url=URLS[rig._slot%URLS.length],built=TBAssets.cloneSkinned(url);
+url=url||URLS[(rig._slot||0)%URLS.length];
+if(!(window.TBAssets&&TBAssets.get(url)))return false;
+const built=TBAssets.cloneSkinned(url);
 if(!built)return false;
-const drop=[];
-rig.root.traverse(o=>{if(o.isMesh)drop.push(o);});
-drop.forEach(o=>{if(o.parent)o.parent.remove(o);});
+hideCubes(rig);
 built.root.scale.multiplyScalar(sizeOf(url));
 rig.size=sizeOf(url);rig.gait=TBAssets.gait(url);
-built.root.traverse(o=>{o.visible=true;});
+built.root.traverse(o=>{o.visible=true;o.frustumCulled=false;});
+built.root.userData.sharedAsset=1;
 rig.root.add(built.root);
+rig.heroRoot=built.root;
 const mixer=new THREE.AnimationMixer(built.root),actions={};
 for(let i=0;i<built.clips.length;i++){
 const c=built.clips[i],act=mixer.clipAction(c);
@@ -54,6 +56,8 @@ rig.mixer=mixer;rig.actions=actions;rig.clip="";
 play(rig,"Idle");
 return true;
 }
+/* Instance games ask for the same hero as the area player, not the next claimed slot. */
+function dressHero(rig){return dress(rig, URLS[0]);}
 function dressAll(){claimed.forEach(dress);}
 /* Returns true once a hero mesh owns the pose. Jump and fall keep the clip they left the ground with.
    Walk and Run are foot-locked to ground speed; everything else plays at the rip's native rate. */
@@ -80,5 +84,5 @@ rig.mixer.timeScale=sample.timeScale;
 rig.mixer.update(dt);
 return true;
 }
-window.TBAvatar={claim:claim,dressAll:dressAll,drive:drive,urls:function(){return URLS.slice();}};
+window.TBAvatar={claim:claim,dressAll:dressAll,dressHero:dressHero,drive:drive,urls:function(){return URLS.slice();}};
 })();

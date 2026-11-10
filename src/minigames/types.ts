@@ -21,6 +21,10 @@ export interface MinigamePointer {
   dx: number;
   dy: number;
   tap: boolean;
+  press: boolean;
+  dragX: number;
+  dragY: number;
+  moved: boolean;
 }
 
 export interface MinigameHelpers {
@@ -29,17 +33,40 @@ export interface MinigameHelpers {
   hot(phase: number, start: number, end: number): boolean;
 }
 
+export interface WorldPose {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+}
+
 export interface MinigameContext {
   in: MinigameStick;
   pointer: MinigamePointer;
-  /** Space, F, jump, or a tap on a game that is not drag-driven. */
+  /** Space, F, jump, or a tap on the overlay this frame. */
   act: boolean;
   quit: boolean;
   canvas: HTMLCanvasElement | null;
+  /** 2D drawing context. Pop games are sized in game pixels (`W` by `H`). */
+  gfx: CanvasRenderingContext2D | null;
   scene: Scene | null;
   camera: Camera | null;
+  /** Live town scene for world games. */
+  worldScene: Scene | null;
+  pose: WorldPose | null;
+  /** Instance avatar. Null until an instanced game starts. */
+  A: import('./helpers/runtime').SimAvatar | null;
+  camYaw: number;
+  syncAvatar?(avatar: import('./helpers/runtime').SimAvatar): void;
+  hud: HTMLElement | null;
+  side: HTMLElement | null;
   width: number;
   height: number;
+  /** Game-pixel size of a pop2d canvas. */
+  W: number;
+  H: number;
+  t: number;
+  over: boolean;
   supplies: PartyState;
   helpers: MinigameHelpers;
   done(result: MinigameResult): void;
@@ -57,7 +84,10 @@ export interface MinigameDef {
   name: string;
   type: MinigameKind;
   size?: MinigameSize;
-  /** Part-popup height in CSS pixels. */
+  /**
+   * Pop2d game-pixel height (controller `h`). Values at or under 200 size the
+   * canvas in game pixels. Taller values are the wagon popup's CSS height.
+   */
   h?: number;
   drag?: boolean;
   /** Wagon games set this so a miss spends half that activity's TU. */
