@@ -11,97 +11,96 @@ const BASE = `http://127.0.0.1:${PORT}/`;
 /** Headless Chrome. Absent on runners that do not ship a browser, so the test skips. */
 const chromeBin = chromeExecutable();
 
+const WINDOWS_SKIP =
+  'Windows CI headless Chrome has no usable GPU/WebGL, so the game never reaches the ready state.';
+
 /**
  * The adopted Character Forge body is one mesh shared by the creator, the town,
  * and instance minigames. Leaving a 3D area disposes that visit's renderer.
- * Windows CI launches Chrome but never reaches the title screen, so that job skips.
  */
-test.skipIf(process.platform === 'win32' || chromeBin === undefined)(
-  'the player mesh survives map round trips and Slime Arena',
-  async () => {
-    if (chromeBin === undefined) return;
-    const server = await ensureServer();
-    const browser = await chromium.launch({
-      executablePath: chromeBin,
-      args: [
-        '--use-angle=swiftshader',
-        '--enable-webgl',
-        '--ignore-gpu-blocklist',
-        '--headless=new',
-      ],
-    });
-    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-    const pageErrors: string[] = [];
-    page.on('pageerror', (error) => pageErrors.push(error.message));
-    try {
-      await page.goto(BASE);
-      await waitMode(page, 'title');
-      await page.getByRole('button', { name: 'New', exact: true }).click();
-      await waitMode(page, 'creator', 'forge');
-      await page.getByRole('button', { name: 'Take the road', exact: true }).click();
-      await waitMode(page, 'map');
-      await walkUntilEnterEnabled(page);
+test('the player mesh survives map round trips and Slime Arena', async (ctx) => {
+  ctx.skip(
+    process.platform === 'win32' ||
+      process.env.CI_WINDOWS === '1' ||
+      process.env.CI_WINDOWS === 'true',
+    WINDOWS_SKIP,
+  );
+  if (chromeBin === undefined) ctx.skip('No Chrome binary is installed.');
+  const server = await ensureServer();
+  const browser = await chromium.launch({
+    executablePath: chromeBin,
+    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--headless=new'],
+  });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  try {
+    await page.goto(BASE);
+    await waitMode(page, 'title');
+    await page.getByRole('button', { name: 'New', exact: true }).click();
+    await waitMode(page, 'creator', 'forge');
+    await page.getByRole('button', { name: 'Take the road', exact: true }).click();
+    await waitMode(page, 'map');
+    await walkUntilEnterEnabled(page);
 
-      for (let trip = 1; trip <= 5; trip += 1) {
-        if (trip % 2 === 1) await page.getByRole('button', { name: 'Enter', exact: true }).click();
-        else await page.keyboard.press('Enter');
-        await waitMode(page, 'area');
-        await page.waitForFunction(
-          () => (globalThis as { __tb?: { ready?: boolean } }).__tb?.ready === true,
-        );
-        const report = await inspectPlayer(page);
-        assertPlayer(report, `trip ${trip}`);
-        if (trip === 5) {
-          await frameClose(page);
-          await page.screenshot({ path: `${ARTIFACTS}/player-after-fifth-entry.png` });
-          await restoreHud(page);
-        }
-        await page.keyboard.press('Escape');
-        await waitMode(page, 'map');
-        if (trip < 5) await walkUntilEnterEnabled(page);
-      }
-
-      await walkUntilEnterEnabled(page);
-      await page.getByRole('button', { name: 'Enter', exact: true }).click();
+    for (let trip = 1; trip <= 5; trip += 1) {
+      if (trip % 2 === 1) await page.getByRole('button', { name: 'Enter', exact: true }).click();
+      else await page.keyboard.press('Enter');
       await waitMode(page, 'area');
       await page.waitForFunction(
         () => (globalThis as { __tb?: { ready?: boolean } }).__tb?.ready === true,
       );
-      await page.getByRole('button', { name: 'Settings', exact: true }).click();
-      await page.getByRole('button', { name: 'Slime Arena', exact: true }).click();
-      await page.waitForFunction(
-        () => document.querySelector('#app')?.getAttribute('data-minigame-phase') === 'play',
-      );
-      await page.locator('#mg .mg-quit').click();
-      try {
-        await page.waitForFunction(() => {
-          const root = document.querySelector('#app');
-          return (
-            root instanceof HTMLElement &&
-            root.getAttribute('data-minigame') === '' &&
-            root.dataset.mode === 'area'
-          );
-        });
-      } catch (error) {
-        const state = await page.evaluate(() => {
-          const root = document.querySelector('#app');
-          return root instanceof HTMLElement ? { ...root.dataset } : {};
-        });
-        throw new Error(`Slime Arena did not return (${JSON.stringify(state)})`, { cause: error });
+      const report = await inspectPlayer(page);
+      assertPlayer(report, `trip ${trip}`);
+      if (trip === 5) {
+        await frameClose(page);
+        await page.screenshot({ path: `${ARTIFACTS}/player-after-fifth-entry.png` });
+        await restoreHud(page);
       }
-      const afterArena = await inspectPlayer(page);
-      assertPlayer(afterArena, 'after Slime Arena');
-      await frameClose(page);
-      await page.screenshot({ path: `${ARTIFACTS}/player-after-slime-arena.png` });
-      await restoreHud(page);
-      expect(pageErrors, pageErrors.join('\n')).toEqual([]);
-    } finally {
-      await browser.close();
-      await server.stop();
+      await page.keyboard.press('Escape');
+      await waitMode(page, 'map');
+      if (trip < 5) await walkUntilEnterEnabled(page);
     }
-  },
-  420_000,
-);
+
+    await walkUntilEnterEnabled(page);
+    await page.getByRole('button', { name: 'Enter', exact: true }).click();
+    await waitMode(page, 'area');
+    await page.waitForFunction(
+      () => (globalThis as { __tb?: { ready?: boolean } }).__tb?.ready === true,
+    );
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('button', { name: 'Slime Arena', exact: true }).click();
+    await page.waitForFunction(
+      () => document.querySelector('#app')?.getAttribute('data-minigame-phase') === 'play',
+    );
+    await page.locator('#mg .mg-quit').click();
+    try {
+      await page.waitForFunction(() => {
+        const root = document.querySelector('#app');
+        return (
+          root instanceof HTMLElement &&
+          root.getAttribute('data-minigame') === '' &&
+          root.dataset.mode === 'area'
+        );
+      });
+    } catch (error) {
+      const state = await page.evaluate(() => {
+        const root = document.querySelector('#app');
+        return root instanceof HTMLElement ? { ...root.dataset } : {};
+      });
+      throw new Error(`Slime Arena did not return (${JSON.stringify(state)})`, { cause: error });
+    }
+    const afterArena = await inspectPlayer(page);
+    assertPlayer(afterArena, 'after Slime Arena');
+    await frameClose(page);
+    await page.screenshot({ path: `${ARTIFACTS}/player-after-slime-arena.png` });
+    await restoreHud(page);
+    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+  } finally {
+    await browser.close();
+    await server.stop();
+  }
+}, 420_000);
 
 interface PlayerReport {
   inScene: boolean;
