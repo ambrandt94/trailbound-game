@@ -66,5 +66,4 @@ export function disposeObject(root: Object3D): void {
 export function disposeStage(stage: Stage): void {
   disposeObject(stage.scene);
   stage.renderer.dispose();
-  stage.renderer.forceContextLoss();
 }

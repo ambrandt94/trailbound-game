@@ -52,5 +52,6 @@ export function createTownSession(
     getLook?: () => unknown;
     onLook?: (patch: unknown) => void;
     onWagon?: () => void;
+    onMinigame?: (id: string) => void;
   },
 ): Promise<TownSession>;

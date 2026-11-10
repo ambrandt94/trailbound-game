@@ -22,7 +22,13 @@ import { resolveLandStyle } from '../core/world/world-gen';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { formatPartyReadout, wagonMenuRows, wagonRefusal } from '../core/sim/party';
-import { getMinigame, MinigameHost, registerWagonMinigames } from '../minigames';
+import {
+  getMinigame,
+  listMinigames,
+  MinigameHost,
+  registerDemoMinigames,
+  registerWagonMinigames,
+} from '../minigames';
 import { dayLightAt, tuOfDay } from '../core/sim/time';
 import { Keyboard, type AreaActionSnapshot } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
@@ -46,6 +52,7 @@ import {
   generating,
   hint,
   nearTown,
+  minigameCatalog,
   notice,
   partyHud,
   savedFlash,
@@ -137,6 +144,8 @@ export class Game implements GameHost {
       },
     });
     registerWagonMinigames();
+    registerDemoMinigames();
+    minigameCatalog.value = listMinigames().map((game) => ({ id: game.id, name: game.name }));
     this.bindUi();
     this.setMode('boot');
     this.setFade(0);
@@ -354,6 +363,9 @@ export class Game implements GameHost {
         onWagon: () => {
           this.openWagon();
         },
+        onMinigame: (id: string) => {
+          this.openMinigame(id);
+        },
       });
       await renderer.start(areaExport);
       view = new AreaView(this, renderer, this.pendingArea);
@@ -477,6 +489,13 @@ export class Game implements GameHost {
       },
       closeWagon: () => {
         wagonOpen.value = false;
+      },
+      launchMinigame: (id) => {
+        settingsOpen.value = false;
+        if (!this.openMinigame(id)) {
+          notice.value = this.minigames.isOpen() ? 'Finish this one first.' : 'Not now.';
+          this.armNotice();
+        }
       },
       save: () => {
         void this.save();
@@ -737,6 +756,10 @@ export class Game implements GameHost {
     this.clockLoop.frame(
       (dt) => {
         this.stack.update(dt);
+        const top = this.stack.current();
+        if (this.minigames.isOpen() && this.minigames.kind !== 'inst' && top?.id !== 'area') {
+          this.minigames.tick(dt);
+        }
         this.flushJobs();
       },
       (alpha) => {

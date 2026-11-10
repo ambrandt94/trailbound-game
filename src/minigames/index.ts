@@ -1,4 +1,4 @@
-export { registerWagonMinigames } from './games';
+export { registerDemoMinigames, registerWagonMinigames } from './games';
 export { createStage, disposeObject, disposeStage, pixelTexture } from './helpers/stage';
 export { MinigameHost } from './host';
 export type { MinigameHostOptions } from './host';

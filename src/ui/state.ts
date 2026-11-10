@@ -30,6 +30,8 @@ export const generating = signal(false);
 export const mapNight = signal(0);
 export const wagonOpen = signal(false);
 export const wagonRows = signal<WagonRow[]>([]);
+/** Registered minigames, filled by the app so settings can launch them. */
+export const minigameCatalog = signal<Array<{ id: string; name: string }>>([]);
 
 export interface UiCommands {
   newGame(): void;
@@ -42,6 +44,7 @@ export interface UiCommands {
   enterPlace(): void;
   wagonAct(id: WagonActionId): void;
   closeWagon(): void;
+  launchMinigame(id: string): void;
 }
 
 export const commands: UiCommands = {
@@ -75,6 +78,9 @@ export const commands: UiCommands = {
   closeWagon() {
     return;
   },
+  launchMinigame(_id: string) {
+    return;
+  },
 };
 
 export function bindCommands(next: UiCommands): void {
@@ -88,4 +94,5 @@ export function bindCommands(next: UiCommands): void {
   commands.enterPlace = next.enterPlace;
   commands.wagonAct = next.wagonAct;
   commands.closeWagon = next.closeWagon;
+  commands.launchMinigame = next.launchMinigame;
 }
