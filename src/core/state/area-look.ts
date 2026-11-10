@@ -118,6 +118,8 @@ export interface AreaLook extends CameraPose {
   heightContour: boolean;
   hitbox: boolean;
   showHud: boolean;
+  /** Fade trees, bushes, large rocks, and building shells that block the camera. */
+  seeThrough: boolean;
   invertX: boolean;
   invertY: boolean;
   maxSpeed: number;
@@ -491,6 +493,13 @@ export const LOOK_FIELDS: readonly LookField[] = [
     group: 'Textures',
     kind: 'bool',
     fallback: false,
+  },
+  {
+    key: 'seeThrough',
+    label: 'See-through trees',
+    group: 'Camera',
+    kind: 'bool',
+    fallback: true,
   },
   {
     key: 'camFov',

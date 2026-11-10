@@ -29,6 +29,9 @@ test('every original visual control is in the settings schema', () => {
   expect(DEFAULT_AREA_LOOK.camDist).toBe(60);
   expect(DEFAULT_AREA_LOOK.fog).toBe(1);
   expect(DEFAULT_AREA_LOOK.outline).toBe(true);
+  expect(DEFAULT_AREA_LOOK.seeThrough).toBe(true);
+  expect(normalizeAreaLook({}).seeThrough).toBe(true);
+  expect(normalizeAreaLook({ seeThrough: false }).seeThrough).toBe(false);
   expect(DEFAULT_AREA_LOOK.walkMps).toBe(1.6);
   expect(DEFAULT_AREA_LOOK.sprintMps).toBe(5.5);
   expect(normalizeAreaLook({ maxSpeed: 9 }).walkMps).toBe(1.6);

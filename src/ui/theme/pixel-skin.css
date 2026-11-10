@@ -469,14 +469,28 @@
 #ui .hud-bar {
   position: absolute;
   z-index: 2;
-  top: calc(12px * var(--tb-ui-scale));
-  left: calc(12px * var(--tb-ui-scale));
-  right: calc(12px * var(--tb-ui-scale));
+  top: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-top, 0px));
+  left: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-left, 0px));
+  right: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-right, 0px));
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: calc(10px * var(--tb-ui-scale));
+  width: auto;
+  max-width: calc(100% - 24px * var(--tb-ui-scale));
+  margin: 0;
+  transform: none;
+  pointer-events: none;
+}
+
+#ui .hud-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   align-items: center;
   gap: calc(10px * var(--tb-ui-scale));
-  pointer-events: none;
+  max-width: 100%;
 }
 
 #ui .hud-bar .pill {
@@ -484,6 +498,9 @@
   top: auto;
   right: auto;
   left: auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
   transform: none;
   pointer-events: auto;
 }
@@ -509,17 +526,24 @@
 }
 
 #ui .pill.clock {
+  flex: 1 1 16rem;
   flex-direction: column;
   align-items: flex-start;
+  max-width: 100%;
+  min-width: min(100%, 16rem);
   font-variant-numeric: tabular-nums;
+  white-space: normal;
 }
 
 #ui .clock .rate,
 #ui .clock .party {
+  max-width: 100%;
   margin: 0;
   color: var(--tb-muted);
   font-size: var(--tb-size-body);
   line-height: var(--tb-line);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 #ui .clock .party {
@@ -538,16 +562,21 @@
 #ui .hud-foot {
   position: absolute;
   z-index: 2;
-  left: calc(12px * var(--tb-ui-scale));
-  right: calc(12px * var(--tb-ui-scale));
-  bottom: calc(12px * var(--tb-ui-scale));
+  left: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-left, 0px));
+  right: auto;
+  bottom: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: calc(10px * var(--tb-ui-scale));
-  max-height: none;
+  width: min(40rem, calc(100% - 24px * var(--tb-ui-scale)));
+  max-width: calc(100% - 24px * var(--tb-ui-scale));
+  max-height: calc(100% - 24px);
   min-width: 0;
-  overflow: visible;
+  margin: 0;
+  box-sizing: border-box;
+  transform: none;
+  overflow: auto;
   pointer-events: none;
 }
 
@@ -609,8 +638,22 @@
   max-width: 100%;
 }
 
+#ui .hud-foot .hint {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+}
+
 #ui .hint {
   max-height: calc(160px * var(--tb-ui-scale));
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
   overflow: auto;
 }
 
