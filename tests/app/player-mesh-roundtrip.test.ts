@@ -1,92 +1,106 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { chromium, type Page } from 'playwright';
 import { expect, test } from 'vitest';
+import { createServer } from 'vite';
 
 const ARTIFACTS = '/opt/cursor/artifacts';
 const PORT = 5173;
 const BASE = `http://127.0.0.1:${PORT}/`;
 
+/** Headless Chrome. Absent on runners that do not ship a browser, so the test skips. */
+const chromeBin = chromeExecutable();
+
 /**
  * The adopted Character Forge body is one mesh shared by the creator, the town,
  * and instance minigames. Leaving a 3D area disposes that visit's renderer.
  */
-test('the player mesh survives map round trips and Slime Arena', async () => {
-  const server = await ensureServer();
-  const browser = await chromium.launch({
-    executablePath: '/usr/bin/google-chrome',
-    args: ['--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--headless=new'],
-  });
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  const pageErrors: string[] = [];
-  page.on('pageerror', (error) => pageErrors.push(error.message));
-  try {
-    await page.goto(BASE);
-    await waitMode(page, 'title');
-    await page.getByRole('button', { name: 'New', exact: true }).click();
-    await waitMode(page, 'creator', 'forge');
-    await page.getByRole('button', { name: 'Take the road', exact: true }).click();
-    await waitMode(page, 'map');
-    await walkUntilEnterEnabled(page);
+test.skipIf(chromeBin === undefined)(
+  'the player mesh survives map round trips and Slime Arena',
+  async () => {
+    if (chromeBin === undefined) return;
+    const server = await ensureServer();
+    const browser = await chromium.launch({
+      executablePath: chromeBin,
+      args: [
+        '--use-angle=swiftshader',
+        '--enable-webgl',
+        '--ignore-gpu-blocklist',
+        '--headless=new',
+      ],
+    });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    try {
+      await page.goto(BASE);
+      await waitMode(page, 'title');
+      await page.getByRole('button', { name: 'New', exact: true }).click();
+      await waitMode(page, 'creator', 'forge');
+      await page.getByRole('button', { name: 'Take the road', exact: true }).click();
+      await waitMode(page, 'map');
+      await walkUntilEnterEnabled(page);
 
-    for (let trip = 1; trip <= 5; trip += 1) {
-      if (trip % 2 === 1) await page.getByRole('button', { name: 'Enter', exact: true }).click();
-      else await page.keyboard.press('Enter');
+      for (let trip = 1; trip <= 5; trip += 1) {
+        if (trip % 2 === 1) await page.getByRole('button', { name: 'Enter', exact: true }).click();
+        else await page.keyboard.press('Enter');
+        await waitMode(page, 'area');
+        await page.waitForFunction(
+          () => (globalThis as { __tb?: { ready?: boolean } }).__tb?.ready === true,
+        );
+        const report = await inspectPlayer(page);
+        assertPlayer(report, `trip ${trip}`);
+        if (trip === 5) {
+          await frameClose(page);
+          await page.screenshot({ path: `${ARTIFACTS}/player-after-fifth-entry.png` });
+          await restoreHud(page);
+        }
+        await page.keyboard.press('Escape');
+        await waitMode(page, 'map');
+        if (trip < 5) await walkUntilEnterEnabled(page);
+      }
+
+      await walkUntilEnterEnabled(page);
+      await page.getByRole('button', { name: 'Enter', exact: true }).click();
       await waitMode(page, 'area');
       await page.waitForFunction(
         () => (globalThis as { __tb?: { ready?: boolean } }).__tb?.ready === true,
       );
-      const report = await inspectPlayer(page);
-      assertPlayer(report, `trip ${trip}`);
-      if (trip === 5) {
-        await frameClose(page);
-        await page.screenshot({ path: `${ARTIFACTS}/player-after-fifth-entry.png` });
-        await restoreHud(page);
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      await page.getByRole('button', { name: 'Slime Arena', exact: true }).click();
+      await page.waitForFunction(
+        () => document.querySelector('#app')?.getAttribute('data-minigame-phase') === 'play',
+      );
+      await page.locator('#mg .mg-quit').click();
+      try {
+        await page.waitForFunction(() => {
+          const root = document.querySelector('#app');
+          return (
+            root instanceof HTMLElement &&
+            root.getAttribute('data-minigame') === '' &&
+            root.dataset.mode === 'area'
+          );
+        });
+      } catch (error) {
+        const state = await page.evaluate(() => {
+          const root = document.querySelector('#app');
+          return root instanceof HTMLElement ? { ...root.dataset } : {};
+        });
+        throw new Error(`Slime Arena did not return (${JSON.stringify(state)})`, { cause: error });
       }
-      await page.keyboard.press('Escape');
-      await waitMode(page, 'map');
-      if (trip < 5) await walkUntilEnterEnabled(page);
+      const afterArena = await inspectPlayer(page);
+      assertPlayer(afterArena, 'after Slime Arena');
+      await frameClose(page);
+      await page.screenshot({ path: `${ARTIFACTS}/player-after-slime-arena.png` });
+      await restoreHud(page);
+      expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+    } finally {
+      await browser.close();
+      await server.stop();
     }
-
-    await walkUntilEnterEnabled(page);
-    await page.getByRole('button', { name: 'Enter', exact: true }).click();
-    await waitMode(page, 'area');
-    await page.waitForFunction(
-      () => (globalThis as { __tb?: { ready?: boolean } }).__tb?.ready === true,
-    );
-    await page.getByRole('button', { name: 'Settings', exact: true }).click();
-    await page.getByRole('button', { name: 'Slime Arena', exact: true }).click();
-    await page.waitForFunction(
-      () => document.querySelector('#app')?.getAttribute('data-minigame-phase') === 'play',
-    );
-    await page.locator('#mg .mg-quit').click();
-    try {
-      await page.waitForFunction(() => {
-        const root = document.querySelector('#app');
-        return (
-          root instanceof HTMLElement &&
-          root.getAttribute('data-minigame') === '' &&
-          root.dataset.mode === 'area'
-        );
-      });
-    } catch (error) {
-      const state = await page.evaluate(() => {
-        const root = document.querySelector('#app');
-        return root instanceof HTMLElement ? { ...root.dataset } : {};
-      });
-      throw new Error(`Slime Arena did not return (${JSON.stringify(state)})`, { cause: error });
-    }
-    const afterArena = await inspectPlayer(page);
-    assertPlayer(afterArena, 'after Slime Arena');
-    await frameClose(page);
-    await page.screenshot({ path: `${ARTIFACTS}/player-after-slime-arena.png` });
-    await restoreHud(page);
-    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
-  } finally {
-    await browser.close();
-    await server.stop();
-  }
-}, 240_000);
+  },
+  240_000,
+);
 
 interface PlayerReport {
   inScene: boolean;
@@ -424,27 +438,39 @@ async function waitMode(page: Page, mode: string, extra = ''): Promise<void> {
   );
 }
 
+function chromeExecutable(): string | undefined {
+  const fromEnv = process.env.CHROME_PATH;
+  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+  const programFiles = process.env.PROGRAMFILES ?? 'C:\\Program Files';
+  const programFilesX86 = process.env['PROGRAMFILES(X86)'] ?? 'C:\\Program Files (x86)';
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          `${programFiles}\\Google\\Chrome\\Application\\chrome.exe`,
+          `${programFilesX86}\\Google\\Chrome\\Application\\chrome.exe`,
+          `${process.env.LOCALAPPDATA ?? ''}\\Google\\Chrome\\Application\\chrome.exe`,
+        ]
+      : ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'];
+  return candidates.find((path) => path.length > 0 && existsSync(path));
+}
+
 async function ensureServer(): Promise<{ stop: () => Promise<void> }> {
   await mkdir(ARTIFACTS, { recursive: true });
   if (await serverUp()) return { stop: async () => undefined };
-  const child: ChildProcess = spawn(
-    'npm',
-    ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(PORT)],
-    { cwd: process.cwd(), stdio: 'ignore' },
-  );
-  const started = Date.now();
-  while (Date.now() - started < 30_000) {
-    if (await serverUp()) {
-      return {
-        stop: async () => {
-          child.kill('SIGTERM');
-        },
-      };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
+  const server = await createServer({
+    mode: 'development',
+    server: { host: '127.0.0.1', port: PORT, strictPort: true },
+  });
+  await server.listen();
+  if (!(await serverUp())) {
+    await server.close();
+    throw new Error('vite did not start');
   }
-  child.kill('SIGTERM');
-  throw new Error('vite did not start');
+  return {
+    stop: async () => {
+      await server.close();
+    },
+  };
 }
 
 async function serverUp(): Promise<boolean> {
