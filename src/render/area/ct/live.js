@@ -387,14 +387,9 @@ sky();
 showBadge();
 }
 function sky(){
-const c=clockNow();
-if(!c||!window.TBVisuals||!TBVisuals.v)return;
-if(state.mode!=="live"&&state.mode!=="standalone")return;
-const h=((c.hours%24)+24)%24;
-if(Math.abs(TBVisuals.v.sunHour-h)>0.02){
-TBVisuals.v.sunHour=h;
-if(TBVisuals.applySky)TBVisuals.applySky();
-}
+/* The area look owns the sun angle (dayLightAt → setLook). Copying the zone
+   clock into sunHour pinned NPC towns at the export hour, so night colours
+   arrived with a morning sun. NPC schedules still read clockNow(). */
 }
 function placeName(){
 if(window.TBArea&&TBArea.name)return TBArea.name()||"the place";

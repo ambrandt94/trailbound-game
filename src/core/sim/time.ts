@@ -15,6 +15,26 @@ export const SLEEP_ONLY_TU = 90;
 
 export type DayBand = 'dawn' | 'day' | 'dusk' | 'night';
 
+/** Directional key at warmth 0. Noon cream. */
+export const KEY_LIGHT_NEUTRAL = '#fff0c8';
+/** Directional key at warmth +1. Sunset orange. */
+export const KEY_LIGHT_WARM = '#ffb060';
+/**
+ * Directional key at warmth -1. Pale blue-white moonlight.
+ * A saturated cobalt (the old #6a8ee0) replaces albedo hue, and the cel
+ * bands then posterize the complement into magenta and teal.
+ */
+export const KEY_LIGHT_COOL = '#d0e6ff';
+/** Hemisphere sky at warmth 0. */
+export const HEMI_SKY_NEUTRAL = '#bfe6ff';
+/** Hemisphere sky at warmth +1. */
+export const HEMI_SKY_WARM = '#ffc090';
+/**
+ * Hemisphere sky at warmth -1. Soft blue fill.
+ * The old #4a68b0 turned uncelled props into flat cobalt blocks.
+ */
+export const HEMI_SKY_COOL = '#8eadd4';
+
 export interface DayLight {
   band: DayBand;
   /** 0..24, the sun slider's hour. A low hour lays long shadows. */
@@ -35,6 +55,12 @@ export interface DayLight {
   fog: number;
   /** 0..1 blue wash on the 2D map. */
   mapNight: number;
+  /**
+   * Exposure applied by the area grade. The screen composite then raises
+   * linear colour by about pow(c, 0.38), so night has to be cut here or the
+   * framebuffer stays near dusk.
+   */
+  bright: number;
 }
 
 /** TU position inside the current day, in `[0, 100)`. */
@@ -78,6 +104,7 @@ const DAY_FILL = {
   shadeCool: 1,
   shadowSoft: 1,
   grass: '#ffffff',
+  bright: 1,
 } as const;
 
 const LIGHT_KEYS: readonly LightKey[] = [
@@ -91,11 +118,12 @@ const LIGHT_KEYS: readonly LightKey[] = [
     shadeCool: 0.85,
     shadowSoft: 1.4,
     grass: '#ffe8d4',
-    haze: '#e4c4d8',
+    haze: '#f0c4a4',
     skyTop: '#6d5c9e',
     skyHor: '#f0b898',
     fog: 1.05,
     mapNight: 0.16,
+    bright: 1,
   },
   {
     tu: 10,
@@ -140,6 +168,7 @@ const LIGHT_KEYS: readonly LightKey[] = [
     skyHor: '#f0a060',
     fog: 1.15,
     mapNight: 0.08,
+    bright: 1,
   },
   {
     tu: 72,
@@ -156,38 +185,44 @@ const LIGHT_KEYS: readonly LightKey[] = [
     skyHor: '#e88848',
     fog: 1.25,
     mapNight: 0.12,
+    bright: 0.92,
   },
   {
+    /* Moon, not a cobalt grade. shadeCool stays near 1 so the 20° shadow
+       hue does not spin roofs through magenta. Grass stays near white so
+       the ground keeps its own green. */
     tu: 82,
     band: 'night',
-    sunHour: 2.2,
+    sunHour: 4.8,
     sunIntensity: 0.26,
-    sunWarmth: -1,
-    hemi: 0.16,
-    shadeCool: 1.9,
-    shadowSoft: 3.2,
-    grass: '#b7c4ea',
-    haze: '#1a2744',
-    skyTop: '#0c1428',
-    skyHor: '#1c3058',
-    fog: 1.7,
-    mapNight: 0.48,
+    sunWarmth: -0.74,
+    hemi: 0.22,
+    shadeCool: 1.12,
+    shadowSoft: 2.05,
+    grass: '#e8eef6',
+    haze: '#3c4a68',
+    skyTop: '#161e42',
+    skyHor: '#2c3e6c',
+    fog: 1.08,
+    mapNight: 0.42,
+    bright: 0.48,
   },
   {
     tu: 94,
     band: 'night',
-    sunHour: 1.6,
+    sunHour: 4.4,
     sunIntensity: 0.22,
-    sunWarmth: -1,
-    hemi: 0.14,
-    shadeCool: 2,
-    shadowSoft: 3.4,
-    grass: '#aebde6',
-    haze: '#121c38',
-    skyTop: '#080e1e',
-    skyHor: '#162848',
-    fog: 1.85,
-    mapNight: 0.55,
+    sunWarmth: -0.82,
+    hemi: 0.2,
+    shadeCool: 1.16,
+    shadowSoft: 2.2,
+    grass: '#e6ecf4',
+    haze: '#364462',
+    skyTop: '#121838',
+    skyHor: '#263860',
+    fog: 1.12,
+    mapNight: 0.48,
+    bright: 0.42,
   },
   {
     tu: 100,
@@ -199,11 +234,12 @@ const LIGHT_KEYS: readonly LightKey[] = [
     shadeCool: 0.85,
     shadowSoft: 1.4,
     grass: '#ffe8d4',
-    haze: '#e4c4d8',
+    haze: '#f0c4a4',
     skyTop: '#6d5c9e',
     skyHor: '#f0b898',
     fog: 1.05,
     mapNight: 0.16,
+    bright: 1,
   },
 ];
 
@@ -235,6 +271,7 @@ export function dayLightAt(clockHours: number): DayLight {
     skyHor: lerpHex(prev.skyHor, next.skyHor, smooth),
     fog: lerp(prev.fog, next.fog, smooth),
     mapNight: lerp(prev.mapNight, next.mapNight, smooth),
+    bright: lerp(prev.bright, next.bright, smooth),
   };
 }
 

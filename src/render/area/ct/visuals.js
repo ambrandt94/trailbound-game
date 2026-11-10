@@ -2,6 +2,14 @@
    Not typechecked: a full TS conversion of these files would stall the port.
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
+import {
+  HEMI_SKY_COOL,
+  HEMI_SKY_NEUTRAL,
+  HEMI_SKY_WARM,
+  KEY_LIGHT_COOL,
+  KEY_LIGHT_NEUTRAL,
+  KEY_LIGHT_WARM,
+} from '../../../core/sim/time.ts';
 import { THREE } from './three-runtime.js';
 /* Live look controls. The game settings panel owns persistence (tb-settings).
    This module only applies the numbers. The old floating panel stays for a host
@@ -64,15 +72,15 @@ _q.setFromUnitVectors(FROM, d);
 return SUN0.clone().applyQuaternion(_q);
 }
 function warmColor(w){
-const c=new THREE.Color(0xfff0c8);
-if(w>0)c.lerp(new THREE.Color(0xffb060), Math.min(1,w));
-else if(w<0)c.lerp(new THREE.Color(0x6a8ee0), Math.min(1,-w));
+const c=new THREE.Color(KEY_LIGHT_NEUTRAL);
+if(w>0)c.lerp(new THREE.Color(KEY_LIGHT_WARM), Math.min(1,w));
+else if(w<0)c.lerp(new THREE.Color(KEY_LIGHT_COOL), Math.min(1,-w));
 return c;
 }
 function hemiSky(w){
-const c=new THREE.Color(0xbfe6ff);
-if(w>0.2)c.lerp(new THREE.Color(0xffc090), Math.min(1,(w-0.2)/0.8));
-else if(w<-0.2)c.lerp(new THREE.Color(0x4a68b0), Math.min(1,(-w-0.2)/0.8));
+const c=new THREE.Color(HEMI_SKY_NEUTRAL);
+if(w>0.2)c.lerp(new THREE.Color(HEMI_SKY_WARM), Math.min(1,(w-0.2)/0.8));
+else if(w<-0.2)c.lerp(new THREE.Color(HEMI_SKY_COOL), Math.min(1,(-w-0.2)/0.8));
 return c;
 }
 function coolGround(c){
@@ -175,6 +183,11 @@ TBTiles.shade.uSunI.value=+v.sunIntensity;
 TBTiles.shade.uLit.value=Math.PI*legacy*mx*Math.max(0,+v.sunIntensity);
 }
 ctx.hemi.groundColor.copy(coolGround(+v.shadeCool));
+const nightGlow=Math.max(0,Math.min(1,((-(+v.sunWarmth||0))-0.25)/0.5));
+if(window.TBTiles&&TBTiles.MAT&&TBTiles.MAT.glass){
+TBTiles.MAT.glass.emissive.set(0xffb46a);
+TBTiles.MAT.glass.emissiveIntensity=nightGlow*0.85;
+}
 const hz=lin(v.haze);
 ctx.BGO.setRGB(hz.r,hz.g,hz.b);
 applyShadow();

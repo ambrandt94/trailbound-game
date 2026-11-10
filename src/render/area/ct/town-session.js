@@ -196,6 +196,9 @@ export async function createTownSession(canvas, hooks) {
   sun.shadow.bias = -0.0007;
   scene.add(sun);
   scene.add(sun.target);
+  const lamp = new THREE.PointLight(0xffc48a, 0, 16, 2);
+  lamp.castShadow = false;
+  scene.add(lamp);
 
   const cam = new THREE.PerspectiveCamera(30, 16 / 9, 0.5, 120);
   const camA = cam.clone();
@@ -1003,6 +1006,10 @@ export async function createTownSession(canvas, hooks) {
     if (window.TBVisuals && TBVisuals.sunOffset) sunOff = TBVisuals.sunOffset();
     sun.position.set(p.x + sunOff.x, sunOff.y, p.z + sunOff.z);
     sun.target.position.set(p.x, 0.4, p.z);
+    const warmth = window.TBVisuals ? +TBVisuals.v.sunWarmth || 0 : 0;
+    const glow = Math.max(0, Math.min(1, (-warmth - 0.25) / 0.5));
+    lamp.intensity = glow * 6;
+    lamp.position.set(p.x, p.y + 1.5, p.z);
   }
 
   function renderFrame(fdt) {
