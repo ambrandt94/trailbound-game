@@ -26,6 +26,10 @@ export const OCCLUSION = {
   cellSize: 8,
   maxBuildingFades: 8,
   holeVisible: 0.14,
+  /** Extra metres around a trunk box so a thick or morphed bole still meets the capsule. */
+  trunkPad: 0.55,
+  /** Canopy and trunk parts of one tree share a base. Neighbours sit further out. */
+  treeLink: 1.6,
   visible: {
     canopy: 0.3,
     bush: 0.3,
@@ -205,6 +209,51 @@ export function aabbFromMatrix(local: Aabb, elements: ArrayLike<number>): Aabb {
 
 function hashCell(x: number, y: number, z: number): number {
   return (Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791)) | 0;
+}
+
+function centerOf(box: Aabb): Vec3 {
+  return {
+    x: (box.minX + box.maxX) * 0.5,
+    y: (box.minY + box.maxY) * 0.5,
+    z: (box.minZ + box.maxZ) * 0.5,
+  };
+}
+
+function isTreePart(role: OccRole): boolean {
+  return role === 'trunk' || role === 'canopy';
+}
+
+/**
+ * A wide crown can cross the capsule while a thin bole beside the player does not.
+ * Any trunk or canopy of that same tree fades with the part that was hit.
+ * A trunk several metres away stays solid.
+ */
+export function linkTreeParts(items: readonly OccCandidate[], active: readonly number[]): number[] {
+  const byId = new Map<number, OccCandidate>();
+  for (const item of items) byId.set(item.id, item);
+  const anchors: Vec3[] = [];
+  for (const id of active) {
+    const item = byId.get(id);
+    if (!item || !isTreePart(item.role)) continue;
+    anchors.push(centerOf(item.bounds));
+  }
+  if (anchors.length === 0) return active.slice();
+  const reach = OCCLUSION.treeLink * OCCLUSION.treeLink;
+  const seen = new Set<number>(active);
+  const extra: number[] = [];
+  for (const item of items) {
+    if (seen.has(item.id) || !isTreePart(item.role)) continue;
+    const center = centerOf(item.bounds);
+    for (const anchor of anchors) {
+      const dx = center.x - anchor.x;
+      const dz = center.z - anchor.z;
+      if (dx * dx + dz * dz > reach) continue;
+      extra.push(item.id);
+      seen.add(item.id);
+      break;
+    }
+  }
+  return extra.length === 0 ? active.slice() : active.concat(extra);
 }
 
 export class OccluderGrid {

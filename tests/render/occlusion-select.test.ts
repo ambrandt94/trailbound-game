@@ -6,6 +6,7 @@ import {
   expandAabb,
   isFadeRole,
   isProtectedNode,
+  linkTreeParts,
   occludes,
   propOccluderRole,
   OccluderGrid,
@@ -134,6 +135,22 @@ test('nature props are tagged by part, and actors are never fade targets', () =>
   expect(isProtectedNode('npc-miller', {})).toBe(true);
   expect(isProtectedNode('oak-broadleaf-foliage', {})).toBe(false);
   expect(isProtectedNode('wagonwright', {})).toBe(false);
+});
+
+test('a thin trunk beside a fading crown fades with that tree', () => {
+  const camera = { x: 0, y: 2.2, z: -8 };
+  const player = { x: 0, y: 1.1, z: 0 };
+  const canopy = box(-2.2, 2.4, -2.2, 2.2, 7, 2.2);
+  const bole = box(1.4, 0, -0.18, 1.8, 2.4, 0.18);
+  const neighbour = box(6.5, 0, -0.2, 6.9, 2.6, 0.2);
+  expect(occludes(camera, player, canopy, 'canopy')).toBe(true);
+  expect(occludes(camera, player, bole, 'trunk')).toBe(false);
+  const items: OccCandidate[] = [
+    { id: 3, role: 'canopy', bounds: canopy },
+    { id: 4, role: 'trunk', bounds: bole },
+    { id: 9, role: 'trunk', bounds: neighbour },
+  ];
+  expect(linkTreeParts(items, [3]).sort((a, b) => a - b)).toEqual([3, 4]);
 });
 
 test('instance matrices turn a local trunk box into a world box', () => {

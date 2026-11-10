@@ -96,32 +96,34 @@ function Hud() {
           ) : null}
           {partyHud.value ? <span class="party">{skinText(partyHud.value)}</span> : null}
         </div>
-        <label class="pill skin">
-          <span>Map</span>
-          <select
-            aria-label="Map skin"
-            value={settings.value.mapSkin}
-            onChange={(event) => {
-              const target = event.currentTarget;
-              if (!(target instanceof HTMLSelectElement)) return;
-              commands.changeSettings({
-                mapSkin: target.value === 'classic' ? 'classic' : 'trailbound48',
-              });
-            }}
-          >
-            <option value="classic">Pixel Kingdom</option>
-            <option value="trailbound48">Trailbound 48</option>
-          </select>
-        </label>
-        <button type="button" class="pill save" onClick={() => commands.save()}>
-          Save
-        </button>
-        <button type="button" class="pill look" onClick={() => commands.openSettings()}>
-          Settings
-        </button>
-        <button type="button" class="pill avatar" onClick={() => commands.editAvatar()}>
-          Avatar
-        </button>
+        <div class="hud-actions">
+          <label class="pill skin">
+            <span>Map</span>
+            <select
+              aria-label="Map skin"
+              value={settings.value.mapSkin}
+              onChange={(event) => {
+                const target = event.currentTarget;
+                if (!(target instanceof HTMLSelectElement)) return;
+                commands.changeSettings({
+                  mapSkin: target.value === 'classic' ? 'classic' : 'trailbound48',
+                });
+              }}
+            >
+              <option value="classic">Pixel Kingdom</option>
+              <option value="trailbound48">Trailbound 48</option>
+            </select>
+          </label>
+          <button type="button" class="pill save" onClick={() => commands.save()}>
+            Save
+          </button>
+          <button type="button" class="pill look" onClick={() => commands.openSettings()}>
+            Settings
+          </button>
+          <button type="button" class="pill avatar" onClick={() => commands.editAvatar()}>
+            Avatar
+          </button>
+        </div>
       </div>
       <div class="hud-foot">
         {placeName.value ? (

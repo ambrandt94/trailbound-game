@@ -484,6 +484,15 @@
   pointer-events: none;
 }
 
+#ui .hud-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: calc(10px * var(--tb-ui-scale));
+  max-width: 100%;
+}
+
 #ui .hud-bar .pill {
   position: static;
   top: auto;
@@ -517,10 +526,11 @@
 }
 
 #ui .pill.clock {
+  flex: 1 1 16rem;
   flex-direction: column;
   align-items: flex-start;
   max-width: 100%;
-  min-width: 0;
+  min-width: min(100%, 16rem);
   font-variant-numeric: tabular-nums;
   white-space: normal;
 }

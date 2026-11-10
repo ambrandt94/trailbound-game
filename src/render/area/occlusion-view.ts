@@ -24,8 +24,10 @@ import {
   OccluderGrid,
   aabbFromMatrix,
   advanceFades,
+  expandAabb,
   isFadeRole,
   isProtectedNode,
+  linkTreeParts,
   visibilityFor,
   type Aabb,
   type OccCandidate,
@@ -72,6 +74,7 @@ interface BuildingFade {
 
 let boundRoot: Object3D | null = null;
 let grid = new OccluderGrid();
+let catalog: OccCandidate[] = [];
 let fades = new Float32Array(0);
 let batches: Batch[] = [];
 let buildings: BuildingFade[] = [];
@@ -339,10 +342,11 @@ function bindInstances(root: Object3D, records: OccCandidate[]): void {
       mesh.getMatrixAt(i, instanceMatrix);
       worldMatrix.multiplyMatrices(mesh.matrixWorld, instanceMatrix);
       const id = records.length;
+      const raw = aabbFromMatrix(source, worldMatrix.elements);
       const candidate: OccCandidate = {
         id,
         role,
-        bounds: aabbFromMatrix(source, worldMatrix.elements),
+        bounds: role === 'trunk' ? expandAabb(raw, OCCLUSION.trunkPad) : raw,
       };
       records.push(candidate);
       grid.insert(candidate);
@@ -361,6 +365,7 @@ function bind(root: Object3D): void {
   buildings = [];
   const records: OccCandidate[] = [];
   bindInstances(root, records);
+  catalog = records;
   const stored = (root.userData as { tbBuildingAabbs?: Aabb[] }).tbBuildingAabbs ?? [];
   for (const bounds of stored) {
     const id = records.length;
@@ -449,7 +454,8 @@ export function updateCameraOcclusion(frame: OcclusionFrame): void {
   pyU.value = (projected.y * 0.5 + 0.5) * Math.max(1, frame.viewHeight);
   holeU.value = inFront ? HOLE_PX : 0;
   const camera = cameraVec(frame.camera);
-  const active = frame.enabled ? grid.collect(camera, frame.player) : [];
+  const hits = frame.enabled ? grid.collect(camera, frame.player) : [];
+  const active = frame.enabled ? linkTreeParts(catalog, hits) : hits;
   advanceFades(fades, active, frame.dt);
   writeInstances();
   writeBuildings(camera);
