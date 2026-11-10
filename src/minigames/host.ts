@@ -169,6 +169,7 @@ export class MinigameHost {
     this.options.source.areaActions();
     this.options.source.consumePress('Escape');
     def.start(this.context);
+    if (this.context.A) this.options.syncAvatar?.(this.context.A, 0);
   }
 
   tick(dt: number): void {

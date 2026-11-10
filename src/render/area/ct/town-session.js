@@ -316,6 +316,7 @@ export async function createTownSession(canvas, hooks) {
   }
   const PLS = [mkP(0, 0), mkP(1, 1.2)];
   const RIGS = [createBlockRig(scene, M), createBlockRig(scene, M2)];
+  if (window.TBAvatar) TBAvatar.claim(RIGS[0]);
   RIGS[1].root.visible = false;
   RIGS[1].sh.visible = false;
   /* Confirmed Character Forge look. Null keeps the block rig (CF off, ?cf=0, or still loading). */

@@ -128,6 +128,7 @@ export class Game implements GameHost {
   private readonly jobs: Array<() => void> = [];
   private noticeTimer = 0;
   private avatarRestore: (() => void) | null = null;
+  private instanceRig: SimAvatar['rig'] | null = null;
 
   constructor(options: GameOptions) {
     this.options = options;
@@ -432,15 +433,34 @@ export class Game implements GameHost {
   }
 
   private syncInstanceAvatar(avatar: SimAvatar, dt: number): void {
+    const rig = avatar.rig;
+    if (!rig) return;
+    this.instanceRig = rig;
+    if (this.useForgeBody(avatar, dt)) return;
+    const hero = (
+      globalThis as {
+        TBAvatar?: {
+          dressHero?: (target: SimAvatar['rig']) => boolean;
+          drive?: (target: SimAvatar['rig'], pawn: SimAvatar, dt: number) => boolean;
+        };
+      }
+    ).TBAvatar;
+    if (!hero?.dressHero || !hero.drive) return;
+    if (!hero.dressHero(rig)) return;
+    hero.drive(rig, avatar, dt);
+  }
+
+  /** Forge body when the area has one. Otherwise the caller dresses the area hero. */
+  private useForgeBody(avatar: SimAvatar, dt: number): boolean {
     const body = getPlayerBody();
     const rig = avatar.rig?.root ?? null;
     const scene = rig?.parent ?? null;
-    if (!body || body.source !== 'forge' || !rig || !scene) return;
+    if (!body || body.source !== 'forge' || !rig || !scene) return false;
     let meshes = 0;
     body.object3D.traverse((node) => {
       if ((node as { isMesh?: boolean }).isMesh) meshes += 1;
     });
-    if (meshes < 1) return;
+    if (meshes < 1) return false;
     if (!this.avatarRestore) {
       const parent = body.object3D.parent;
       scene.add(body.object3D);
@@ -462,9 +482,14 @@ export class Game implements GameHost {
       fade: 0.12,
     });
     body.update(dt);
+    return true;
   }
 
   private releaseInstanceAvatar(): void {
+    const heroRoot = (this.instanceRig as { heroRoot?: { removeFromParent(): void } } | null)
+      ?.heroRoot;
+    heroRoot?.removeFromParent();
+    this.instanceRig = null;
     this.avatarRestore?.();
     this.avatarRestore = null;
   }

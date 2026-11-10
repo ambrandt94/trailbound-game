@@ -49,6 +49,11 @@ export function pixelTexture(texture: Texture): Texture {
 export function disposeObject(root: Object3D): void {
   const materials: Material[] = [];
   root.traverse((node) => {
+    let shared: Object3D | null = node;
+    while (shared) {
+      if (shared.userData?.sharedAsset) return;
+      shared = shared.parent;
+    }
     const mesh = node as Mesh;
     if (mesh.geometry) mesh.geometry.dispose();
     const material = mesh.material;

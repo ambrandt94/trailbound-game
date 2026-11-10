@@ -917,17 +917,22 @@ input:focus-visible {
 }
 
 #mg.demo.world .mg-bar {
-  position: absolute;
-  top: 0;
-  right: 0;
-  margin: 0;
+  position: static;
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  margin: 0 0 0.35rem;
 }
 
 #mg.demo.world .mg-hud {
   pointer-events: none;
+  width: 100%;
+  margin: 0;
   background: rgba(0, 0, 0, 0.6);
   border-radius: 6px;
   padding: 6px 12px;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 #mg.demo .mg-card {
