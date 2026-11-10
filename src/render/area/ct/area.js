@@ -10,6 +10,7 @@ import {
   clampClearance,
 } from '../../../core/area/edge-leave.ts';
 import { useOakBiome, useOakSeed } from '../oak-batch.ts';
+import { captureBuildingOccluders } from '../occlusion-view.ts';
 /* AreaExport v0.1–v0.4 → a smooth heightmapped level.
    Schema: world-map src/app/engine/area-export.ts (types win over the field guide).
    Loaded by ?area=, a dropped JSON file, or postMessage {type:'tb-area', payload}.
@@ -1891,16 +1892,17 @@ im.instanceMatrix.needsUpdate=true;
 if(im.instanceColor)im.instanceColor.needsUpdate=true;
 im.castShadow=true;im.receiveShadow=true;im.frustumCulled=false;
 im.userData.surface=1;im.userData.tbOwnMat=1;
+if(part.occ)im.userData.tbOcc=part.occ;
 g.add(im);
 });
 }
 place(trees,[
-{geo:new THREE.CylinderGeometry(0.07,0.11,0.55,5),mat:bark,y:0,s:1},
-{geo:geoCone(0.72,1.15,6),mat:leaf,y:0.55,s:1},
-{geo:geoCone(0.48,0.9,6),mat:leaf.clone(),y:1.35,s:1}
+{geo:new THREE.CylinderGeometry(0.07,0.11,0.55,5),mat:bark,y:0,s:1,occ:"trunk"},
+{geo:geoCone(0.72,1.15,6),mat:leaf,y:0.55,s:1,occ:"canopy"},
+{geo:geoCone(0.48,0.9,6),mat:leaf.clone(),y:1.35,s:1,occ:"canopy"}
 ]);
 const bushGeo=new THREE.IcosahedronGeometry(0.42,0);bushGeo.translate(0,0.38,0);
-place(bushes,[{geo:bushGeo,mat:bush,y:0,s:1}]);
+place(bushes,[{geo:bushGeo,mat:bush,y:0,s:1,occ:"bush"}]);
 return g;
 }
 /* Static boxes (walls, roofs, stalls, fences) share a handful of materials.
@@ -2102,6 +2104,7 @@ if(window.TBBuildings&&p.buildings&&p.buildings.length){
 TBBuildings.place(group,groundY,p.buildings,p.area.innerOrigin,meters,ctx.BX);
 }
 if(window.TBProps)TBProps.place(group,groundY,p,meters);
+captureBuildingOccluders(group);
 weldStatic(group);
 widenShadows();
 if(window.__tbEntry)window.__tbEntry.sceneMs=(typeof performance!=="undefined"?performance.now():Date.now())-window.__tbEntry.t0;

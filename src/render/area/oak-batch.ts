@@ -219,6 +219,7 @@ export function scatterOaks(
     mesh.name = `oak-${variant}-${part}`;
     mesh.userData.tbOak = 1;
     mesh.userData.tbProp = mesh.name;
+    mesh.userData.tbOcc = part === 'foliage' ? 'canopy' : 'trunk';
     mesh.userData.tbTrunkRadius = OAK_TRUNK_RADIUS_M;
     group.add(mesh);
   }

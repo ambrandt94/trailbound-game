@@ -18,6 +18,7 @@ import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
 import { oakLoadMs, oakReady } from '../oak-batch.ts';
+import { updateCameraOcclusion } from '../occlusion-view.ts';
 import { mountPartyWagon, tickPartyWagon } from '../party-wagon.ts';
 import { signPlacement } from '../../../core/world/minigame-play.ts';
 
@@ -1078,6 +1079,15 @@ export async function createTownSession(canvas, hooks) {
     env(zoneOf(a), cam, zoneOf(a) ? ea.d : 0);
     if (window.TBTiles && TBTiles.followSky) TBTiles.followSky(cam);
     followSun();
+    updateCameraOcclusion({
+      scene,
+      camera: cam,
+      player: { x: a.x, y: a.y + 1.05 * (P.scale || 1), z: a.z },
+      dt: fdt,
+      enabled: !lookNow || lookNow.seeThrough !== false,
+      viewWidth: cW,
+      viewHeight: cH,
+    });
     travelFade.style.opacity = String(a.f || 0);
     U.solo.value = 1;
     U.sv.value = 0;

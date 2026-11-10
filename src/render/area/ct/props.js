@@ -4,6 +4,7 @@
 */
 import { THREE } from './three-runtime.js';
 import { acceptsOak, bootOaks, scatterOaks } from '../oak-batch.ts';
+import { propOccluderRole } from '../occlusion-select.ts';
 bootOaks();
 /* AreaExport props, wagon-yard slots and host_* markers.
    Kit name → placeholder (bbox, pivot, family colour, flat bands). One
@@ -610,7 +611,7 @@ Object.keys(bins).forEach(function(kit){
 const list=bins[kit],spec=specOf(kit);
 if(!spec)return;
 const parts=partsFor(spec);
-parts.forEach(function(pt){
+parts.forEach(function(pt,pi){
 const im=new THREE.InstancedMesh(pt.geo,pt.mat,list.length);
 const dummy=new THREE.Object3D(),tint=new THREE.Color();
 for(let i=0;i<list.length;i++){
@@ -627,6 +628,8 @@ if(im.instanceColor)im.instanceColor.needsUpdate=true;
 im.castShadow=!!pt.solid;im.receiveShadow=!!pt.solid;im.frustumCulled=false;
 if(!pt.solid)im.userData.surface=1;
 im.userData.tbProp=kit;
+const role=propOccluderRole(spec.category||"",spec.name||kit,pi,spec.w||0,spec.d||0,spec.h||0);
+if(role)im.userData.tbOcc=role;
 group.add(im);
 });
 });
