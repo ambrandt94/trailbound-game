@@ -155,7 +155,12 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
         setView?: (index: number) => void;
         place?: (x: number, z: number, yaw?: number) => void;
       };
-      TBArea?: { spawn?: () => { x: number; z: number; yaw?: number } };
+      TBArea?: {
+        spawn?: () => { x: number; z: number; yaw?: number };
+        walkClamp?: (x: number, z: number) => { x: number; z: number };
+        groundName?: (x: number, z: number) => string;
+      };
+      TBInteriors?: { contains?: (x: number, z: number) => boolean };
       TBRenderer?: {
         setRenderTarget: (target: null) => void;
         render: (scene: unknown, camera: unknown) => void;
@@ -163,35 +168,40 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
       };
     };
     const tb = host.__tb;
-    const spawn = host.TBArea?.spawn?.();
-    if (spawn) tb?.place?.(spawn.x, spawn.z, spawn.yaw ?? 0);
+    const here = tb?.player?.() ?? host.TBArea?.spawn?.() ?? { x: 0, y: 0, z: 0 };
+    const clear = (x: number, z: number) => {
+      const clamped = host.TBArea?.walkClamp?.(x, z) ?? { x, z };
+      if (Math.hypot(clamped.x - x, clamped.z - z) > 0.6) return false;
+      if (host.TBInteriors?.contains?.(x, z)) return false;
+      return host.TBArea?.groundName?.(x, z) === 'grass';
+    };
+    let spot = { x: here.x, z: here.z };
+    for (let radius = 0; radius <= 48; radius += 4) {
+      let picked = false;
+      for (let step = 0; step < 16; step += 1) {
+        const angle = (step / 16) * Math.PI * 2;
+        const x = here.x + Math.cos(angle) * radius;
+        const z = here.z + Math.sin(angle) * radius;
+        if (!clear(x, z)) continue;
+        let open = true;
+        for (let around = 0; around < 8; around += 1) {
+          const theta = (around / 8) * Math.PI * 2;
+          if (!clear(x + Math.cos(theta) * 6, z + Math.sin(theta) * 6)) open = false;
+        }
+        if (!open) continue;
+        spot = { x, z };
+        picked = true;
+        break;
+      }
+      if (picked) break;
+    }
+    tb?.place?.(spot.x, spot.z, 0.4);
     tb?.setView?.(7);
+    tb?.session?.frame?.();
     const scene = tb?.session?.worldView?.().scene;
     const avatar = scene?.getObjectByName?.('CF_avatar') ?? null;
     const body = scene?.getObjectByName?.('CF_body') ?? null;
     const bones = body?.skeleton?.bones ?? [];
-    const sample = () =>
-      bones.flatMap((bone) => [
-        bone.position.x,
-        bone.position.y,
-        bone.quaternion.x,
-        bone.quaternion.y,
-        bone.quaternion.z,
-        bone.quaternion.w,
-      ]);
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', bubbles: true }));
-    const before = sample();
-    const started = performance.now();
-    while (performance.now() - started < 500) {
-      tb?.session?.frame?.();
-      await new Promise((resolve) => setTimeout(resolve, 40));
-    }
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', bubbles: true }));
-    const after = sample();
-    let mixerMoved = false;
-    for (let i = 0; i < before.length; i += 1) {
-      if (Math.abs((before[i] ?? 0) - (after[i] ?? 0)) > 1e-3) mixerMoved = true;
-    }
     let inScene = false;
     for (let parent: Node | null | undefined = avatar; parent; parent = parent.parent) {
       if (parent === scene) inScene = true;
@@ -228,18 +238,15 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
         );
         inFrustum = frustum.intersectsSphere(world as import('three').Sphere);
       }
-      const readAtPlayer = () => {
+      for (let i = 0; i < 8; i += 1) tb?.session?.frame?.();
+      const readCenter = () => {
         tb?.session?.frame?.();
         const pawn = tb?.player?.();
         const pt = pawn ? tb?.project?.(pawn.x, pawn.y + 1.05, pawn.z) : undefined;
         const rect = canvas.getBoundingClientRect();
-        const size = 28;
-        const cx = pt
-          ? Math.round((pt.x / Math.max(1, rect.width)) * canvas.width)
-          : canvas.width / 2;
-        const cy = pt
-          ? Math.round((1 - pt.y / Math.max(1, rect.height)) * canvas.height)
-          : canvas.height / 2;
+        const size = 72;
+        const cx = pt ? (pt.x / Math.max(1, rect.width)) * canvas.width : canvas.width / 2;
+        const cy = pt ? (1 - pt.y / Math.max(1, rect.height)) * canvas.height : canvas.height / 2;
         const x = Math.min(canvas.width - size, Math.max(0, Math.floor(cx - size / 2)));
         const y = Math.min(canvas.height - size, Math.max(0, Math.floor(cy - size / 2)));
         const pixels = new Uint8Array(size * size * 4);
@@ -248,12 +255,37 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
         for (let i = 0; i < pixels.length; i += 1) sum += pixels[i] ?? 0;
         return sum;
       };
+      avatar.visible = true;
       if (body) body.visible = true;
-      const shown = readAtPlayer();
+      const shown = readCenter();
+      avatar.visible = false;
       if (body) body.visible = false;
-      const hidden = readAtPlayer();
+      const hidden = readCenter();
+      avatar.visible = true;
       if (body) body.visible = true;
       pixelDelta = Math.abs(shown - hidden);
+    }
+    const sample = () =>
+      bones.flatMap((bone) => [
+        bone.position.x,
+        bone.position.y,
+        bone.quaternion.x,
+        bone.quaternion.y,
+        bone.quaternion.z,
+        bone.quaternion.w,
+      ]);
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', bubbles: true }));
+    const before = sample();
+    const started = performance.now();
+    while (performance.now() - started < 400) {
+      tb?.session?.frame?.();
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', bubbles: true }));
+    const after = sample();
+    let mixerMoved = false;
+    for (let i = 0; i < before.length; i += 1) {
+      if (Math.abs((before[i] ?? 0) - (after[i] ?? 0)) > 1e-3) mixerMoved = true;
     }
     return {
       inScene,
