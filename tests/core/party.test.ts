@@ -1,9 +1,5 @@
 import { expect, test } from 'vitest';
 import {
-  EAT_MORALE,
-  EAT_TU,
-  HUNT_FOOD,
-  HUNT_TU,
   OVERNIGHT_FOOD,
   START_RAW_FOOD,
   applyOvernight,
@@ -27,37 +23,29 @@ test('a new party starts stocked, with a wagon, and not hungry', () => {
   expect(normalizeParty({ rawFood: -3, meals: 2.2, hungry: true }).rawFood).toBe(0);
 });
 
-test('hunting, cooking, and eating spend the draft TU and move food', () => {
+test('play rows refuse empty stores and do not spend TU by themselves', () => {
   const start = createParty();
   const hunt = applyWagonAction(start, 'hunt', 20);
-  expect(hunt.tu).toBe(HUNT_TU);
-  expect(hunt.party.rawFood).toBe(START_RAW_FOOD + HUNT_FOOD);
-  expect(hunt.message).toContain(String(HUNT_FOOD));
+  expect(hunt.tu).toBe(0);
+  expect(hunt.party.rawFood).toBe(START_RAW_FOOD);
+  expect(hunt.message).toBe('Step up to it.');
 
   const empty = applyWagonAction({ ...start, rawFood: 0 }, 'cook', 20);
   expect(empty.tu).toBe(0);
   expect(empty.message).toBe('No food to cook.');
   expect(empty.party.rawFood).toBe(0);
 
-  const cooked = applyWagonAction(start, 'cook', 20);
-  expect(cooked.tu).toBe(10);
-  expect(cooked.party.rawFood).toBe(START_RAW_FOOD - 1);
-  expect(cooked.party.meals).toBe(1);
-
   const noMeal = applyWagonAction(start, 'eat', 20);
   expect(noMeal.message).toBe('No meal ready.');
   expect(noMeal.tu).toBe(0);
 
-  const hungry = { ...cooked.party, hungry: true, morale: -10 };
-  const ate = applyWagonAction(hungry, 'eat', 20);
-  expect(ate.tu).toBe(EAT_TU);
-  expect(ate.party.meals).toBe(0);
-  expect(ate.party.hungry).toBe(false);
-  expect(ate.party.morale).toBe(-10 + EAT_MORALE);
+  const noDishes = applyWagonAction(start, 'wash', 20);
+  expect(noDishes.message).toBe('No dishes to wash.');
+  expect(noDishes.tu).toBe(0);
 });
 
 test('after TU 90 the wagon offers only Sleep, and Sleep skips to dawn', () => {
-  expect(wagonMenuRows(40).map((row) => row.id)).toEqual(['hunt', 'cook', 'eat']);
+  expect(wagonMenuRows(40).map((row) => row.id)).toEqual(['hunt', 'cook', 'eat', 'wash']);
   expect(wagonMenuRows(90).map((row) => row.id)).toEqual(['sleep']);
   expect(wagonMenuRows(99).map((row) => row.label)).toEqual(['Sleep']);
   const refused = applyWagonAction(createParty(), 'hunt', 95);

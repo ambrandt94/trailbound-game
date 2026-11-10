@@ -5,6 +5,7 @@ import type { AreaHandoff } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
 import { AreaRenderer } from '../../render/area/area-renderer';
 import { hint, settings, settingsOpen } from '../../ui/state';
+import { areaEscapeAction } from '../area-escape';
 import {
   controllerExitToMap,
   exitFromCancel,
@@ -58,23 +59,41 @@ export class AreaView implements Scene {
 
   update(dt: number): void {
     if (this.leaving || !this.renderer) return;
+    const games = this.host.minigames;
+    if (games.isOpen()) {
+      if (games.kind !== 'inst') {
+        const kind = games.kind;
+        const wasPlaying = games.isPlaying();
+        games.tick(dt);
+        if (kind === 'world' && wasPlaying && games.isPlaying()) {
+          this.renderer.step(dt);
+          this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
+        }
+      }
+      return;
+    }
     this.renderer.step(dt);
     this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
-    if (this.host.keyboard.consumePress('Escape')) {
-      if (settingsOpen.value) {
-        settingsOpen.value = false;
-        return;
-      }
-      this.leave(exitFromCancel(0));
-    }
+    const action = areaEscapeAction({
+      minigameOpen: false,
+      settingsOpen: settingsOpen.value,
+      escape: this.host.keyboard.consumePress('Escape'),
+    });
+    if (action === 'close-settings') settingsOpen.value = false;
+    if (action === 'leave') this.leave(exitFromCancel(0));
   }
 
   render(_alpha: number): void {
     if (!this.renderer) return;
-    this.renderer.frame();
+    const games = this.host.minigames;
+    if (!games.isOpen() || games.kind === 'world') this.renderer.frame();
     const mix = settings.value;
     music.setVolume((mix.music / 100) * (mix.master / 100));
     music.setMuffle(this.renderer.indoors() ? 1 : 0);
+    if (games.isOpen()) {
+      hint.value = games.hint();
+      return;
+    }
     const line = this.renderer.prompt();
     hint.value = line ? `${line}  ·  ${CONTROLS}` : CONTROLS;
   }

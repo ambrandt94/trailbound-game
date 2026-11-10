@@ -3,6 +3,7 @@ import type { SaveBackend } from '../core/save/types';
 import type { AreaExit, WorldState } from '../core/state/world-state';
 import type { ChunkData } from '../core/world/models';
 import type { Keyboard } from '../input/keyboard';
+import type { MinigameHost } from '../minigames/host';
 import type { MapDrawState } from '../render/map/map-renderer';
 import type { SceneStack } from './scene-stack';
 
@@ -11,6 +12,7 @@ export type AppMode = 'boot' | 'title' | 'map' | 'transition' | 'area' | 'creato
 export interface GameHost {
   readonly stack: SceneStack;
   readonly keyboard: Keyboard;
+  readonly minigames: MinigameHost;
   readonly content: ContentSource;
   readonly saves: SaveBackend;
   readonly areaCanvas: HTMLCanvasElement;

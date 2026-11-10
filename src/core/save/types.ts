@@ -36,6 +36,10 @@ export interface PartySave {
   meals: number;
   morale: number;
   hungry: boolean;
+  /** Missing on older saves. The loader fills 0. */
+  dirtyDishes?: number;
+  /** Missing on older saves. The loader fills 0. */
+  coins?: number;
 }
 
 export interface PackedWorld {
