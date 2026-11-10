@@ -232,6 +232,12 @@ interface CfApi {
     clips?: { flyer?: unknown; flyerRaces?: string[] };
   };
   init(options: { THREE: typeof import('three'); baseUrl: string }): Promise<unknown>;
+  /**
+   * Default true discards CPU arrays and the atlas image after the first GPU
+   * upload. The adopted body outlives the renderer that uploaded it, so this
+   * stays false.
+   */
+  freeCpuGeometry?: boolean;
   generate(
     seed: number,
     profileEntry: PlayerProfileEntry,
@@ -503,6 +509,10 @@ async function runInit(options: InitOptions): Promise<ForgeStatus> {
     if (!api || typeof api.init !== 'function' || api.api !== 1) {
       throw new Error('character runtime api mismatch');
     }
+    // Keep the bake on the CPU. The area renderer is disposed on every return
+    // to the map, which deletes the GPU buffers, and a later visit has to
+    // upload this same body again.
+    api.freeCpuGeometry = false;
     await api.init({ THREE, baseUrl: options.baseUrl ?? defaultBaseUrl() });
     const runtimeVersion = api.bundle?.engine?.version ?? api.version ?? '';
     const generatorVersion = api.bundle?.generator?.version;
@@ -542,6 +552,10 @@ function actionFor(built: CfBody, name: 'Idle' | 'Walk'): THREE.AnimationAction 
 function wrapForge(built: CfBody, hash: string): AvatarBody {
   const state = { clip: 'Idle' as 'Idle' | 'Walk', disposed: false };
   built.object3D.name = 'CF_avatar';
+  // The town, the creator, and instance games all borrow this one object.
+  // Teardown detaches it. It must not be disposed with a scene.
+  built.object3D.userData.sharedAsset = 1;
+  built.object3D.userData.tbKeep = 1;
   built.play('Idle');
   const body: AvatarBody = {
     object3D: built.object3D,

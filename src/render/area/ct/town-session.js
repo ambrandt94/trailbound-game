@@ -1332,6 +1332,12 @@ export async function createTownSession(canvas, hooks) {
     },
     dispose() {
       dead = true;
+      /* The forge body is owned by the creator, not this visit. Detach it.
+         Disposing it, or the cached geometry it shares, blanks the next entry. */
+      if (forgePawn && forgePawn.object3D) {
+        forgePawn.object3D.removeFromParent();
+        forgePawn = null;
+      }
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContext);
       canvas.removeEventListener('pointerdown', onDown);
