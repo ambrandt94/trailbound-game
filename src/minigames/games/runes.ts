@@ -1,129 +1,141 @@
-import { BoxGeometry, Mesh, MeshLambertMaterial } from 'three';
-import { RUNES_COINS } from './rewards';
+import {
+  CanvasTexture,
+  DodecahedronGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Vector3,
+} from 'three';
+import { clamp, lit, noiseTexture, pixelTexture } from '../helpers/runtime';
 import type { MinigameDef } from '../types';
 
-const COLORS = [0xc45c32, 0x3f7d55, 0x4a9eb2, 0xe0b15a];
+export const RUNE_COINS = 3;
 
 interface Rune {
+  v: Vector3;
   mesh: Mesh;
-  homeX: number;
-  x: number;
-  z: number;
-  socketX: number;
-  socketZ: number;
-  held: boolean;
-  set: boolean;
+  got: boolean;
 }
 
-interface RuneState {
-  runes: Rune[];
-  drag: number;
-  over: boolean;
+let runes: Rune[] = [];
+let yaw = 0;
+let pitch = 0.2;
+let found = 0;
+let penalty = 0;
+let note = '';
+const aim = new Vector3();
+
+function runeTexture(): CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.fillStyle = '#fff';
+  for (const rect of [
+    [7, 2, 2, 12],
+    [3, 4, 10, 2],
+    [4, 9, 8, 2],
+    [3, 12, 3, 2],
+    [10, 12, 3, 2],
+  ]) {
+    ctx.fillRect(rect[0]!, rect[1]!, rect[2]!, rect[3]!);
+  }
+  const texture = new CanvasTexture(canvas);
+  return pixelTexture(texture);
 }
 
-function fresh(): RuneState {
-  return { runes: [], drag: -1, over: false };
-}
-
-let state = fresh();
-
-/** Drag each rune onto the matching socket. */
+/** Orbit a stone and tap the rune that glows. A miss adds three seconds. */
 export const runesGame: MinigameDef = {
   id: 'runes',
-  name: 'Runes',
+  name: 'Rune Stone',
   type: 'pop3d',
   size: 'full',
   drag: true,
   start(g) {
-    state = fresh();
+    runes = [];
+    yaw = 0;
+    pitch = 0.2;
+    found = 0;
+    penalty = 0;
+    note = '';
     const scene = g.scene;
     if (!scene) return;
-    const board = new Mesh(
-      new BoxGeometry(8, 0.15, 5),
-      new MeshLambertMaterial({ color: 0xf4e2c4 }),
-    );
-    board.position.y = -0.1;
-    scene.add(board);
-    COLORS.forEach((color, index) => {
-      const mesh = new Mesh(new BoxGeometry(0.7, 0.35, 0.7), new MeshLambertMaterial({ color }));
-      const homeX = -2.4 + index * 1.6;
-      mesh.position.set(homeX, 0.2, 1.4);
-      scene.add(mesh);
-      const socket = new Mesh(
-        new BoxGeometry(0.85, 0.08, 0.85),
-        new MeshLambertMaterial({ color }),
+    lit(scene, '#2a2440', 0, 0, 0.8);
+    const stoneMat = new MeshBasicMaterial({ map: noiseTexture('#8a8578', 0.35, 104) });
+    const stone = new Mesh(new DodecahedronGeometry(1.6, 1), stoneMat);
+    stone.scale.set(1, 1.15, 0.95);
+    scene.add(stone);
+    const map = runeTexture();
+    for (let i = 0; i < 60 && runes.length < 3; i++) {
+      const v = new Vector3(
+        Math.random() * 2 - 1,
+        Math.random() * 1.6 - 0.8,
+        Math.random() * 2 - 1,
+      ).normalize();
+      if (runes.some((rune) => rune.v.dot(v) > 0.4)) continue;
+      const mesh = new Mesh(
+        new PlaneGeometry(0.5, 0.5),
+        new MeshBasicMaterial({
+          map: map ?? undefined,
+          transparent: true,
+          color: '#6a6458',
+          depthWrite: false,
+        }),
       );
-      const socketX = -2.4 + ((index * 3) % 4) * 1.6;
-      socket.position.set(socketX, 0.02, -1.3);
-      scene.add(socket);
-      state.runes.push({
-        mesh,
-        homeX,
-        x: homeX,
-        z: 1.4,
-        socketX,
-        socketZ: -1.3,
-        held: false,
-        set: false,
-      });
-    });
-    if (g.camera) {
-      g.camera.position.set(0, 6.5, 4.2);
-      g.camera.lookAt(0, 0, 0);
+      mesh.position.copy(v).multiply(new Vector3(1.62, 1.86, 1.54));
+      mesh.lookAt(mesh.position.clone().multiplyScalar(2));
+      scene.add(mesh);
+      runes.push({ v, mesh, got: false });
     }
   },
   update(g, dt) {
-    if (state.over) return;
-    void dt;
-    if (g.quit) return finish(g, false, 'You let it go.');
-    const worldX = (g.pointer.x - 0.5) * 8;
-    const worldZ = (0.5 - g.pointer.y) * 5;
-    if (g.pointer.down && state.drag < 0) {
-      let best = -1;
-      let bestD = 0.7;
-      state.runes.forEach((rune, index) => {
-        if (rune.set) return;
-        const dist = Math.hypot(rune.x - worldX, rune.z - worldZ);
-        if (dist < bestD) {
-          bestD = dist;
-          best = index;
-        }
-      });
-      state.drag = best;
+    if (!g.over) {
+      yaw += g.in.x * 1.8 * dt;
+      pitch = clamp(pitch + g.in.y * 1.5 * dt, -1.2, 1.2);
     }
-    if (!g.pointer.down) {
-      const rune = state.runes[state.drag];
-      if (rune && !rune.set) {
-        const dist = Math.hypot(rune.x - rune.socketX, rune.z - rune.socketZ);
-        if (dist < 0.55) {
-          rune.set = true;
-          rune.x = rune.socketX;
-          rune.z = rune.socketZ;
+    const dist = 6.4;
+    if (g.camera) {
+      g.camera.position.set(
+        Math.sin(yaw) * Math.cos(pitch) * dist,
+        Math.sin(pitch) * dist,
+        Math.cos(yaw) * Math.cos(pitch) * dist,
+      );
+      g.camera.lookAt(0, 0, 0);
+      aim.copy(g.camera.position).normalize();
+    }
+    let facing: Rune | null = null;
+    for (const rune of runes) {
+      const dot = rune.v.dot(aim);
+      if (!rune.got && dot > 0.9) facing = rune;
+      const material = rune.mesh.material as MeshBasicMaterial;
+      material.color.set(rune.got ? '#ffd27a' : dot > 0.9 ? '#9ae6ff' : '#6a6458');
+      rune.mesh.scale.setScalar(rune.got ? 1.2 : dot > 0.9 ? 1 + Math.sin(g.t * 10) * 0.1 : 1);
+    }
+    if (!g.over && g.act) {
+      if (facing) {
+        facing.got = true;
+        found += 1;
+        note = 'Found one!';
+        if (found >= 3) {
+          g.done({
+            ok: true,
+            message: `All runes found in ${(g.t + penalty).toFixed(1)}s`,
+            coins: RUNE_COINS,
+          });
         }
+      } else {
+        penalty += 3;
+        note = 'Nothing there (+3s)';
       }
-      state.drag = -1;
     }
-    const held = state.runes[state.drag];
-    if (held && g.pointer.down && !held.set) {
-      held.x = worldX;
-      held.z = worldZ;
-    }
-    for (const rune of state.runes) rune.mesh.position.set(rune.x, 0.2, rune.z);
-    if (state.runes.length === COLORS.length && state.runes.every((rune) => rune.set)) {
-      return finish(g, true, `The sockets glow. +${RUNES_COINS} coins.`);
+    if (g.hud) {
+      const hint = facing ? '<b>a rune glows: press Space / F</b>' : note;
+      g.hud.innerHTML = `runes ${found}/3 &nbsp; ${(g.t + penalty).toFixed(1)}s &nbsp; ${hint}<br><small>◀ ▶ ▲ ▼ or drag to orbit the camera · tap when a rune glows</small>`;
     }
   },
   status() {
-    return {
-      hot: state.drag >= 0,
-      hits: state.runes.filter((rune) => rune.set).length,
-      beat: 0,
-      detail: 'Drag each rune to its matching socket.',
-    };
+    return { hot: false, hits: found, beat: 0, detail: 'Orbit until a rune glows, then tap' };
   },
 };
-
-function finish(g: Parameters<MinigameDef['update']>[0], ok: boolean, message: string): void {
-  state.over = true;
-  g.done(ok ? { ok, message, coins: RUNES_COINS } : { ok, message });
-}

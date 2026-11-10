@@ -46,6 +46,10 @@ export class AreaView implements Scene {
     return this.handoff?.entry ?? null;
   }
 
+  worldView() {
+    return this.renderer?.worldView() ?? null;
+  }
+
   /** Stack calls this with no args after the town is already loaded. */
   async enter(ctx?: AreaEnter): Promise<void> {
     this.host.keyboard.clearPresses();

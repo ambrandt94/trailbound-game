@@ -29,6 +29,7 @@ import {
   registerDemoMinigames,
   registerWagonMinigames,
 } from '../minigames';
+import type { SimAvatar } from '../minigames/helpers/runtime';
 import { dayLightAt, tuOfDay } from '../core/sim/time';
 import { Keyboard, type AreaActionSnapshot } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
@@ -65,6 +66,7 @@ import {
 import {
   adoptPlayerBody,
   buildAvatar,
+  getPlayerBody,
   forgeReady,
   forgeTimings,
   generateRecipe,
@@ -125,6 +127,7 @@ export class Game implements GameHost {
   private detachTouch: (() => void) | null = null;
   private readonly jobs: Array<() => void> = [];
   private noticeTimer = 0;
+  private avatarRestore: (() => void) | null = null;
 
   constructor(options: GameOptions) {
     this.options = options;
@@ -142,6 +145,10 @@ export class Game implements GameHost {
       onApplied: () => {
         void this.persist();
       },
+      world: () => this.areaScene?.worldView() ?? null,
+      camYaw: () => settings.value.look.camYaw,
+      syncAvatar: (avatar, dt) => this.syncInstanceAvatar(avatar, dt),
+      releaseAvatar: () => this.releaseInstanceAvatar(),
     });
     registerWagonMinigames();
     registerDemoMinigames();
@@ -422,6 +429,35 @@ export class Game implements GameHost {
       skyHor: light.skyHor,
       fog: light.fog,
     };
+  }
+
+  private syncInstanceAvatar(avatar: SimAvatar, dt: number): void {
+    const body = getPlayerBody();
+    const view = this.areaScene?.worldView();
+    if (!body || !view) return;
+    if (!this.avatarRestore) {
+      const parent = body.object3D.parent;
+      view.scene.add(body.object3D);
+      if (avatar.rig) avatar.rig.root.visible = false;
+      this.avatarRestore = () => {
+        if (parent) parent.add(body.object3D);
+        body.object3D.visible = true;
+      };
+    }
+    body.object3D.position.set(avatar.x, avatar.y, avatar.z);
+    body.object3D.rotation.y = avatar.yaw;
+    const speed = Math.hypot(avatar.vx, avatar.vz);
+    body.present({
+      clip: speed > 0.4 ? 'Walk' : 'Idle',
+      timeScale: speed > 0.4 ? Math.max(0.6, speed / 1.4) : 1,
+      fade: 0.12,
+    });
+    body.update(dt);
+  }
+
+  private releaseInstanceAvatar(): void {
+    this.avatarRestore?.();
+    this.avatarRestore = null;
   }
 
   private openWagon(): void {

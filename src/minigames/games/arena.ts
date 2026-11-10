@@ -1,110 +1,193 @@
-import { BoxGeometry, Mesh, MeshLambertMaterial } from 'three';
-import { ARENA_COINS } from './rewards';
-import { makePawn } from '../helpers/pawn';
+import {
+  CircleGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  MeshLambertMaterial,
+  PlaneGeometry,
+  SphereGeometry,
+  BoxGeometry,
+} from 'three';
+import {
+  follow,
+  jump,
+  lambert,
+  lit,
+  makeSim,
+  mountRig,
+  rnd2,
+  walk,
+  type SimAvatar,
+} from '../helpers/runtime';
 import type { MinigameDef } from '../types';
 
-export const ARENA_FOES = 3;
-const LIMIT = 40;
+export const ARENA_COINS = 5;
 
-interface Foe {
-  mesh: Mesh;
+interface Slime {
   x: number;
   z: number;
-  down: boolean;
+  y: number;
+  hop: number;
+  ht: number;
+  dx: number;
+  dz: number;
+  dead: number;
+  mesh: Mesh;
+  group: Mesh['parent'];
 }
 
 interface ArenaState {
-  time: number;
-  x: number;
-  z: number;
-  swing: number;
-  foes: Foe[];
-  down: number;
-  over: boolean;
-  pawn: ReturnType<typeof makePawn> | null;
+  avatar: SimAvatar | null;
+  slimes: Slime[];
+  kills: number;
+  hp: number;
+  spawn: number;
+  camYaw: number;
 }
 
-function fresh(): ArenaState {
-  return { time: 0, x: 0, z: 0, swing: 0, foes: [], down: 0, over: false, pawn: null };
-}
+let state: ArenaState = { avatar: null, slimes: [], kills: 0, hp: 3, spawn: 0, camYaw: 45 };
 
-let state = fresh();
-
-/** Drag to move, Space or F to swing. Three dummies pay the purse. */
+/** Stomp 5 slimes. Jump on them; touching one costs a heart. */
 export const arenaGame: MinigameDef = {
   id: 'arena',
-  name: 'Arena',
+  name: 'Slime Arena',
   type: 'inst',
   drag: true,
   start(g) {
-    state = fresh();
+    state = { avatar: null, slimes: [], kills: 0, hp: 3, spawn: 0, camYaw: g.camYaw };
     const scene = g.scene;
     if (!scene) return;
-    const floor = new Mesh(
-      new BoxGeometry(10, 0.2, 10),
-      new MeshLambertMaterial({ color: 0xd7b07a }),
-    );
-    floor.position.y = -0.1;
-    scene.add(floor);
-    const pawn = makePawn();
-    scene.add(pawn);
-    state.pawn = pawn;
-    const spots = [
-      [2.2, 1.4],
-      [-2, 1.8],
-      [0.4, -2],
-    ];
-    state.foes = spots.map(([x, z]) => {
-      const mesh = new Mesh(
-        new BoxGeometry(0.7, 1.2, 0.7),
-        new MeshLambertMaterial({ color: 0xc45c32 }),
-      );
-      mesh.position.set(x!, 0.6, z!);
-      scene.add(mesh);
-      return { mesh, x: x!, z: z!, down: false };
-    });
+    lit(scene, '#f0c9a8', 30, 70);
+    const grass = lambert('#6a9a45', 0.3, 96);
+    grass.map!.repeat.set(12, 12);
+    const disc = new Mesh(new CircleGeometry(13, 24), grass);
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.y = -0.2;
+    scene.add(disc);
+    const out = lambert('#4a7a3a', 0.3, 97);
+    out.map!.repeat.set(40, 40);
+    const field = new Mesh(new PlaneGeometry(200, 200), out);
+    field.rotation.x = -Math.PI / 2;
+    field.position.y = -0.3;
+    scene.add(field);
+    const stone = lambert('#8a8578', 0.3, 4);
+    for (let i = 0; i < 28; i++) {
+      const angle = (i / 28) * Math.PI * 2;
+      const pillar = new Mesh(new BoxGeometry(0.5, 1.2 + ((i * 13) % 8) / 10, 0.5), stone);
+      pillar.position.set(Math.sin(angle) * 12.6, 0.5, Math.cos(angle) * 12.6);
+      scene.add(pillar);
+    }
+    const avatar = makeSim(0, 6);
+    mountRig(scene, avatar);
+    state.avatar = avatar;
+    g.A = avatar;
+    hud(g);
   },
   update(g, dt) {
-    if (state.over) return;
-    const step = Math.min(0.05, Math.max(0, dt));
-    if (g.quit) return finish(g, false, 'You let it go.');
-    state.time += step;
-    state.x += g.pointer.dx * 6 + g.in.x * step * 3.2;
-    state.z += g.pointer.dy * 6 - g.in.y * step * 3.2;
-    state.x = Math.max(-4, Math.min(4, state.x));
-    state.z = Math.max(-4, Math.min(4, state.z));
-    if (g.act) state.swing = 0.28;
-    if (state.swing > 0) state.swing -= step;
-    state.pawn?.position.set(state.x, 0, state.z);
-    for (const foe of state.foes) {
-      if (foe.down) continue;
-      const dx = state.x - foe.x;
-      const dz = state.z - foe.z;
-      const dist = Math.hypot(dx, dz) || 1;
-      foe.x += (dx / dist) * step * 0.7;
-      foe.z += (dz / dist) * step * 0.7;
-      foe.mesh.position.set(foe.x, 0.6, foe.z);
-      if (state.swing > 0 && dist < 1.15) {
-        foe.down = true;
-        foe.mesh.position.y = 0.2;
-        state.down += 1;
+    const avatar = state.avatar;
+    if (!avatar || !g.camera) return;
+    if (g.act) jump(avatar);
+    walk(avatar, dt, g.over ? 0 : g.in.x, g.over ? 0 : g.in.y, 12, [], state.camYaw);
+    if (!g.over) {
+      state.spawn -= dt;
+      if (state.spawn <= 0 && state.slimes.length < 3 && state.kills + state.slimes.length < 5) {
+        state.spawn = 1.4;
+        spawn(g);
       }
     }
-    if (state.down >= ARENA_FOES)
-      return finish(g, true, `The ring is yours. +${ARENA_COINS} coins.`);
-    if (state.time >= LIMIT) return finish(g, false, 'The dummies outlast you.');
+    for (const slime of state.slimes) {
+      if (slime.dead) {
+        slime.dead += dt;
+        const squash = Math.max(0.05, 1 - slime.dead * 5);
+        slime.mesh.scale.set(1 + slime.dead * 3, squash, 1 + slime.dead * 3);
+        continue;
+      }
+      if (!g.over) {
+        slime.hop -= dt;
+        if (slime.hop <= 0 && !slime.ht) {
+          slime.ht = 0.5;
+          const dist = Math.hypot(avatar.x - slime.x, avatar.z - slime.z) || 1;
+          slime.dx = ((avatar.x - slime.x) / dist) * 1.9;
+          slime.dz = ((avatar.z - slime.z) / dist) * 1.9;
+        }
+        if (slime.ht > 0) {
+          slime.ht -= dt;
+          slime.x += (slime.dx * dt) / 0.5;
+          slime.z += (slime.dz * dt) / 0.5;
+          slime.y = Math.sin((1 - slime.ht / 0.5) * Math.PI) * 0.7;
+          if (slime.ht <= 0) {
+            slime.ht = 0;
+            slime.y = 0;
+            slime.hop = rnd2(0.6, 1.3);
+          }
+        }
+        const dist = Math.hypot(avatar.x - slime.x, avatar.z - slime.z);
+        if (dist < 0.85 && avatar.vy < 0 && avatar.y > slime.y + 0.3) {
+          slime.dead = 0.001;
+          avatar.vy = 8;
+          state.kills += 1;
+          hud(g);
+          if (state.kills >= 5) g.done({ ok: true, message: 'Arena cleared!', coins: ARENA_COINS });
+        } else if (dist < 0.7 && avatar.y < slime.y + 0.6 && avatar.inv <= 0) {
+          state.hp -= 1;
+          avatar.inv = 1.2;
+          avatar.kb = 0.3;
+          avatar.vx = ((avatar.x - slime.x) / (dist || 1)) * 9;
+          avatar.vz = ((avatar.z - slime.z) / (dist || 1)) * 9;
+          avatar.vy = 4;
+          hud(g);
+          if (state.hp <= 0)
+            g.done({ ok: false, message: 'Knocked out!\nBack to the trail you go.', coins: 0 });
+        }
+      }
+      slime.mesh.position.set(slime.x, slime.y + 0.4, slime.z);
+      slime.mesh.rotation.y = Math.atan2(avatar.x - slime.x, avatar.z - slime.z);
+    }
+    state.slimes = state.slimes.filter((slime) => {
+      if (slime.dead > 0.35) {
+        slime.mesh.parent?.remove(slime.mesh);
+        return false;
+      }
+      return true;
+    });
+    follow(g.camera, avatar, 16, 52, state.camYaw);
+    g.syncAvatar?.(avatar);
   },
   status() {
-    return {
-      hot: state.swing > 0,
-      hits: state.down,
-      beat: 0,
-      detail: 'Drag to move. Space swings.',
-    };
+    return { hot: false, hits: state.kills, beat: state.hp, detail: 'Jump on the slimes' };
   },
 };
 
-function finish(g: Parameters<MinigameDef['update']>[0], ok: boolean, message: string): void {
-  state.over = true;
-  g.done(ok ? { ok, message, coins: ARENA_COINS } : { ok, message });
+function hud(g: { hud: HTMLElement | null }): void {
+  if (!g.hud) return;
+  const hearts = '♥'.repeat(Math.max(0, state.hp)) + '♡'.repeat(3 - Math.max(0, state.hp));
+  g.hud.innerHTML = `${hearts} &nbsp; slimes ${state.kills}/5<br><small>drag or stick to move · Space / F / tap to jump · land on the slimes</small>`;
+}
+
+function spawn(g: { scene: { add(object: unknown): void } | null }): void {
+  if (!g.scene) return;
+  const angle = Math.random() * Math.PI * 2;
+  const mesh = new Mesh(
+    new SphereGeometry(0.5, 8, 6),
+    new MeshLambertMaterial({ color: '#7fd65f' }),
+  );
+  mesh.scale.y = 0.75;
+  const eye = new MeshBasicMaterial({ color: '#2a1c1c' });
+  const left = new Mesh(new BoxGeometry(0.08, 0.12, 0.04), eye);
+  const right = left.clone();
+  left.position.set(-0.17, 0.1, 0.45);
+  right.position.set(0.17, 0.1, 0.45);
+  mesh.add(left, right);
+  g.scene.add(mesh);
+  state.slimes.push({
+    x: Math.sin(angle) * 10,
+    z: Math.cos(angle) * 10,
+    y: 0,
+    hop: rnd2(0.5, 1),
+    ht: 0,
+    dx: 0,
+    dz: 0,
+    dead: 0,
+    mesh,
+    group: mesh.parent,
+  });
 }

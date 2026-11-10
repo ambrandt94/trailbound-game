@@ -1257,6 +1257,10 @@ export async function createTownSession(canvas, hooks) {
         fpsN = 0;
       }
     },
+    worldView() {
+      const p = PLS[0];
+      return { scene, pose: { x: p.x, y: p.y, z: p.z, yaw: p.yaw } };
+    },
     prompt() {
       const p = PLS[0];
       const t = target(p);

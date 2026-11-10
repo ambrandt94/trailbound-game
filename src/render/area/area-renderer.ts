@@ -74,6 +74,10 @@ export class AreaRenderer {
     return this.session?.prompt() ?? '';
   }
 
+  worldView(): ReturnType<TownSession['worldView']> | null {
+    return this.session?.worldView() ?? null;
+  }
+
   indoors(): boolean {
     return this.session?.indoors() ?? false;
   }

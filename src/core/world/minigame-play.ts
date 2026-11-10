@@ -1,7 +1,7 @@
 /** Which spawned slots open a playable demo. Worldgen ids stay as they are. */
 export const PLAYABLE_SLOTS: Record<string, { id: string; label: string }> = {
-  wild_fish: { id: 'fish', label: 'Fish' },
-  wild_chop: { id: 'chop', label: 'Chop wood' },
+  wild_fish: { id: 'fish', label: 'Fishing' },
+  wild_chop: { id: 'chop', label: 'Woodchop' },
 };
 
 export interface SlotPoint {

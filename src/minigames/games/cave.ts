@@ -1,94 +1,168 @@
-import { BoxGeometry, Mesh, MeshLambertMaterial } from 'three';
-import { CAVE_COINS } from './rewards';
-import { makePawn } from '../helpers/pawn';
+import {
+  CircleGeometry,
+  CylinderGeometry,
+  ConeGeometry,
+  Mesh,
+  MeshBasicMaterial,
+  OctahedronGeometry,
+  PointLight,
+} from 'three';
+import {
+  clamp,
+  follow,
+  jump,
+  lambert,
+  lit,
+  makeSim,
+  mountRig,
+  rnd2,
+  walk,
+} from '../helpers/runtime';
 import type { MinigameDef } from '../types';
 
-const GATES = [2.5, 6, 9.5, 13, 16.5];
-const END = 20;
+export const CAVE_CLEAR_COINS = 4;
+export const CAVE_PARTIAL_COINS = 1;
 
-interface CaveState {
-  z: number;
+interface Crystal {
   x: number;
-  scrapes: number;
-  over: boolean;
-  pawn: ReturnType<typeof makePawn> | null;
+  z: number;
+  mesh: Mesh;
+  light: PointLight;
+  got: boolean;
 }
 
-function fresh(): CaveState {
-  return { z: 0, x: 0, scrapes: 0, over: false, pawn: null };
+interface Column {
+  x: number;
+  z: number;
+  r: number;
 }
 
-let state = fresh();
+let avatar = makeSim();
+let crystals: Crystal[] = [];
+let columns: Column[] = [];
+let torch: PointLight | null = null;
+let found = 0;
+let left = 45;
+let total = 0;
+let camYaw = 45;
 
-/** The path moves itself. Drag to stay in the gaps. */
+/** Collect every crystal before the 45 second torch dies. */
 export const caveGame: MinigameDef = {
   id: 'cave',
-  name: 'Cave',
+  name: 'Crystal Cave',
   type: 'inst',
   drag: true,
   start(g) {
-    state = fresh();
+    found = 0;
+    left = 45;
+    crystals = [];
+    columns = [];
+    camYaw = g.camYaw;
     const scene = g.scene;
     if (!scene) return;
-    const floor = new Mesh(
-      new BoxGeometry(6, 0.2, 24),
-      new MeshLambertMaterial({ color: 0xc4a574 }),
-    );
-    floor.position.set(0, -0.1, 10);
+    lit(scene, '#120e14', 6, 22, 0.6);
+    const floorMat = lambert('#5a5260', 0.35, 100);
+    floorMat.map!.repeat.set(14, 14);
+    const floor = new Mesh(new CircleGeometry(13.5, 28), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.2;
     scene.add(floor);
-    const wallMat = new MeshLambertMaterial({ color: 0x8d6a4a });
-    GATES.forEach((z, index) => {
-      const gap = index % 2 === 0 ? -0.6 : 0.7;
-      for (const side of [-1.8, 1.8]) {
-        const mesh = new Mesh(new BoxGeometry(1.6, 1.6, 0.4), wallMat);
-        mesh.position.set(side + gap * 0.2, 0.8, z);
-        scene.add(mesh);
-      }
-    });
-    const glow = new Mesh(
-      new BoxGeometry(0.5, 0.5, 0.5),
-      new MeshLambertMaterial({ color: 0xf2d48a }),
-    );
-    glow.position.set(0, 0.6, END);
-    scene.add(glow);
-    const pawn = makePawn();
-    scene.add(pawn);
-    state.pawn = pawn;
-    if (g.camera) {
-      g.camera.position.set(0, 6, -4);
-      g.camera.lookAt(0, 0.4, 6);
+    const wallMat = lambert('#3a3440', 0.35, 101);
+    wallMat.side = 1;
+    wallMat.map!.repeat.set(20, 1.5);
+    const wall = new Mesh(new CylinderGeometry(13.8, 14.5, 4, 28, 1, true), wallMat);
+    wall.position.y = 1.8;
+    scene.add(wall);
+    for (let i = 0; i < 14; i++) {
+      const angle = (((i * 47) % 100) / 100) * Math.PI * 2;
+      const dist = 3 + (((i * 19) % 100) / 100) * 8.5;
+      const x = Math.sin(angle) * dist;
+      const z = Math.cos(angle) * dist;
+      const radius = 0.4 + (((i * 13) % 50) / 100) * 0.5;
+      if (Math.hypot(x, z - 5) < 2.5) continue;
+      const pillar = new Mesh(
+        new ConeGeometry(radius, 2 + radius * 3, 6),
+        lambert('#3a3440', 0.35, 101),
+      );
+      pillar.position.set(x, 1 + radius * 1.5, z);
+      scene.add(pillar);
+      columns.push({ x, z, r: radius });
     }
+    for (let i = 0; i < 40 && crystals.length < 6; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = rnd2(2.5, 11.5);
+      const x = Math.sin(angle) * dist;
+      const z = Math.cos(angle) * dist;
+      if (columns.some((column) => Math.hypot(column.x - x, column.z - z) < column.r + 1)) continue;
+      if (crystals.some((crystal) => Math.hypot(crystal.x - x, crystal.z - z) < 3)) continue;
+      if (Math.hypot(x, z - 5) < 3) continue;
+      const pink = crystals.length % 2 === 1;
+      const mesh = new Mesh(
+        new OctahedronGeometry(0.3, 0),
+        new MeshBasicMaterial({ color: pink ? '#ff9ae6' : '#7fe6ff' }),
+      );
+      mesh.scale.y = 1.7;
+      mesh.position.set(x, 0.7, z);
+      const light = new PointLight(pink ? '#ff9ae6' : '#7fe6ff', 0.9 * 12, 3.5);
+      light.position.set(x, 0.8, z);
+      scene.add(mesh, light);
+      crystals.push({ x, z, mesh, light, got: false });
+    }
+    torch = new PointLight('#ffcc88', 1.8 * 12, 12);
+    scene.add(torch);
+    avatar = makeSim(0, 5);
+    mountRig(scene, avatar);
+    g.A = avatar;
+    total = crystals.length;
   },
   update(g, dt) {
-    if (state.over) return;
-    const step = Math.min(0.05, Math.max(0, dt));
-    if (g.quit) return finish(g, false, 'You let it go.');
-    state.z += step * 2.4;
-    if (g.pointer.down) state.x = (g.pointer.x - 0.5) * 3.2;
-    else state.x = Math.max(-1.6, Math.min(1.6, state.x + g.in.x * step * 2.2));
-    const gate = GATES.find((z) => Math.abs(z - state.z) < 0.18);
-    if (gate != null) {
-      const index = GATES.indexOf(gate);
-      const gap = index % 2 === 0 ? -0.6 : 0.7;
-      if (Math.abs(state.x - gap) > 0.85) state.scrapes += step * 8;
+    if (!g.camera || !g.scene) return;
+    if (g.act) jump(avatar);
+    walk(avatar, dt, g.over ? 0 : g.in.x, g.over ? 0 : g.in.y, 12.6, columns, camYaw);
+    if (!g.over) {
+      left -= dt;
+      for (const crystal of crystals) {
+        if (!crystal.got && Math.hypot(avatar.x - crystal.x, avatar.z - crystal.z) < 0.8) {
+          crystal.got = true;
+          found += 1;
+          crystal.light.intensity = 0;
+        }
+      }
+      if (found >= total && total > 0) {
+        g.done({ ok: true, message: `All ${total} crystals!`, coins: CAVE_CLEAR_COINS });
+      } else if (left <= 0) {
+        g.done({
+          ok: found >= 3,
+          message: `The torch went out…\nFound ${found} of ${total}`,
+          coins: found >= 3 ? CAVE_PARTIAL_COINS : 0,
+        });
+      }
     }
-    state.pawn?.position.set(state.x, 0, state.z);
-    g.camera?.position.set(state.x * 0.3, 5.5, state.z - 5);
-    g.camera?.lookAt(state.x, 0.6, state.z + 3);
-    if (state.scrapes >= 6) return finish(g, false, 'The walls close in.');
-    if (state.z >= END) return finish(g, true, `Daylight. +${CAVE_COINS} coins.`);
+    for (const crystal of crystals) {
+      crystal.mesh.rotation.y += dt * 2;
+      if (crystal.got) {
+        crystal.mesh.position.y += dt * 4;
+        crystal.mesh.scale.multiplyScalar(1 - dt * 3);
+      } else crystal.mesh.position.y = 0.7 + Math.sin(g.t * 2 + crystal.x) * 0.12;
+    }
+    const k = clamp(left / 45, 0, 1);
+    if (torch) {
+      torch.distance = 5 + 9 * k;
+      torch.intensity = (0.8 + k) * 12 * (1 + Math.sin(g.t * 23) * 0.05 + Math.sin(g.t * 7) * 0.05);
+      torch.position.set(avatar.x, avatar.y + 2, avatar.z);
+    }
+    if (g.hud) {
+      g.hud.innerHTML = `crystals ${found}/${total} &nbsp; torch ${Math.ceil(Math.max(0, left))}s<br><small>walk into the crystals (drag or stick) · Space / F / tap to jump</small>`;
+    }
+    follow(g.camera, avatar, 13, 55, camYaw);
+    g.syncAvatar?.(avatar);
   },
   status() {
     return {
       hot: false,
-      hits: Math.floor(state.z),
-      beat: 0,
-      detail: 'Drag to thread the gaps.',
+      hits: found,
+      beat: Math.ceil(Math.max(0, left)),
+      detail: 'Collect the crystals',
     };
   },
 };
-
-function finish(g: Parameters<MinigameDef['update']>[0], ok: boolean, message: string): void {
-  state.over = true;
-  g.done(ok ? { ok, message, coins: CAVE_COINS } : { ok, message });
-}

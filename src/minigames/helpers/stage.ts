@@ -1,8 +1,5 @@
 import {
-  AmbientLight,
   Color,
-  DirectionalLight,
-  HemisphereLight,
   Mesh,
   NearestFilter,
   PerspectiveCamera,
@@ -21,17 +18,14 @@ export function createStage(canvas: HTMLCanvasElement, background: string) {
   renderer.setPixelRatio(1);
   const scene = new Scene();
   scene.background = new Color(background);
-  const camera = new PerspectiveCamera(42, 1, 0.1, 80);
+  const camera = new PerspectiveCamera(40, 1, 0.1, 200);
   camera.position.set(0, 3.4, 6.8);
   camera.lookAt(0, 0.7, 0);
-  const hemi = new HemisphereLight(0xfff6e4, 0x8d6a42, 0.62);
-  const sun = new DirectionalLight(0xfff1d0, 2.6);
-  sun.position.set(4.5, 8, 3);
-  const fill = new AmbientLight(0xfff8ee, 0.38);
-  scene.add(hemi, sun, fill);
   const resize = (width: number, height: number) => {
-    renderer.setSize(width, height, false);
-    camera.aspect = width / Math.max(1, height);
+    const w = Math.max(2, Math.ceil(width / 2));
+    const h = Math.max(2, Math.ceil(height / 2));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(1, h);
     camera.updateProjectionMatrix();
   };
   return { renderer, scene, camera, resize };

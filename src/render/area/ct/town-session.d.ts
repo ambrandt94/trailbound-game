@@ -11,6 +11,10 @@ export interface TownSession {
   step(dt: number): void;
   frame(): void;
   prompt(): string;
+  worldView(): {
+    scene: import('three').Scene;
+    pose: { x: number; y: number; z: number; yaw: number };
+  };
   indoors(): boolean;
   bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null;
   stats(): { fps: number; calls: number; triangles: number; view: string; name: string };

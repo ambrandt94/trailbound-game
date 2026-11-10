@@ -1,12 +1,11 @@
 /**
- * Draft coin purses for the eight controller demos.
- * The controller source was not readable here, so these are named and easy to retune.
+ * Coin purses copied from the controller demos.
+ * Fish purses depend on the species: minnow 2, perch 3, trout 4, pike 6.
+ * Flap pays floor(score / 2). Apples pay floor(caught / 3), or floor(caught / 4) if a rotten apple ends it.
+ * Tower Stack pays floor(blocks / 3).
  */
-export const FISH_COINS = 8;
-export const CHOP_COINS = 6;
-export const FLAP_COINS = 10;
-export const APPLES_COINS = 7;
-export const ARENA_COINS = 12;
-export const CAVE_COINS = 12;
-export const STACK_COINS = 9;
-export const RUNES_COINS = 8;
+export const CHOP_COINS = 3;
+export const ARENA_COINS = 5;
+export const CAVE_CLEAR_COINS = 4;
+export const CAVE_PARTIAL_COINS = 1;
+export const RUNE_COINS = 3;

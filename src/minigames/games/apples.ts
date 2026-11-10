@@ -1,101 +1,133 @@
-import { APPLES_COINS } from './rewards';
-import { BERRY, CREAM, MOSS, WOOD, drawLabel, paintField } from '../helpers/draw';
+import { clamp, rnd2 } from '../helpers/runtime';
 import type { MinigameDef } from '../types';
-
-export const APPLE_GOAL = 8;
 
 interface Apple {
   x: number;
   y: number;
-  caught: boolean;
-  missed: boolean;
+  v: number;
+  bad: boolean;
+  gone?: number;
 }
 
 interface AppleState {
-  time: number;
-  next: number;
+  bx: number;
   apples: Apple[];
   caught: number;
-  missed: number;
-  basket: number;
-  over: boolean;
+  life: number;
+  left: number;
+  spawn: number;
 }
 
-function fresh(): AppleState {
-  return { time: 0, next: 0.4, apples: [], caught: 0, missed: 0, basket: 0.5, over: false };
+function blank(width: number): AppleState {
+  return { bx: width / 2, apples: [], caught: 0, life: 3, left: 30, spawn: 0 };
 }
 
-let state = fresh();
+let state = blank(120);
 
-/** Drag the basket, or hold A and D. Eight apples pay the purse. */
+/** Catch red apples, skip the brown ones. Thirty seconds, three lives. */
 export const applesGame: MinigameDef = {
   id: 'apples',
-  name: 'Apples',
+  name: 'Apple Catch',
   type: 'pop2d',
   size: 'part',
-  h: 460,
+  h: 90,
   drag: true,
-  start() {
-    state = fresh();
+  start(g) {
+    state = blank(g.W || g.width || 160);
+    if (g.hud)
+      g.hud.innerHTML = '◀ ▶ or drag to move the basket · catch red apples, skip the rotten ones';
+    g.over = false;
   },
   update(g, dt) {
-    if (state.over) return;
-    const step = Math.min(0.05, Math.max(0, dt));
-    if (g.quit) return finish(g, false, 'You let it go.');
-    if (g.pointer.down) state.basket = g.pointer.x;
-    else state.basket = Math.max(0.08, Math.min(0.92, state.basket + g.in.x * step * 0.8));
-    state.time += step;
-    if (state.time >= state.next && state.apples.length < 14) {
-      state.next += 1.5;
-      const n = state.apples.length + 1;
-      state.apples.push({ x: ((n * 53) % 80) / 100 + 0.1, y: 0.12, caught: false, missed: false });
-    }
-    for (const apple of state.apples) {
-      if (apple.caught || apple.missed) continue;
-      apple.y += step * 0.28;
-      if (apple.y >= 0.82) {
-        if (Math.abs(apple.x - state.basket) < 0.09) {
-          apple.caught = true;
-          state.caught += 1;
-        } else {
-          apple.missed = true;
-          state.missed += 1;
+    const width = g.W || g.width || 160;
+    const height = g.H || g.height || 90;
+    const basketY = height - 12;
+    if (!g.over) {
+      state.left -= dt;
+      state.bx = clamp(state.bx + g.in.x * 95 * dt, 8, width - 8);
+      state.spawn -= dt;
+      if (state.spawn <= 0) {
+        state.spawn = rnd2(0.45, 0.9);
+        state.apples.push({
+          x: rnd2(6, width - 6),
+          y: 14,
+          v: rnd2(26, 48) * (1 + (30 - state.left) / 40),
+          bad: Math.random() < 0.22,
+        });
+      }
+      for (const apple of state.apples) {
+        apple.y += apple.v * dt;
+        if (
+          !apple.gone &&
+          apple.y > basketY - 3 &&
+          apple.y < basketY + 3 &&
+          Math.abs(apple.x - state.bx) < 9
+        ) {
+          apple.gone = 1;
+          if (apple.bad) state.life -= 1;
+          else state.caught += 1;
         }
       }
+      state.apples = state.apples.filter((apple) => !apple.gone && apple.y < height + 4);
+      if (state.life <= 0) {
+        g.done({
+          ok: state.caught > 0,
+          message: `Too many rotten apples!\nCaught ${state.caught}`,
+          coins: Math.floor(state.caught / 4),
+        });
+      } else if (state.left <= 0) {
+        g.done({
+          ok: true,
+          message: `Time! Caught ${state.caught} apples`,
+          coins: Math.floor(state.caught / 3),
+        });
+      }
     }
-    if (state.caught >= APPLE_GOAL)
-      return finish(g, true, `A full basket. +${APPLES_COINS} coins.`);
-    if (state.missed >= 6) return finish(g, false, 'Too many on the ground.');
-    paint(g);
+    paint(g, width, height, basketY);
   },
   status() {
-    return { hot: false, hits: state.caught, beat: 0, detail: 'Drag the basket under the apples.' };
+    return {
+      hot: false,
+      hits: state.caught,
+      beat: state.life,
+      detail: 'Drag the basket. Skip the brown apples.',
+    };
   },
 };
 
-function finish(g: Parameters<MinigameDef['update']>[0], ok: boolean, message: string): void {
-  state.over = true;
-  g.done(ok ? { ok, message, coins: APPLES_COINS } : { ok, message });
-}
-
-function paint(g: Parameters<MinigameDef['update']>[0]): void {
-  const canvas = g.canvas;
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
+function paint(
+  g: { gfx: CanvasRenderingContext2D | null },
+  width: number,
+  height: number,
+  basketY: number,
+): void {
+  const ctx = g.gfx;
   if (!ctx) return;
-  paintField(ctx, g.width, g.height);
-  drawLabel(ctx, 'Apples', 18, 14, 20);
-  drawLabel(ctx, `${state.caught} / ${APPLE_GOAL}`, 18, 42, 14, WOOD);
+  ctx.fillStyle = '#cfe6c2';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = '#3f7a3a';
+  for (let i = -4; i < width; i += 14) ctx.fillRect(i, 0, 16, 10 + Math.abs((i * 5) % 7));
+  ctx.fillStyle = '#6a9a45';
+  ctx.fillRect(0, basketY + 5, width, height - basketY);
   for (const apple of state.apples) {
-    if (apple.missed) continue;
-    ctx.fillStyle = apple.caught ? MOSS : BERRY;
-    ctx.beginPath();
-    ctx.arc(apple.x * g.width, (apple.caught ? 0.78 : apple.y) * g.height, 12, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = apple.bad ? '#7a5230' : '#d93a2a';
+    ctx.fillRect(Math.round(apple.x) - 2, Math.round(apple.y) - 2, 5, 5);
+    ctx.fillStyle = '#3f7a3a';
+    ctx.fillRect(Math.round(apple.x), Math.round(apple.y) - 4, 1, 2);
   }
-  const bx = state.basket * g.width;
-  ctx.fillStyle = WOOD;
-  ctx.fillRect(bx - 36, g.height * 0.84, 72, 16);
-  ctx.fillStyle = CREAM;
-  ctx.fillRect(bx - 28, g.height * 0.8, 56, 8);
+  const basket = Math.round(state.bx);
+  ctx.fillStyle = '#a9783c';
+  ctx.fillRect(basket - 8, basketY - 2, 16, 7);
+  ctx.fillStyle = '#8a5a2b';
+  ctx.fillRect(basket - 8, basketY - 2, 16, 2);
+  ctx.fillStyle = '#2a1c1c';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`apple ${state.caught}`, 3, height - 2);
+  ctx.textAlign = 'right';
+  ctx.fillText(
+    `${'♥'.repeat(Math.max(0, state.life))} ${Math.ceil(Math.max(0, state.left))}s`,
+    width - 3,
+    height - 2,
+  );
 }
