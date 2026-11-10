@@ -1,18 +1,19 @@
 import {
-  BufferGeometry,
-  Float32BufferAttribute,
-  Group,
-  Line,
-  LineBasicMaterial,
-  Mesh,
-  MeshLambertMaterial,
-  SphereGeometry,
+  CanvasTexture,
   CircleGeometry,
+  CylinderGeometry,
   DodecahedronGeometry,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  SphereGeometry,
+  Sprite,
+  SpriteMaterial,
+  Vector3,
   type Object3D,
   type Scene,
 } from 'three';
-import { rnd2 } from '../helpers/runtime';
+import { pixelTexture, rnd2 } from '../helpers/runtime';
 import type { MinigameContext, MinigameDef } from '../types';
 
 /** Controller fish table: name, fight speed, coin purse. */
@@ -37,9 +38,11 @@ interface FishState {
   bv: number;
   pr: number;
   bob: Object3D | null;
-  line: Line | null;
+  line: Mesh | null;
+  bite: Object3D | null;
   props: Object3D[];
   cv: HTMLCanvasElement | null;
+  surface: number;
 }
 
 function blank(): FishState {
@@ -58,8 +61,10 @@ function blank(): FishState {
     pr: 0.3,
     bob: null,
     line: null,
+    bite: null,
     props: [],
     cv: null,
+    surface: 0,
   };
 }
 
@@ -73,10 +78,19 @@ export const fishGame: MinigameDef = {
   start(g) {
     state = blank();
     const pose = g.pose ?? { x: 0, y: 0, z: 0, yaw: 0 };
-    state.bx = pose.x + Math.sin(pose.yaw) * 2.2;
-    state.bz = pose.z + Math.cos(pose.yaw) * 2.2;
+    const sign = g.worldScene ? nearestFishSign(g.worldScene, pose.x, pose.z) : null;
+    if (sign) {
+      const yaw = sign.rotation.y;
+      state.bx = sign.position.x + Math.sin(yaw) * 1.6;
+      state.bz = sign.position.z + Math.cos(yaw) * 1.6;
+      state.surface = sign.position.y;
+    } else {
+      state.bx = pose.x + Math.sin(pose.yaw) * 2.2;
+      state.bz = pose.z + Math.cos(pose.yaw) * 2.2;
+      state.surface = pose.y;
+    }
     const scene = g.worldScene;
-    if (scene && typeof document !== 'undefined') buildPond(scene, state);
+    if (scene && typeof document !== 'undefined') buildPond(scene, state, sign == null);
     if (g.hud) g.hud.innerHTML = 'Casting…';
     g.over = false;
   },
@@ -88,13 +102,13 @@ export const fishGame: MinigameDef = {
     const hx = pose.x + dx * 0.5;
     const hz = pose.z + dz * 0.5;
     const hy = pose.y + 1.5;
-    let by = 0.04;
+    let by = state.surface + 0.55;
     if (state.phase === 'cast') {
       state.pt += dt / 0.55;
       const u = Math.min(1, state.pt);
       state.bob?.position.set(
         hx + (state.bx - hx) * u,
-        hy + (0.04 - hy) * u + Math.sin(u * Math.PI) * 1.2,
+        hy + (state.surface + 0.55 - hy) * u + Math.sin(u * Math.PI) * 1.2,
         hz + (state.bz - hz) * u,
       );
       if (u >= 1) wait(g);
@@ -108,7 +122,7 @@ export const fishGame: MinigameDef = {
         } else if (state.pt <= 0) {
           state.phase = 'bite';
           state.pt = 0.85;
-          if (g.hud) g.hud.innerHTML = '!';
+          if (g.hud) g.hud.innerHTML = '<b>Bite!</b> Press Space / F or tap';
         }
       } else if (state.phase === 'bite') {
         state.pt -= dt;
@@ -149,17 +163,21 @@ export const fishGame: MinigameDef = {
       }
       state.bob?.position.set(state.bx, by, state.bz);
     }
-    const line = state.line?.geometry.getAttribute('position');
-    if (line && state.bob) {
-      line.setXYZ(0, hx, hy, hz);
-      line.setXYZ(1, state.bob.position.x, state.bob.position.y + 0.2, state.bob.position.z);
-      line.needsUpdate = true;
+    if (state.line && state.bob) aimLine(state.line, hx, hy, hz, state.bob.position);
+    if (state.bite && state.bob) {
+      state.bite.visible = state.phase === 'bite';
+      state.bite.position.set(
+        state.bob.position.x,
+        state.bob.position.y + 0.7,
+        state.bob.position.z,
+      );
     }
   },
   end() {
     for (const prop of state.props) prop.parent?.remove(prop);
     state.bob?.parent?.remove(state.bob);
     state.line?.parent?.remove(state.line);
+    state.bite?.parent?.remove(state.bite);
     state.cv?.remove();
   },
   status() {
@@ -225,46 +243,120 @@ function paintBar(inside: boolean): void {
   ctx.fillRect(29, 3 + (height - 6) * (1 - state.pr), 8, (height - 6) * state.pr);
 }
 
-function buildPond(scene: Scene, fish: FishState): void {
-  const group = new Group();
-  const water = new Mesh(
-    new CircleGeometry(2.6, 20),
-    new MeshLambertMaterial({ color: '#4f8fb8', transparent: true, opacity: 0.9 }),
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.position.y = 0.04;
-  group.add(water);
-  for (let i = 0; i < 11; i++) {
-    const angle = (i / 11) * Math.PI * 2;
-    const rock = new Mesh(
-      new DodecahedronGeometry(0.28 + ((i * 17) % 10) / 50, 0),
-      new MeshLambertMaterial({ color: '#8a8578' }),
-    );
-    rock.position.set(Math.sin(angle) * 2.75, 0.08, Math.cos(angle) * 2.75);
-    rock.scale.y = 0.55;
-    group.add(rock);
+const up = new Vector3(0, 1, 0);
+const hand = new Vector3();
+const tip = new Vector3();
+const mid = new Vector3();
+const dir = new Vector3();
+
+function buildPond(scene: Scene, fish: FishState, pond: boolean): void {
+  if (pond) {
+    const group = new Group();
+    group.name = 'fishing-pond';
+    const waterMat = new MeshBasicMaterial({ color: '#2f8fd8' });
+    waterMat.polygonOffset = true;
+    waterMat.polygonOffsetFactor = -4;
+    waterMat.polygonOffsetUnits = -4;
+    const water = new Mesh(new CircleGeometry(4.4, 24), waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = 0.45;
+    group.add(water);
+    for (let i = 0; i < 11; i++) {
+      const angle = (i / 11) * Math.PI * 2;
+      const rock = new Mesh(
+        new DodecahedronGeometry(0.34 + ((i * 17) % 10) / 40, 0),
+        new MeshBasicMaterial({ color: '#8a8578' }),
+      );
+      rock.position.set(Math.sin(angle) * 3.55, 0.16, Math.cos(angle) * 3.55);
+      rock.scale.y = 0.55;
+      group.add(rock);
+    }
+    group.position.set(fish.bx, fish.surface, fish.bz);
+    keep(group);
+    scene.add(group);
+    fish.props.push(group);
   }
   const bob = new Group();
-  const red = new Mesh(
-    new SphereGeometry(0.12, 8, 6),
-    new MeshLambertMaterial({ color: '#e04040' }),
-  );
-  red.position.y = 0.06;
+  bob.name = 'fishing-float';
+  const red = new Mesh(new SphereGeometry(0.22, 8, 6), new MeshBasicMaterial({ color: '#e04040' }));
+  red.position.y = 0.1;
   const white = new Mesh(
-    new SphereGeometry(0.09, 8, 6),
-    new MeshLambertMaterial({ color: '#fffdf2' }),
+    new SphereGeometry(0.16, 8, 6),
+    new MeshBasicMaterial({ color: '#fffdf2' }),
   );
-  white.position.y = 0.17;
+  white.position.y = 0.28;
   bob.add(red, white);
-  const line = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#e8e0cc' }));
-  line.geometry.setAttribute('position', new Float32BufferAttribute(new Float32Array(6), 3));
+  bob.scale.setScalar(1.7);
+  bob.position.set(fish.bx, fish.surface + 0.55, fish.bz);
+  const line = new Mesh(
+    new CylinderGeometry(0.06, 0.06, 1, 5),
+    new MeshBasicMaterial({ color: '#f4efe2' }),
+  );
+  line.name = 'fishing-line';
   line.frustumCulled = false;
-  group.position.set(fish.bx, 0, fish.bz);
-  bob.position.set(0, 0.2, 0);
-  scene.add(group, bob, line);
-  fish.props.push(group);
+  const bite = biteMark();
+  keep(bob);
+  keep(line);
+  keep(bite);
+  scene.add(bob, line, bite);
   fish.bob = bob;
   fish.line = line;
+  fish.bite = bite;
+}
+
+function aimLine(line: Mesh, hx: number, hy: number, hz: number, bob: Vector3): void {
+  hand.set(hx, hy, hz);
+  tip.set(bob.x, bob.y + 0.28, bob.z);
+  mid.copy(hand).lerp(tip, 0.5);
+  dir.copy(tip).sub(hand);
+  const length = Math.max(0.2, dir.length());
+  dir.multiplyScalar(1 / length);
+  line.position.copy(mid);
+  line.scale.set(1, length, 1);
+  line.quaternion.setFromUnitVectors(up, dir);
+}
+
+function biteMark(): Sprite {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = '#fffdf2';
+    ctx.strokeStyle = '#2a1c1c';
+    ctx.lineWidth = 6;
+    ctx.font = 'bold 52px monospace';
+    ctx.textAlign = 'center';
+    ctx.strokeText('!', 32, 50);
+    ctx.fillText('!', 32, 50);
+  }
+  const map = pixelTexture(new CanvasTexture(canvas));
+  const sprite = new Sprite(new SpriteMaterial({ map, depthTest: false }));
+  sprite.scale.set(0.9, 0.9, 1);
+  sprite.visible = false;
+  sprite.name = 'fishing-bite';
+  return sprite;
+}
+
+function nearestFishSign(scene: Scene, x: number, z: number): Object3D | null {
+  let best: Object3D | null = null;
+  let bestD = 8;
+  scene.traverse((node) => {
+    if (node.userData.mg !== 'fish') return;
+    const dist = Math.hypot(node.position.x - x, node.position.z - z);
+    if (dist < bestD) {
+      best = node;
+      bestD = dist;
+    }
+  });
+  return best;
+}
+
+function keep(object: Object3D): void {
+  object.traverse((node) => {
+    node.userData.tbKeep = 1;
+    node.frustumCulled = false;
+  });
 }
 
 function clamp01(value: number): number {

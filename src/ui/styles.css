@@ -709,6 +709,14 @@ input:focus-visible {
   background: rgba(58, 42, 28, 0.28);
 }
 
+#mg.inst {
+  background: transparent;
+}
+
+#app:has(#mg.inst.open) .hud {
+  visibility: hidden;
+}
+
 #mgfade {
   position: absolute;
   inset: 0;
@@ -855,14 +863,16 @@ input:focus-visible {
   opacity: 0.8;
 }
 
-#mg.demo .mg-side {
+#mg .mg-side {
   position: absolute;
   left: 62%;
-  top: 50%;
-  z-index: 2;
+  top: 46%;
+  z-index: 3;
   transform: translateY(-50%);
   padding: 6px;
   background: rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 #mg.demo .mg-side canvas,
@@ -884,11 +894,11 @@ input:focus-visible {
 
 #mg.demo.world {
   background: transparent;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 #mg.demo.world .mg-frame {
-  top: 0.6rem;
+  top: 7.1rem;
   bottom: auto;
   left: 50%;
   width: min(36rem, calc(100% - 2rem));
@@ -944,7 +954,7 @@ input:focus-visible {
 
 #mg.inst .mg-stage {
   border: 0;
-  background: #000;
+  background: transparent;
 }
 
 #mg.inst .mg-bar {

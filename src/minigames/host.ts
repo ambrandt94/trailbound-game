@@ -1,10 +1,11 @@
+import { PerspectiveCamera, Scene, type Camera } from 'three';
 import {
   wagonPlayResult,
   type MinigameResult,
   type PartyState,
   type ResolvedMinigame,
 } from '../core/sim/party';
-import { createStage, disposeStage, type Stage } from './helpers/stage';
+import { createStage, disposeObject, disposeStage, type Stage } from './helpers/stage';
 import { minigameHelpers } from './helpers/meter';
 import type { SimAvatar } from './helpers/runtime';
 import { PointerTracker, readMinigameInput, type MinigameActionSource } from './input-bridge';
@@ -23,7 +24,12 @@ export interface MinigameHostOptions {
   apply: (result: MinigameResult) => ResolvedMinigame;
   /** Persist after the world has applied the result. */
   onApplied?: () => void;
-  world?: () => { scene: import('three').Scene; pose: WorldPose } | null;
+  world?: () => {
+    scene: Scene;
+    pose: WorldPose;
+    /** Draw an instance with the town renderer so the live avatar stays on one context. */
+    draw?: (scene: Scene, camera: Camera) => void;
+  } | null;
   camYaw?: () => number;
   /** Pose the live player avatar inside an instance, if one is built. */
   syncAvatar?: (avatar: SimAvatar, dt: number) => void;
@@ -42,6 +48,12 @@ export class MinigameHost {
   private quitButton = false;
   private wantsExitFlag = false;
   private gfx: Stage | null = null;
+  /** Instance drawn by the town renderer. Null when the game uses its own canvas. */
+  private instOwn: {
+    scene: Scene;
+    camera: PerspectiveCamera;
+    draw: (scene: Scene, camera: Camera) => void;
+  } | null = null;
   private shell: HTMLElement | null = null;
   private frame: HTMLElement | null = null;
   private stageEl: HTMLElement | null = null;
@@ -140,8 +152,8 @@ export class MinigameHost {
     this.ensureGraphics();
     this.layout();
     this.context.supplies = { ...this.options.readParty() };
-    this.context.scene = this.gfx?.scene ?? null;
-    this.context.camera = this.gfx?.camera ?? null;
+    this.context.scene = this.instOwn?.scene ?? this.gfx?.scene ?? null;
+    this.context.camera = this.instOwn?.camera ?? this.gfx?.camera ?? null;
     this.context.canvas = this.usesWebgl(def) ? this.canvas3d : this.canvas2d;
     this.context.gfx = this.canvas2d?.getContext('2d') ?? null;
     this.context.hud = this.hudEl;
@@ -201,8 +213,13 @@ export class MinigameHost {
   }
 
   render3d(): void {
-    if (!this.gfx || !this.def || (this.phase !== 'play' && this.phase !== 'card')) return;
+    if (!this.def || (this.phase !== 'play' && this.phase !== 'card')) return;
     this.layout();
+    if (this.instOwn) {
+      this.instOwn.draw(this.instOwn.scene, this.instOwn.camera);
+      return;
+    }
+    if (!this.gfx) return;
     this.gfx.renderer.render(this.gfx.scene, this.gfx.camera);
   }
 
@@ -287,7 +304,7 @@ export class MinigameHost {
       shell.id = 'mg';
       shell.hidden = true;
       shell.innerHTML =
-        '<div id="mgfade"></div><div class="mg-frame"><header class="mg-bar"><strong class="mg-name"></strong><button type="button" class="mg-quit">✕ Quit</button></header><div class="mg-hud"></div><div class="mg-stage"><canvas class="mg-2d"></canvas><canvas class="mg-3d"></canvas><div class="mg-side"></div></div><p class="mg-foot"></p><div class="mg-card" hidden><p class="mg-message"></p><p class="mg-lines"></p><p class="mg-close">Space / F / tap to continue</p></div></div>';
+        '<div id="mgfade"></div><div class="mg-side"></div><div class="mg-frame"><header class="mg-bar"><strong class="mg-name"></strong><button type="button" class="mg-quit">✕ Quit</button></header><div class="mg-hud"></div><div class="mg-stage"><canvas class="mg-2d"></canvas><canvas class="mg-3d"></canvas></div><p class="mg-foot"></p><div class="mg-card" hidden><p class="mg-message"></p><p class="mg-lines"></p><p class="mg-close">Space / F / tap to continue</p></div></div>';
       this.options.root.append(shell);
       this.shell = shell;
       this.fadeEl = shell.querySelector('#mgfade');
@@ -322,26 +339,43 @@ export class MinigameHost {
       this.frame.style.setProperty('--mg-h', `${def.h}px`);
     else this.frame.style.removeProperty('--mg-h');
     this.setCover(def.type === 'inst' ? 0 : 0);
-    if (this.stageEl) this.pointer.attach(this.stageEl);
+    const pointerTarget = def.type === 'world' ? this.shell : this.stageEl;
+    if (pointerTarget) this.pointer.attach(pointerTarget);
     if (this.canvas3d) this.canvas3d.hidden = !this.usesWebgl(def);
     if (this.canvas2d) this.canvas2d.hidden = this.usesWebgl(def);
   }
 
   private ensureGraphics(): void {
     const def = this.def;
-    if (!def || !this.usesWebgl(def) || this.gfx || !this.canvas3d) return;
+    if (!def || !this.usesWebgl(def) || this.gfx || this.instOwn) return;
+    if (def.type === 'inst') {
+      const draw = this.options.world?.()?.draw;
+      if (draw) {
+        const scene = new Scene();
+        const camera = new PerspectiveCamera(35, 1, 0.5, 300);
+        this.instOwn = { scene, camera, draw };
+        if (this.canvas3d) this.canvas3d.hidden = true;
+        return;
+      }
+    }
+    if (!this.canvas3d) return;
     const background = def.type === 'inst' ? '#e7c89a' : '#f4e2c4';
     try {
-      this.gfx = createStage(this.canvas3d, background);
+      this.gfx = createStage(this.canvas3d, background, def.type === 'inst' ? 'inst' : 'pop');
     } catch (error) {
       console.warn('minigame webgl', error);
     }
   }
 
   private disposeGraphics(): void {
-    if (!this.gfx) return;
-    disposeStage(this.gfx);
-    this.gfx = null;
+    if (this.instOwn) {
+      disposeObject(this.instOwn.scene);
+      this.instOwn = null;
+    }
+    if (this.gfx) {
+      disposeStage(this.gfx);
+      this.gfx = null;
+    }
     this.context.scene = null;
     this.context.camera = null;
   }
@@ -377,6 +411,10 @@ export class MinigameHost {
         if (this.canvas2d.height !== height) this.canvas2d.height = height;
         this.context.gfx = this.canvas2d.getContext('2d');
       }
+    }
+    if (this.instOwn) {
+      this.instOwn.camera.aspect = width / Math.max(1, height);
+      this.instOwn.camera.updateProjectionMatrix();
     }
     this.gfx?.resize(width, height);
   }

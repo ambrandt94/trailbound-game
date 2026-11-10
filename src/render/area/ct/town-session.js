@@ -1259,7 +1259,24 @@ export async function createTownSession(canvas, hooks) {
     },
     worldView() {
       const p = PLS[0];
-      return { scene, pose: { x: p.x, y: p.y, z: p.z, yaw: p.yaw } };
+      return {
+        scene,
+        pose: { x: p.x, y: p.y, z: p.z, yaw: p.yaw },
+        draw(nextScene, nextCamera) {
+          const w = Math.max(1, renderer.domElement.width);
+          const h = Math.max(1, renderer.domElement.height);
+          nextCamera.aspect = w / h;
+          nextCamera.updateProjectionMatrix();
+          const target = renderer.getRenderTarget();
+          const clear = renderer.autoClear;
+          renderer.setRenderTarget(null);
+          renderer.autoClear = true;
+          aimForgeSun(nextCamera);
+          renderer.render(nextScene, nextCamera);
+          renderer.setRenderTarget(target);
+          renderer.autoClear = clear;
+        },
+      };
     },
     prompt() {
       const p = PLS[0];
@@ -1330,6 +1347,8 @@ export async function createTownSession(canvas, hooks) {
       const y = groundY(place.x, place.z);
       const group = new THREE.Group();
       group.name = 'mg-sign';
+      group.userData.mg = place.id;
+      group.userData.tbKeep = 1;
       group.position.set(place.x, y, place.z);
       const wood = new THREE.MeshLambertMaterial({ color: 0x8d5a32 });
       const boardMat = new THREE.MeshLambertMaterial({ color: 0xf4e2c4 });

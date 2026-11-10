@@ -7,17 +7,7 @@ import {
   OctahedronGeometry,
   PointLight,
 } from 'three';
-import {
-  clamp,
-  follow,
-  jump,
-  lambert,
-  lit,
-  makeSim,
-  mountRig,
-  rnd2,
-  walk,
-} from '../helpers/runtime';
+import { clamp, follow, jump, lambert, lit, makeSim, mountRig, walk } from '../helpers/runtime';
 import type { MinigameDef } from '../types';
 
 export const CAVE_CLEAR_COINS = 4;
@@ -60,7 +50,7 @@ export const caveGame: MinigameDef = {
     camYaw = g.camYaw;
     const scene = g.scene;
     if (!scene) return;
-    lit(scene, '#120e14', 6, 22, 0.6);
+    lit(scene, '#1a1420', 14, 46, 0.9);
     const floorMat = lambert('#5a5260', 0.35, 100);
     floorMat.map!.repeat.set(14, 14);
     const floor = new Mesh(new CircleGeometry(13.5, 28), floorMat);
@@ -88,32 +78,54 @@ export const caveGame: MinigameDef = {
       scene.add(pillar);
       columns.push({ x, z, r: radius });
     }
-    for (let i = 0; i < 40 && crystals.length < 6; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = rnd2(2.5, 11.5);
-      const x = Math.sin(angle) * dist;
-      const z = Math.cos(angle) * dist;
-      if (columns.some((column) => Math.hypot(column.x - x, column.z - z) < column.r + 1)) continue;
-      if (crystals.some((crystal) => Math.hypot(crystal.x - x, crystal.z - z) < 3)) continue;
-      if (Math.hypot(x, z - 5) < 3) continue;
+    const spots = crystalSpots(camYaw);
+    for (const [x, z] of spots) {
+      if (crystals.length >= 6) break;
+      if (columns.some((column) => Math.hypot(column.x - x, column.z - z) < column.r + 0.7))
+        continue;
+      if (crystals.some((crystal) => Math.hypot(crystal.x - x, crystal.z - z) < 1.4)) continue;
       const pink = crystals.length % 2 === 1;
       const mesh = new Mesh(
-        new OctahedronGeometry(0.3, 0),
+        new OctahedronGeometry(0.42, 0),
         new MeshBasicMaterial({ color: pink ? '#ff9ae6' : '#7fe6ff' }),
       );
+      mesh.name = 'crystal';
       mesh.scale.y = 1.7;
-      mesh.position.set(x, 0.7, z);
-      const light = new PointLight(pink ? '#ff9ae6' : '#7fe6ff', 0.9 * 12, 3.5);
-      light.position.set(x, 0.8, z);
+      mesh.position.set(x, 0.85, z);
+      const light = new PointLight(pink ? '#ff9ae6' : '#7fe6ff', 7, 6);
+      light.decay = 1;
+      light.position.set(x, 1, z);
       scene.add(mesh, light);
       crystals.push({ x, z, mesh, light, got: false });
     }
-    torch = new PointLight('#ffcc88', 1.8 * 12, 12);
+    if (crystals.length < 6) {
+      for (const [x, z] of spots) {
+        if (crystals.length >= 6) break;
+        if (crystals.some((crystal) => Math.hypot(crystal.x - x, crystal.z - z) < 1.2)) continue;
+        if (Math.hypot(x, z - 5) < 1.4) continue;
+        const pink = crystals.length % 2 === 1;
+        const mesh = new Mesh(
+          new OctahedronGeometry(0.42, 0),
+          new MeshBasicMaterial({ color: pink ? '#ff9ae6' : '#7fe6ff' }),
+        );
+        mesh.name = 'crystal';
+        mesh.scale.y = 1.7;
+        mesh.position.set(x, 0.85, z);
+        const light = new PointLight(pink ? '#ff9ae6' : '#7fe6ff', 7, 6);
+        light.decay = 1;
+        light.position.set(x, 1, z);
+        scene.add(mesh, light);
+        crystals.push({ x, z, mesh, light, got: false });
+      }
+    }
+    torch = new PointLight('#ffcc88', 18, 14);
+    torch.decay = 1;
     scene.add(torch);
     avatar = makeSim(0, 5);
     mountRig(scene, avatar);
     g.A = avatar;
     total = crystals.length;
+    if (g.camera) follow(g.camera, avatar, 13, 55, camYaw);
   },
   update(g, dt) {
     if (!g.camera || !g.scene) return;
@@ -143,19 +155,19 @@ export const caveGame: MinigameDef = {
       if (crystal.got) {
         crystal.mesh.position.y += dt * 4;
         crystal.mesh.scale.multiplyScalar(1 - dt * 3);
-      } else crystal.mesh.position.y = 0.7 + Math.sin(g.t * 2 + crystal.x) * 0.12;
+      } else crystal.mesh.position.y = 0.85 + Math.sin(g.t * 2 + crystal.x) * 0.12;
     }
     const k = clamp(left / 45, 0, 1);
     if (torch) {
+      torch.decay = 1;
       torch.distance = 5 + 9 * k;
-      torch.intensity = (0.8 + k) * 12 * (1 + Math.sin(g.t * 23) * 0.05 + Math.sin(g.t * 7) * 0.05);
-      torch.position.set(avatar.x, avatar.y + 2, avatar.z);
+      torch.intensity = (0.8 + k) * 16 * (1 + Math.sin(g.t * 23) * 0.05 + Math.sin(g.t * 7) * 0.05);
+      torch.position.set(avatar.x, avatar.y + 1.6, avatar.z);
     }
     if (g.hud) {
       g.hud.innerHTML = `crystals ${found}/${total} &nbsp; torch ${Math.ceil(Math.max(0, left))}s<br><small>walk into the crystals (drag or stick) · Space / F / tap to jump</small>`;
     }
     follow(g.camera, avatar, 13, 55, camYaw);
-    g.syncAvatar?.(avatar);
   },
   status() {
     return {
@@ -166,3 +178,34 @@ export const caveGame: MinigameDef = {
     };
   },
 };
+
+/** Six crystals in front of the opening camera, inside the cave disc. */
+function crystalSpots(camYaw: number): Array<[number, number]> {
+  const th = (camYaw * Math.PI) / 180;
+  const fx = -Math.sin(th);
+  const fz = -Math.cos(th);
+  const rx = -fz;
+  const rz = fx;
+  const layout: Array<[number, number]> = [
+    [2.1, -1.5],
+    [2.4, 1.4],
+    [3.5, -0.2],
+    [3.8, 2.2],
+    [4.8, -1.8],
+    [5.2, 0.5],
+    [3.2, -2.4],
+    [4.4, 0.1],
+    [5.8, -0.6],
+    [2.8, 2.5],
+  ];
+  return layout.map(([forward, side]) => {
+    let x = fx * forward + rx * side;
+    let z = 5 + fz * forward + rz * side;
+    const reach = Math.hypot(x, z);
+    if (reach > 11) {
+      x *= 11 / reach;
+      z *= 11 / reach;
+    }
+    return [x, z];
+  });
+}

@@ -14,6 +14,7 @@ export interface TownSession {
   worldView(): {
     scene: import('three').Scene;
     pose: { x: number; y: number; z: number; yaw: number };
+    draw(scene: import('three').Scene, camera: import('three').Camera): void;
   };
   indoors(): boolean;
   bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null;

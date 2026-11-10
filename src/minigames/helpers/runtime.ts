@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   CanvasTexture,
+  CircleGeometry,
   Color,
   ConeGeometry,
   CylinderGeometry,
@@ -310,13 +311,31 @@ export function mountRig(scene: Scene, avatar: SimAvatar): InstanceRig {
   }
   const head = new Group();
   body.add(head);
-  add(new BoxGeometry(0.62, 0.62, 0.62), skin, 0, 0, 0, head);
+  const skull = new Mesh(new BoxGeometry(0.62, 0.62, 0.62), [
+    skin,
+    skin,
+    skin,
+    skin,
+    faceMaterial(),
+    skin,
+  ]);
+  skull.castShadow = true;
+  head.add(skull);
   add(new BoxGeometry(0.7, 0.26, 0.7), hair, 0, 0.25, 0, head);
   add(new BoxGeometry(0.7, 0.5, 0.14), hair, 0, 0.02, -0.3, head);
+  for (const side of [-1, 1])
+    add(new BoxGeometry(0.08, 0.4, 0.3), hair, side * 0.35, -0.02, -0.02, head);
+  for (const x of [-0.2, 0, 0.2]) {
+    const tuft = add(new ConeGeometry(0.12, 0.3, 4), hair, x, 0.3, 0.34, head);
+    tuft.rotation.x = 2.2;
+  }
+  const crest = add(new ConeGeometry(0.14, 0.34, 4), hair, 0, 0.5, -0.05, head);
+  crest.rotation.x = 0;
   const shadow = new Mesh(
-    new CylinderGeometry(0.4, 0.4, 0.02, 14),
+    new CircleGeometry(0.4, 14),
     new MeshBasicMaterial({ color: 0x3d5a48, transparent: true, opacity: 0.16, depthWrite: false }),
   );
+  shadow.rotation.x = -Math.PI / 2;
   scene.add(shadow);
   const rig: InstanceRig = {
     root,
@@ -335,24 +354,48 @@ export function mountRig(scene: Scene, avatar: SimAvatar): InstanceRig {
   return rig;
 }
 
+function nowSec(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    return performance.now() / 1000;
+  return 0;
+}
+
+/** Controller `animateOne` for idle, run, jump, and fall. The head sits on the neck, not the feet. */
 function poseRig(avatar: SimAvatar): void {
   const rig = avatar.rig;
   if (!rig) return;
   const speed = Math.min(1.3, Math.hypot(avatar.vx, avatar.vz) / WALK.maxSpeed);
   const target = { ll: 0, lr: 0, al: 0, ar: 0, lean: 0, cloak: 0.15 };
+  let bob = 0;
+  const clock = nowSec();
   if (avatar.st === 'run') {
     const swing = Math.sin(avatar.ph);
     target.ll = swing * 0.95;
     target.lr = -target.ll;
     target.al = -swing * 0.8;
     target.ar = -target.al;
-    target.lean = 0.3 * speed;
+    target.lean = 0.15 * speed;
     target.cloak = 0.25 + speed * 0.5;
-  } else if (avatar.st === 'jump' || avatar.st === 'fall') {
-    target.al = -2.4;
-    target.ar = -2.4;
-    target.ll = -0.5;
-    target.cloak = 0.7;
+    bob = Math.abs(Math.cos(avatar.ph)) * 0.07;
+  } else if (avatar.st === 'jump') {
+    target.ll = -0.7;
+    target.lr = 0.3;
+    target.al = -2.6;
+    target.ar = -2.6;
+    target.lean = 0.06;
+    target.cloak = 0.6;
+  } else if (avatar.st === 'fall') {
+    target.ll = -0.3;
+    target.lr = 0.2;
+    target.al = -2.2;
+    target.ar = -2.2;
+    target.cloak = 0.9;
+  } else {
+    const breathe = Math.sin(clock * 2.4);
+    bob = breathe * 0.012;
+    target.al = 0.06 + breathe * 0.04;
+    target.ar = target.al;
+    target.cloak = 0.1 + breathe * 0.04;
   }
   const cur = rig.cur;
   (Object.keys(target) as Array<keyof typeof target>).forEach((key) => {
@@ -362,13 +405,43 @@ function poseRig(avatar: SimAvatar): void {
   rig.legR.rotation.x = cur.lr;
   rig.armL.rotation.x = cur.al;
   rig.armR.rotation.x = cur.ar;
+  rig.armL.rotation.z = avatar.st === 'fall' ? -0.7 : -0.06;
+  rig.armR.rotation.z = avatar.st === 'fall' ? 0.7 : 0.06;
   rig.cloak.rotation.x = cur.cloak;
   rig.body.rotation.x = cur.lean;
+  rig.body.position.y = -0.6 + bob;
+  rig.head.position.y = 1.15;
+  rig.head.rotation.x = -cur.lean * 0.6;
   rig.root.position.set(avatar.x, avatar.y, avatar.z);
   rig.root.rotation.y = avatar.yaw;
+  rig.root.scale.setScalar(1);
   rig.root.visible = !(avatar.inv > 0 && Math.sin(avatar.inv * 30) > 0);
   rig.shadow.position.set(avatar.x, 0.05, avatar.z);
   rig.shadow.scale.setScalar(clamp(1 - avatar.y * 0.2, 0.3, 1));
+}
+
+function faceMaterial(): MeshLambertMaterial {
+  const size = 16;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = PALETTE.skin;
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = PALETTE.hair;
+    ctx.fillRect(3, 6, 4, 1);
+    ctx.fillRect(9, 6, 4, 1);
+    ctx.fillStyle = '#2a1c1c';
+    ctx.fillRect(4, 8, 2, 2);
+    ctx.fillRect(10, 8, 2, 2);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(5, 8, 1, 1);
+    ctx.fillRect(11, 8, 1, 1);
+    ctx.fillStyle = '#a0524a';
+    ctx.fillRect(7, 12, 2, 1);
+  }
+  return new MeshLambertMaterial({ map: pixelTexture(new CanvasTexture(canvas)) });
 }
 
 export function box(w: number, h: number, d: number): BoxGeometry {

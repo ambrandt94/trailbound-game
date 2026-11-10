@@ -433,19 +433,28 @@ export class Game implements GameHost {
 
   private syncInstanceAvatar(avatar: SimAvatar, dt: number): void {
     const body = getPlayerBody();
-    const view = this.areaScene?.worldView();
-    if (!body || !view) return;
+    const rig = avatar.rig?.root ?? null;
+    const scene = rig?.parent ?? null;
+    if (!body || body.source !== 'forge' || !rig || !scene) return;
+    let meshes = 0;
+    body.object3D.traverse((node) => {
+      if ((node as { isMesh?: boolean }).isMesh) meshes += 1;
+    });
+    if (meshes < 1) return;
     if (!this.avatarRestore) {
       const parent = body.object3D.parent;
-      view.scene.add(body.object3D);
-      if (avatar.rig) avatar.rig.root.visible = false;
+      scene.add(body.object3D);
+      rig.visible = false;
       this.avatarRestore = () => {
+        rig.visible = true;
         if (parent) parent.add(body.object3D);
-        body.object3D.visible = true;
+        else body.object3D.removeFromParent();
       };
     }
+    body.object3D.visible = true;
     body.object3D.position.set(avatar.x, avatar.y, avatar.z);
     body.object3D.rotation.y = avatar.yaw;
+    body.object3D.scale.setScalar(1);
     const speed = Math.hypot(avatar.vx, avatar.vz);
     body.present({
       clip: speed > 0.4 ? 'Walk' : 'Idle',

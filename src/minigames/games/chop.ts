@@ -52,12 +52,12 @@ export const chopGame: MinigameDef = {
     state = blank();
     state.zc = rnd2(0.25, 0.75);
     const pose = g.pose ?? { x: 0, y: 0, z: 0, yaw: 0 };
-    const x = pose.x + Math.sin(pose.yaw) * 1.6;
-    const z = pose.z + Math.cos(pose.yaw) * 1.6;
-    if (g.worldScene && typeof document !== 'undefined') buildBlock(g.worldScene, x, z);
+    const x = pose.x + Math.sin(pose.yaw) * 2.4;
+    const z = pose.z + Math.cos(pose.yaw) * 2.4;
+    if (g.worldScene && typeof document !== 'undefined') buildBlock(g.worldScene, x, z, pose.y);
     if (g.hud) {
       g.hud.innerHTML =
-        'Press <b>Space / F</b> when the needle is in the green · 3 clean hits split the log';
+        '<span class="mg-line">Press <b>Space / F</b> when the needle is in the green · 3 clean hits split the log</span>';
       if (typeof document !== 'undefined') {
         const canvas = document.createElement('canvas');
         canvas.width = 120;
@@ -112,13 +112,16 @@ function strike(g: MinigameContext): void {
     state.n += 1;
     if (state.log) {
       state.log.scale.y = 1 - state.n / 3.4;
-      state.log.position.y = 0.5 + 0.35 * state.log.scale.y;
+      const ground = state.log.userData.groundY;
+      const y = typeof ground === 'number' ? ground : 0;
+      state.log.position.y = y + 0.55 + 0.45 * state.log.scale.y;
     }
     const origin = state.log?.position ?? { x: 0, y: 0.9, z: 0 };
     for (let i = 0; i < 5; i++) {
       if (!state.log?.parent) break;
       const chip = new Mesh(new CylinderGeometry(0.06, 0.06, 0.08, 4), state.log.material);
-      chip.position.set(origin.x, 0.9, origin.z);
+      chip.position.set(origin.x, origin.y, origin.z);
+      keep(chip);
       state.log.parent.add(chip);
       state.bits.push({ mesh: chip, v: [rnd2(-2, 2), rnd2(2.5, 4), rnd2(-2, 2)] });
     }
@@ -131,7 +134,8 @@ function strike(g: MinigameContext): void {
     }
   } else {
     state.miss += 1;
-    if (g.hud) g.hud.innerHTML = `Miss! (${state.miss}/3)`;
+    const line = g.hud?.querySelector('.mg-line');
+    if (line) line.innerHTML = `Miss! (${state.miss}/3)`;
     if (state.miss >= 3) {
       state.over = true;
       g.done({ ok: false, message: 'The log wins this time.', coins: 0 });
@@ -154,19 +158,30 @@ function paint(): void {
   ctx.fillRect(1 + 116 * state.u, 0, 3, 14);
 }
 
-function buildBlock(scene: Scene, x: number, z: number): void {
+function buildBlock(scene: Scene, x: number, z: number, ground: number): void {
   const stump = new Mesh(
-    new CylinderGeometry(0.45, 0.5, 0.5, 8),
+    new CylinderGeometry(0.55, 0.62, 0.7, 8),
     new MeshLambertMaterial({ color: '#8a5a2b' }),
   );
-  stump.position.set(x, 0.25, z);
+  stump.position.set(x, ground + 0.35, z);
   const log = new Mesh(
-    new CylinderGeometry(0.28, 0.28, 0.7, 8),
-    new MeshLambertMaterial({ color: '#b08850' }),
+    new CylinderGeometry(0.36, 0.36, 1.15, 8),
+    new MeshLambertMaterial({ color: '#c49858' }),
   );
   log.rotation.z = Math.PI / 2;
-  log.position.set(x, 0.85, z);
+  log.position.set(x, ground + 1.05, z);
+  log.name = 'chop-log';
+  log.userData.groundY = ground;
+  keep(stump);
+  keep(log);
   scene.add(stump, log);
   state.log = log;
   state.props.push(stump, log);
+}
+
+function keep(object: Object3D): void {
+  object.traverse((node) => {
+    node.userData.tbKeep = 1;
+    node.frustumCulled = false;
+  });
 }

@@ -60,12 +60,10 @@ test('three clean chops split the log for 3 coins, and three misses do not', () 
   expect(felled.result?.coins).toBe(CHOP_COINS);
 
   const missed = harness(chopGame);
-  let swings = 0;
-  for (let i = 0; i < 400 && !missed.result; i++) {
+  for (let i = 0; i < 2000 && !missed.result; i++) {
     const hot = chopGame.status?.(missed.context)?.hot === true;
-    const act = !hot && swings < 3 && i % 10 === 0;
-    if (act) swings += 1;
-    missed.step(0.05, { act });
+    if (hot) missed.step(0.03, {});
+    else missed.step(0.0001, { act: true });
   }
   expect(missed.result?.ok).toBe(false);
   expect(missed.result?.coins).toBe(0);
