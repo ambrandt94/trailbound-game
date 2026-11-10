@@ -147,6 +147,149 @@ function readUiScale(): number {
   return raw === 2 || raw === 3 ? raw : 1;
 }
 
+const PILL_SLICE = 6;
+let pillSprite: HTMLImageElement | null = null;
+let pillRequested = false;
+let softballRequested = false;
+
+/** Pill plate from the menu skin. Null until the image has decoded. */
+function menuPill(): HTMLImageElement | null {
+  if (typeof Image === 'undefined') return null;
+  if (!pillRequested) {
+    pillRequested = true;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = new URL('../../ui/theme/sprites/pill.png', import.meta.url).href;
+    pillSprite = img;
+  }
+  return pillSprite && pillSprite.complete && pillSprite.naturalWidth > 0 ? pillSprite : null;
+}
+
+function ensureSoftball(): void {
+  if (softballRequested || typeof document === 'undefined') return;
+  softballRequested = true;
+  void document.fonts?.load('32px "Softball Gold"');
+}
+
+function drawNineSlice(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  slice: number,
+  border: number,
+): void {
+  const sw = img.width;
+  const sh = img.height;
+  const bw = Math.min(border, w / 2 - 1, h / 2 - 1);
+  if (bw < 1) return;
+  const sx = [0, slice, sw - slice];
+  const sy = [0, slice, sh - slice];
+  const sW = [slice, sw - slice * 2, slice];
+  const sH = [slice, sh - slice * 2, slice];
+  const dx = [x, x + bw, x + w - bw];
+  const dy = [y, y + bw, y + h - bw];
+  const dW = [bw, w - bw * 2, bw];
+  const dH = [bw, h - bw * 2, bw];
+  ctx.imageSmoothingEnabled = false;
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      const dw = dW[col] ?? 0;
+      const dh = dH[row] ?? 0;
+      if (dw < 1 || dh < 1) continue;
+      ctx.drawImage(
+        img,
+        sx[col] ?? 0,
+        sy[row] ?? 0,
+        sW[col] ?? 0,
+        sH[row] ?? 0,
+        dx[col] ?? 0,
+        dy[row] ?? 0,
+        dw,
+        dh,
+      );
+    }
+  }
+}
+
+/** Cream plate with a leather stitch, used until the pill sprite is ready. */
+function drawPillFallback(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  border: number,
+): void {
+  ctx.fillStyle = '#7a3a26';
+  ctx.fillRect(x, y, w, h);
+  const inset = Math.max(2, border * 0.55);
+  ctx.fillStyle = '#fff1d2';
+  ctx.fillRect(x + inset, y + inset, w - inset * 2, h - inset * 2);
+  ctx.strokeStyle = '#3a2418';
+  ctx.lineWidth = Math.max(1, border * 0.28);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+}
+
+let hudCacheAt = -1;
+let hudCache: TagBox[] = [];
+
+/** Menu panels in the same pixel space as a nametag (canvas bitmap pixels). */
+function hudObstacles(canvas: HTMLCanvasElement): TagBox[] {
+  if (typeof document === 'undefined') return [];
+  const now = typeof performance === 'undefined' ? 0 : Math.floor(performance.now());
+  if (now === hudCacheAt) return hudCache;
+  hudCacheAt = now;
+  const canvasRect = canvas.getBoundingClientRect();
+  if (canvasRect.width < 1 || canvasRect.height < 1) {
+    hudCache = [];
+    return hudCache;
+  }
+  const scaleX = canvas.width / canvasRect.width;
+  const scaleY = canvas.height / canvasRect.height;
+  const view = canvas.ownerDocument.defaultView;
+  const boxes: TagBox[] = [];
+  const selectors = [
+    '#ui .hud-bar',
+    '#ui .place',
+    '#ui .hint',
+    '#ui .flash',
+    '#ui .notice',
+    '#ui .wagon-menu',
+    '#mg .mg-frame',
+  ];
+  for (const selector of selectors) {
+    for (const node of canvas.ownerDocument.querySelectorAll(selector)) {
+      if (!(node instanceof HTMLElement) || !view) continue;
+      let shown = true;
+      for (let el: HTMLElement | null = node; el; el = el.parentElement) {
+        if (el.hidden) {
+          shown = false;
+          break;
+        }
+        const style = view.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') {
+          shown = false;
+          break;
+        }
+      }
+      if (!shown) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) continue;
+      boxes.push({
+        x: (rect.left - canvasRect.left) * scaleX,
+        y: (rect.top - canvasRect.top) * scaleY,
+        w: rect.width * scaleX,
+        h: rect.height * scaleY,
+      });
+    }
+  }
+  hudCache = boxes;
+  return boxes;
+}
+
 function applyPoint(tr: DOMMatrix, x: number, y: number): { x: number; y: number } {
   return { x: tr.a * x + tr.c * y + tr.e, y: tr.b * x + tr.d * y + tr.f };
 }
@@ -272,8 +415,11 @@ function drawTagLabel(
   const dpr = Math.max(0.5, Math.hypot(tr.a, tr.b) / Math.max(0.001, scale));
   const screenPx = opts?.screenPx ?? NAMETAG_BASE_PX * (kind === 'speech' ? 3 : 2);
   const uiScale = readUiScale();
-  const cssPx = Math.max(16, Math.round((screenPx * uiScale) / 16) * 16);
+  // Place names stay on the 32px Softball Gold grid. Speech can be a larger multiple.
+  const cssPx =
+    kind === 'name' ? 32 * uiScale : Math.max(16, Math.round((screenPx * uiScale) / 16) * 16);
   const fontPx = cssPx * dpr;
+  ensureSoftball();
   const origin = applyPoint(tr, x, y);
   const uy = Math.hypot(tr.c, tr.d) || dpr * scale;
   ctx.save();
@@ -287,11 +433,12 @@ function drawTagLabel(
   while (ctx.measureText(label).width > maxW && label.length > 5) label = label.slice(0, -1);
   if (label !== raw) label = `${label.slice(0, -1)}...`;
   const tw = ctx.measureText(label).width;
-  const padX = 12 * dpr * uiScale;
-  const padY = 8 * dpr * uiScale;
+  const border = 6 * dpr * uiScale;
+  const padX = (kind === 'name' ? 10 : 12) * dpr * uiScale;
+  const padY = (kind === 'name' ? 4 : 8) * dpr * uiScale;
   const tail = kind === 'speech' ? 5.5 * dpr : 0;
-  const boxW = tw + padX * 2;
-  const boxH = fontPx + padY * 2;
+  const boxW = tw + (kind === 'name' ? border * 2 : 0) + padX * 2;
+  const boxH = fontPx + (kind === 'name' ? border * 2 : 0) + padY * 2;
   const gap = (kind === 'speech' ? 5.5 : 3.2) * dpr;
   const clearA = (opts?.clearAbove ?? 0) * uy;
   const clearB = (opts?.clearBelow ?? 0) * uy;
@@ -318,37 +465,75 @@ function drawTagLabel(
         ];
   const avoid = (opts?.avoid ?? []).map((b) => applyBox(tr, b));
   const taken = opts?.taken ?? [];
+  const huds = hudObstacles(ctx.canvas);
+  const hudGap = 8 * dpr * uiScale;
+  const viewW = ctx.canvas.width;
+  const viewH = ctx.canvas.height;
+  const onScreen = (box: TagBox) =>
+    box.x >= 2 && box.y >= 2 && box.x + box.w <= viewW - 2 && box.y + box.h <= viewH - 2;
+  const hitsHud = (box: TagBox) => huds.some((panel) => boxesOverlap(box, panel, hudGap));
+  let topBand = hudGap;
+  for (const panel of huds) {
+    if (panel.y < viewH * 0.45) topBand = Math.max(topBand, panel.y + panel.h + hudGap);
+  }
+  const sideY = Math.max(origin.y, topBand + boxH / 2);
+  const aroundHud: Array<{ cx: number; cy: number; flip: boolean }> = [
+    { cx: origin.x, cy: topBand + boxH / 2, flip: false },
+    { cx: origin.x + boxW, cy: sideY, flip: false },
+    { cx: origin.x - boxW, cy: sideY, flip: false },
+  ];
+  for (const panel of huds) {
+    aroundHud.push(
+      { cx: origin.x, cy: panel.y + panel.h + hudGap + boxH / 2, flip: false },
+      { cx: origin.x, cy: panel.y - hudGap - boxH / 2, flip: true },
+      { cx: panel.x + panel.w + hudGap + boxW / 2, cy: sideY, flip: false },
+      { cx: panel.x - hudGap - boxW / 2, cy: sideY, flip: false },
+    );
+  }
   let best: TagBox | null = null;
   let flip = false;
-  for (const c of candidates) {
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const c of [...candidates, ...aroundHud]) {
     const box: TagBox = {
       x: c.cx - boxW / 2,
       y: c.cy - boxH / 2,
       w: boxW,
       h: boxH + (kind === 'speech' ? tail : 0),
     };
+    const plate: TagBox = { x: box.x, y: box.y, w: boxW, h: boxH };
     const hitsSprite = avoid.some((s) => boxesOverlap(box, s, 1.2 * dpr));
     const hitsTag = taken.some((s) => boxesOverlap(box, s, 2 * dpr));
-    if (!hitsSprite && !hitsTag) {
-      best = { x: c.cx - boxW / 2, y: c.cy - boxH / 2, w: boxW, h: boxH };
+    if (hitsSprite || hitsTag || hitsHud(plate) || !onScreen(plate)) continue;
+    const dist = (c.cx - origin.x) ** 2 + (c.cy - origin.y) ** 2;
+    if (dist < bestDist) {
+      best = plate;
       flip = c.flip;
-      break;
-    }
-    if (!best && !hitsSprite) {
-      best = { x: c.cx - boxW / 2, y: c.cy - boxH / 2, w: boxW, h: boxH };
-      flip = c.flip;
+      bestDist = dist;
     }
   }
   if (!best) {
-    best = { x: origin.x - boxW / 2, y: aboveY - boxH / 2, w: boxW, h: boxH };
+    const shifted: TagBox = {
+      x: Math.max(2, Math.min(origin.x - boxW / 2, viewW - boxW - 2)),
+      y: Math.max(2, Math.min(topBand, viewH - boxH - 2)),
+      w: boxW,
+      h: boxH,
+    };
+    best = onScreen(shifted)
+      ? shifted
+      : { x: origin.x - boxW / 2, y: aboveY - boxH / 2, w: boxW, h: boxH };
   }
-  ctx.beginPath();
-  ctx.rect(best.x, best.y, best.w, best.h);
-  ctx.fillStyle = '#fff1d2';
-  ctx.fill();
-  ctx.lineWidth = Math.max(2, 2 * dpr);
-  ctx.strokeStyle = '#3a2418';
-  ctx.stroke();
+  const pill = kind === 'name' ? menuPill() : null;
+  if (pill) drawNineSlice(ctx, pill, best.x, best.y, best.w, best.h, PILL_SLICE, border);
+  else if (kind === 'name') drawPillFallback(ctx, best.x, best.y, best.w, best.h, border);
+  else {
+    ctx.beginPath();
+    ctx.rect(best.x, best.y, best.w, best.h);
+    ctx.fillStyle = '#fff1d2';
+    ctx.fill();
+    ctx.lineWidth = Math.max(2, 2 * dpr);
+    ctx.strokeStyle = '#3a2418';
+    ctx.stroke();
+  }
   if (kind === 'speech') {
     const midX = best.x + best.w / 2;
     ctx.beginPath();

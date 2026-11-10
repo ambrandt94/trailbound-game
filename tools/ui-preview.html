@@ -250,58 +250,187 @@
       }
 
       const canvas = document.querySelector('#mapbg');
-      const rect = canvas.getBoundingClientRect();
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      canvas.width = Math.round(rect.width * dpr);
-      canvas.height = Math.round(rect.height * dpr);
-      const ctx = canvas.getContext('2d');
-      ctx.imageSmoothingEnabled = false;
-      ctx.scale(dpr, dpr);
-      const w = rect.width;
-      const h = rect.height;
-      ctx.fillStyle = '#8fb56a';
-      ctx.fillRect(0, 0, w, h);
-      ctx.fillStyle = '#c4a36a';
-      ctx.beginPath();
-      ctx.moveTo(0, h * 0.72);
-      ctx.lineTo(w, h * 0.58);
-      ctx.lineTo(w, h);
-      ctx.lineTo(0, h);
-      ctx.fill();
-      ctx.fillStyle = '#d7c48a';
-      ctx.fillRect(w * 0.2, h * 0.35, w * 0.55, 10);
-      const pins = [
-        ['Millford', w * 0.52, h * 0.36],
-        ['Oak Ford', w * 0.72, h * 0.22],
-        ['Camp', w * 0.62, h * 0.5],
-      ];
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '32px "Softball Gold", monospace';
-      for (const [name, x, y] of pins) {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(Math.PI / 4);
-        ctx.fillStyle = '#fff1d2';
-        ctx.strokeStyle = '#3a2418';
-        ctx.lineWidth = 3;
-        ctx.fillRect(-16, -16, 32, 32);
-        ctx.strokeRect(-16, -16, 32, 32);
-        ctx.fillStyle = '#7a3a26';
-        ctx.fillRect(-9, -9, 18, 18);
-        ctx.strokeRect(-9, -9, 18, 18);
-        ctx.restore();
-        const tw = ctx.measureText(name).width;
-        const boxW = tw + 24;
-        const boxH = 48;
-        ctx.fillStyle = '#fff1d2';
-        ctx.fillRect(x - boxW / 2, y - 62, boxW, boxH);
-        ctx.strokeStyle = '#3a2418';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(x - boxW / 2, y - 62, boxW, boxH);
-        ctx.fillStyle = '#2a1d2c';
-        ctx.fillText(name, x, y - 38 + 1);
+
+      function loadImage(src) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = () => reject(new Error(src));
+          img.src = src;
+        });
       }
+
+      function shown(el) {
+        for (let node = el; node; node = node.parentElement) {
+          if (node.hidden) return false;
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+        }
+        return true;
+      }
+
+      function hudObstacles() {
+        const selectors = [
+          '#ui .hud-bar',
+          '#ui .place',
+          '#ui .hint',
+          '#ui .flash',
+          '#ui .wagon-menu',
+          '#mg .mg-frame',
+        ];
+        const boxes = [];
+        for (const selector of selectors) {
+          for (const el of document.querySelectorAll(selector)) {
+            if (!shown(el)) continue;
+            const rect = el.getBoundingClientRect();
+            if (rect.width < 2 || rect.height < 2) continue;
+            boxes.push({ x: rect.left, y: rect.top, w: rect.width, h: rect.height });
+          }
+        }
+        return boxes;
+      }
+
+      function overlaps(a, b, pad) {
+        return (
+          a.x < b.x + b.w + pad &&
+          a.x + a.w + pad > b.x &&
+          a.y < b.y + b.h + pad &&
+          a.y + a.h + pad > b.y
+        );
+      }
+
+      function drawPill(ctx, img, x, y, w, h) {
+        const slice = 6;
+        const border = 6;
+        const sw = img.width;
+        const sh = img.height;
+        const bw = Math.min(border, w / 2 - 1, h / 2 - 1);
+        const map = [
+          [0, slice, sw - slice],
+          [slice, sw - slice * 2, slice],
+        ];
+        const dx = [x, x + bw, x + w - bw];
+        const dy = [y, y + bw, y + h - bw];
+        const dw = [bw, w - bw * 2, bw];
+        const dh = [bw, h - bw * 2, bw];
+        ctx.imageSmoothingEnabled = false;
+        for (let row = 0; row < 3; row++) {
+          for (let col = 0; col < 3; col++) {
+            ctx.drawImage(
+              img,
+              map[0][col],
+              row === 0 ? 0 : row === 1 ? slice : sh - slice,
+              map[1][col],
+              row === 1 ? sh - slice * 2 : slice,
+              dx[col],
+              dy[row],
+              dw[col],
+              dh[row],
+            );
+          }
+        }
+      }
+
+      function placeLabel(name, pinX, pinY, obstacles, viewW, viewH, ctx) {
+        ctx.font = '32px "Softball Gold", monospace';
+        const tw = ctx.measureText(name).width;
+        const boxW = Math.ceil(tw + 6 * 2 + 10 * 2);
+        const boxH = 32 + 6 * 2 + 4 * 2;
+        const gap = 8;
+        let topBand = gap;
+        for (const panel of obstacles) {
+          if (panel.y < viewH * 0.45) topBand = Math.max(topBand, panel.y + panel.h + gap);
+        }
+        const sideY = Math.max(pinY - boxH / 2, topBand);
+        const spots = [
+          { x: pinX - boxW / 2, y: pinY - gap - boxH - 14 },
+          { x: pinX - boxW / 2, y: pinY + gap + 18 },
+          { x: pinX + 26, y: sideY },
+          { x: pinX - boxW - 26, y: sideY },
+          { x: pinX - boxW / 2, y: topBand },
+        ];
+        for (const panel of obstacles) {
+          spots.push(
+            { x: pinX - boxW / 2, y: panel.y + panel.h + gap },
+            { x: pinX - boxW / 2, y: panel.y - gap - boxH },
+            { x: panel.x + panel.w + gap, y: sideY },
+            { x: panel.x - gap - boxW, y: sideY },
+          );
+        }
+        const onScreen = (box) =>
+          box.x >= 4 && box.y >= 4 && box.x + boxW <= viewW - 4 && box.y + boxH <= viewH - 4;
+        const clear = (box) =>
+          obstacles.every((panel) => !overlaps({ ...box, w: boxW, h: boxH }, panel, 4));
+        const good = spots.filter((box) => onScreen(box) && clear(box));
+        good.sort((a, b) => {
+          const da = (a.x + boxW / 2 - pinX) ** 2 + (a.y + boxH / 2 - pinY) ** 2;
+          const db = (b.x + boxW / 2 - pinX) ** 2 + (b.y + boxH / 2 - pinY) ** 2;
+          return da - db;
+        });
+        const best = good[0] ?? {
+          x: Math.max(4, Math.min(pinX - boxW / 2, viewW - boxW - 4)),
+          y: Math.max(4, Math.min(topBand, viewH - boxH - 4)),
+        };
+        return { x: best.x, y: best.y, w: boxW, h: boxH };
+      }
+
+      async function paintMap() {
+        await document.fonts.load('32px "Softball Gold"');
+        await document.fonts.ready;
+        const pill = await loadImage('/src/ui/theme/sprites/pill.png');
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        canvas.width = Math.round(rect.width * dpr);
+        canvas.height = Math.round(rect.height * dpr);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.scale(dpr, dpr);
+        const w = rect.width;
+        const h = rect.height;
+        ctx.fillStyle = '#8fb56a';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#c4a36a';
+        ctx.beginPath();
+        ctx.moveTo(0, h * 0.72);
+        ctx.lineTo(w, h * 0.58);
+        ctx.lineTo(w, h);
+        ctx.lineTo(0, h);
+        ctx.fill();
+        ctx.fillStyle = '#d7c48a';
+        ctx.fillRect(w * 0.2, h * 0.35, w * 0.55, 10);
+        const pins = [
+          ['Millford', w * 0.5, h * 0.4],
+          ['Oak Ford', w * 0.78, h * 0.28],
+          ['Camp', w * 0.46, h * 0.22],
+        ];
+        const obstacles = hudObstacles();
+        const taken = [];
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '32px "Softball Gold", monospace';
+        for (const [name, x, y] of pins) {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(Math.PI / 4);
+          ctx.fillStyle = '#fff1d2';
+          ctx.strokeStyle = '#3a2418';
+          ctx.lineWidth = 3;
+          ctx.fillRect(-16, -16, 32, 32);
+          ctx.strokeRect(-16, -16, 32, 32);
+          ctx.fillStyle = '#7a3a26';
+          ctx.fillRect(-9, -9, 18, 18);
+          ctx.strokeRect(-9, -9, 18, 18);
+          ctx.restore();
+          const box = placeLabel(name, x, y, [...obstacles, ...taken], w, h, ctx);
+          drawPill(ctx, pill, box.x, box.y, box.w, box.h);
+          ctx.fillStyle = '#2a1d2c';
+          ctx.fillText(name, box.x + box.w / 2, box.y + box.h / 2 + 1);
+          taken.push(box);
+        }
+        document.documentElement.dataset.mapReady = '1';
+      }
+
+      void paintMap();
     </script>
   </body>
 </html>
