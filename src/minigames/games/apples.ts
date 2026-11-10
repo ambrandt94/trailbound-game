@@ -35,7 +35,7 @@ export const applesGame: MinigameDef = {
   start(g) {
     state = blank(g.W || g.width || 160);
     if (g.hud)
-      g.hud.innerHTML = '◀ ▶ or drag to move the basket · catch red apples, skip the rotten ones';
+      g.hud.innerHTML = '< > or drag to move the basket | catch red apples, skip the rotten ones';
     g.over = false;
   },
   update(g, dt) {

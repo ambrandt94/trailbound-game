@@ -57,7 +57,7 @@ export const chopGame: MinigameDef = {
     if (g.worldScene && typeof document !== 'undefined') buildBlock(g.worldScene, x, z, pose.y);
     if (g.hud) {
       g.hud.innerHTML =
-        '<span class="mg-line">Press <b>Space / F</b> when the needle is in the green · 3 clean hits split the log</span>';
+        '<span class="mg-line">Press <b>Space / F</b> when the needle is in the green | 3 clean hits split the log</span>';
       if (typeof document !== 'undefined') {
         const canvas = document.createElement('canvas');
         canvas.width = 120;

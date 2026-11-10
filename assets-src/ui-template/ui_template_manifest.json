@@ -1,0 +1,1007 @@
+{
+  "version": "3.0.0",
+  "title": "Trailbound UI template sheet",
+  "sheet": "ui_template_sheet.png",
+  "guide": "ui_template_sheet_guide.png",
+  "blank": "ui_template_sheet_blank.png",
+  "width": 1680,
+  "height": 2130,
+  "font": {
+    "family": "Softball Gold",
+    "designPx": 16,
+    "bodyPx": 32,
+    "titlePx": 48
+  },
+  "sprites": {
+    "title_bar": {
+      "rect": {
+        "x": 108,
+        "y": 78,
+        "w": 176,
+        "h": 56
+      },
+      "borders": {
+        "l": 12,
+        "t": 8,
+        "r": 12,
+        "b": 8
+      },
+      "state": null,
+      "label": "Title bar",
+      "group": "Frames",
+      "notes": ""
+    },
+    "frame": {
+      "rect": {
+        "x": 546,
+        "y": 78,
+        "w": 64,
+        "h": 64
+      },
+      "borders": {
+        "l": 10,
+        "t": 10,
+        "r": 10,
+        "b": 10
+      },
+      "state": null,
+      "label": "Outer frame",
+      "group": "Frames",
+      "notes": ""
+    },
+    "frame_light": {
+      "rect": {
+        "x": 940,
+        "y": 78,
+        "w": 40,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": null,
+      "label": "Inner frame",
+      "group": "Frames",
+      "notes": ""
+    },
+    "panel": {
+      "rect": {
+        "x": 1314,
+        "y": 78,
+        "w": 56,
+        "h": 56
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "state": null,
+      "label": "Panel",
+      "group": "Frames",
+      "notes": ""
+    },
+    "header_strip": {
+      "rect": {
+        "x": 180,
+        "y": 204,
+        "w": 32,
+        "h": 16
+      },
+      "borders": {
+        "l": 0,
+        "t": 4,
+        "r": 0,
+        "b": 4
+      },
+      "state": null,
+      "label": "Header strip",
+      "group": "Frames",
+      "notes": ""
+    },
+    "canvas_fill": {
+      "rect": {
+        "x": 562,
+        "y": 204,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Canvas fill",
+      "group": "Frames",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "button_normal": {
+      "rect": {
+        "x": 156,
+        "y": 320,
+        "w": 80,
+        "h": 44
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "state": "normal",
+      "label": "Button",
+      "group": "Buttons",
+      "notes": ""
+    },
+    "button_hover": {
+      "rect": {
+        "x": 538,
+        "y": 320,
+        "w": 80,
+        "h": 44
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "state": "hover",
+      "label": "Button",
+      "group": "Buttons",
+      "notes": ""
+    },
+    "button_pressed": {
+      "rect": {
+        "x": 920,
+        "y": 320,
+        "w": 80,
+        "h": 44
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "state": "pressed",
+      "label": "Button",
+      "group": "Buttons",
+      "notes": ""
+    },
+    "button_disabled": {
+      "rect": {
+        "x": 1302,
+        "y": 320,
+        "w": 80,
+        "h": 44
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "state": "disabled",
+      "label": "Button",
+      "group": "Buttons",
+      "notes": ""
+    },
+    "button_primary": {
+      "rect": {
+        "x": 156,
+        "y": 426,
+        "w": 80,
+        "h": 44
+      },
+      "borders": {
+        "l": 8,
+        "t": 6,
+        "r": 8,
+        "b": 6
+      },
+      "state": "primary",
+      "label": "Button",
+      "group": "Buttons",
+      "notes": ""
+    },
+    "tab_normal": {
+      "rect": {
+        "x": 164,
+        "y": 554,
+        "w": 64,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "normal",
+      "label": "Tab",
+      "group": "Tabs",
+      "notes": ""
+    },
+    "tab_hover": {
+      "rect": {
+        "x": 546,
+        "y": 554,
+        "w": 64,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "hover",
+      "label": "Tab",
+      "group": "Tabs",
+      "notes": ""
+    },
+    "tab_selected": {
+      "rect": {
+        "x": 928,
+        "y": 554,
+        "w": 64,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "selected",
+      "label": "Tab",
+      "group": "Tabs",
+      "notes": ""
+    },
+    "tab_disabled": {
+      "rect": {
+        "x": 1310,
+        "y": 554,
+        "w": 64,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "disabled",
+      "label": "Tab",
+      "group": "Tabs",
+      "notes": ""
+    },
+    "slot_normal": {
+      "rect": {
+        "x": 140,
+        "y": 674,
+        "w": 112,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "normal",
+      "label": "Slot row",
+      "group": "Rows",
+      "notes": ""
+    },
+    "slot_selected": {
+      "rect": {
+        "x": 522,
+        "y": 674,
+        "w": 112,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "selected",
+      "label": "Slot row",
+      "group": "Rows",
+      "notes": ""
+    },
+    "wagon_row": {
+      "rect": {
+        "x": 904,
+        "y": 674,
+        "w": 112,
+        "h": 44
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "normal",
+      "label": "Wagon row",
+      "group": "Rows",
+      "notes": ""
+    },
+    "chip": {
+      "rect": {
+        "x": 172,
+        "y": 802,
+        "w": 48,
+        "h": 32
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "state": null,
+      "label": "Chip",
+      "group": "Chips",
+      "notes": ""
+    },
+    "chip_legend": {
+      "rect": {
+        "x": 554,
+        "y": 802,
+        "w": 48,
+        "h": 28
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "state": null,
+      "label": "Legend chip",
+      "group": "Chips",
+      "notes": ""
+    },
+    "pill": {
+      "rect": {
+        "x": 924,
+        "y": 802,
+        "w": 72,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": null,
+      "label": "Pill",
+      "group": "Chips",
+      "notes": ""
+    },
+    "hud_bar": {
+      "rect": {
+        "x": 1294,
+        "y": 802,
+        "w": 96,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": null,
+      "label": "HUD plate",
+      "group": "Chips",
+      "notes": ""
+    },
+    "badge_hidden": {
+      "rect": {
+        "x": 168,
+        "y": 904,
+        "w": 56,
+        "h": 24
+      },
+      "borders": {
+        "l": 6,
+        "t": 4,
+        "r": 6,
+        "b": 4
+      },
+      "state": null,
+      "label": "Hidden badge",
+      "group": "Chips",
+      "notes": ""
+    },
+    "tooltip": {
+      "rect": {
+        "x": 546,
+        "y": 904,
+        "w": 64,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": null,
+      "label": "Tooltip",
+      "group": "Chips",
+      "notes": ""
+    },
+    "mg_frame": {
+      "rect": {
+        "x": 164,
+        "y": 1028,
+        "w": 64,
+        "h": 64
+      },
+      "borders": {
+        "l": 10,
+        "t": 10,
+        "r": 10,
+        "b": 10
+      },
+      "state": null,
+      "label": "Minigame frame",
+      "group": "Minigame",
+      "notes": ""
+    },
+    "mg_hud": {
+      "rect": {
+        "x": 530,
+        "y": 1028,
+        "w": 96,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": null,
+      "label": "Minigame HUD",
+      "group": "Minigame",
+      "notes": ""
+    },
+    "mg_card": {
+      "rect": {
+        "x": 924,
+        "y": 1028,
+        "w": 72,
+        "h": 48
+      },
+      "borders": {
+        "l": 8,
+        "t": 8,
+        "r": 8,
+        "b": 8
+      },
+      "state": "result",
+      "label": "Result card",
+      "group": "Minigame",
+      "notes": ""
+    },
+    "scroll_track": {
+      "rect": {
+        "x": 188,
+        "y": 1176,
+        "w": 16,
+        "h": 64
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "state": null,
+      "label": "Scroll track",
+      "group": "Scroll",
+      "notes": ""
+    },
+    "scroll_thumb": {
+      "rect": {
+        "x": 570,
+        "y": 1176,
+        "w": 16,
+        "h": 36
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "state": null,
+      "label": "Scroll thumb",
+      "group": "Scroll",
+      "notes": ""
+    },
+    "scroll_cap_up": {
+      "rect": {
+        "x": 952,
+        "y": 1176,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "up",
+      "label": "Scroll cap",
+      "group": "Scroll",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "scroll_cap_down": {
+      "rect": {
+        "x": 1334,
+        "y": 1176,
+        "w": 16,
+        "h": 16
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "down",
+      "label": "Scroll cap",
+      "group": "Scroll",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "checkbox_off": {
+      "rect": {
+        "x": 180,
+        "y": 1324,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "off",
+      "label": "Checkbox",
+      "group": "Controls",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "checkbox_on": {
+      "rect": {
+        "x": 562,
+        "y": 1324,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "on",
+      "label": "Checkbox",
+      "group": "Controls",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "toggle_off": {
+      "rect": {
+        "x": 934,
+        "y": 1324,
+        "w": 52,
+        "h": 28
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "off",
+      "label": "Toggle",
+      "group": "Controls",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "toggle_on": {
+      "rect": {
+        "x": 1316,
+        "y": 1324,
+        "w": 52,
+        "h": 28
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "on",
+      "label": "Toggle",
+      "group": "Controls",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "slider_track": {
+      "rect": {
+        "x": 164,
+        "y": 1418,
+        "w": 64,
+        "h": 16
+      },
+      "borders": {
+        "l": 6,
+        "t": 4,
+        "r": 6,
+        "b": 4
+      },
+      "state": null,
+      "label": "Slider track",
+      "group": "Controls",
+      "notes": ""
+    },
+    "slider_thumb": {
+      "rect": {
+        "x": 570,
+        "y": 1418,
+        "w": 16,
+        "h": 28
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Slider thumb",
+      "group": "Controls",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "dye_swatch": {
+      "rect": {
+        "x": 182,
+        "y": 1530,
+        "w": 28,
+        "h": 28
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "state": "normal",
+      "label": "Swatch",
+      "group": "Swatches",
+      "notes": ""
+    },
+    "dye_swatch_selected": {
+      "rect": {
+        "x": 564,
+        "y": 1530,
+        "w": 28,
+        "h": 28
+      },
+      "borders": {
+        "l": 4,
+        "t": 4,
+        "r": 4,
+        "b": 4
+      },
+      "state": "selected",
+      "label": "Swatch",
+      "group": "Swatches",
+      "notes": ""
+    },
+    "cell_empty": {
+      "rect": {
+        "x": 176,
+        "y": 1642,
+        "w": 40,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "empty",
+      "label": "Cell",
+      "group": "Cells",
+      "notes": ""
+    },
+    "cell_blocked": {
+      "rect": {
+        "x": 558,
+        "y": 1642,
+        "w": 40,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "blocked",
+      "label": "Cell",
+      "group": "Cells",
+      "notes": ""
+    },
+    "cell_ghost": {
+      "rect": {
+        "x": 940,
+        "y": 1642,
+        "w": 40,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "ghost",
+      "label": "Cell",
+      "group": "Cells",
+      "notes": ""
+    },
+    "cell_hover": {
+      "rect": {
+        "x": 1322,
+        "y": 1642,
+        "w": 40,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "hover",
+      "label": "Cell",
+      "group": "Cells",
+      "notes": ""
+    },
+    "cell_valid": {
+      "rect": {
+        "x": 176,
+        "y": 1744,
+        "w": 40,
+        "h": 40
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "valid",
+      "label": "Cell",
+      "group": "Cells",
+      "notes": ""
+    },
+    "floor_active": {
+      "rect": {
+        "x": 546,
+        "y": 1744,
+        "w": 64,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "active",
+      "label": "Floor",
+      "group": "Cells",
+      "notes": ""
+    },
+    "floor_ghost": {
+      "rect": {
+        "x": 928,
+        "y": 1744,
+        "w": 64,
+        "h": 36
+      },
+      "borders": {
+        "l": 6,
+        "t": 6,
+        "r": 6,
+        "b": 6
+      },
+      "state": "ghost",
+      "label": "Floor",
+      "group": "Cells",
+      "notes": ""
+    },
+    "icon_back": {
+      "rect": {
+        "x": 180,
+        "y": 1868,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Icon back",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "icon_close": {
+      "rect": {
+        "x": 562,
+        "y": 1868,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Icon close",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "icon_down": {
+      "rect": {
+        "x": 944,
+        "y": 1868,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Icon down",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "icon_up": {
+      "rect": {
+        "x": 1326,
+        "y": 1868,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Icon up",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "icon_rotate": {
+      "rect": {
+        "x": 180,
+        "y": 1962,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Icon rotate",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "btn_rotate_left": {
+      "rect": {
+        "x": 560,
+        "y": 1962,
+        "w": 36,
+        "h": 36
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Rotate left",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "btn_rotate_right": {
+      "rect": {
+        "x": 942,
+        "y": 1962,
+        "w": 36,
+        "h": 36
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": null,
+      "label": "Rotate right",
+      "group": "Icons",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "pin_poi": {
+      "rect": {
+        "x": 180,
+        "y": 2082,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "normal",
+      "label": "Map pin",
+      "group": "Map",
+      "notes": "fixed icon, not a 9-slice"
+    },
+    "pin_active": {
+      "rect": {
+        "x": 562,
+        "y": 2082,
+        "w": 32,
+        "h": 32
+      },
+      "borders": {
+        "l": 0,
+        "t": 0,
+        "r": 0,
+        "b": 0
+      },
+      "state": "active",
+      "label": "Map pin",
+      "group": "Map",
+      "notes": "fixed icon, not a 9-slice"
+    }
+  }
+}

@@ -91,7 +91,7 @@ export const fishGame: MinigameDef = {
     }
     const scene = g.worldScene;
     if (scene && typeof document !== 'undefined') buildPond(scene, state, sign == null);
-    if (g.hud) g.hud.innerHTML = 'Casting…';
+    if (g.hud) g.hud.innerHTML = 'Casting...';
     g.over = false;
   },
   update(g, dt) {
@@ -129,7 +129,7 @@ export const fishGame: MinigameDef = {
         by -= 0.12;
         if (g.act) beginReel(g);
         else if (state.pt <= 0) {
-          if (g.hud) g.hud.innerHTML = 'It got away…';
+          if (g.hud) g.hud.innerHTML = 'It got away...';
           wait(g);
         }
       } else if (state.phase === 'reel' && state.fish) {
@@ -208,7 +208,7 @@ function beginReel(g: MinigameContext): void {
   state.pr = 0.3;
   if (g.hud)
     g.hud.innerHTML =
-      'Hold <b>Space</b> (or the screen) to raise the bar · keep the fish inside it';
+      'Hold <b>Space</b> (or the screen) to raise the bar | keep the fish inside it';
   if (typeof document === 'undefined' || !g.side) return;
   const canvas = document.createElement('canvas');
   canvas.width = 40;

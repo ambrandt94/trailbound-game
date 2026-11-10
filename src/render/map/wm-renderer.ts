@@ -86,7 +86,7 @@ import {
 } from './detail-lod';
 import { ImageLodCache, downsampleCanvas } from './lod-cache';
 
-const PIXEL_FONT = 'Tiny5, "Press Start 2P", ui-monospace, monospace';
+const PIXEL_FONT = '"Softball Gold", ui-monospace, monospace';
 
 function paintYard(
   ctx: CanvasRenderingContext2D,
@@ -136,7 +136,16 @@ function boxesOverlap(a: TagBox, b: TagBox, pad = 0): boolean {
   );
 }
 
-const NAMETAG_BASE_PX = 10;
+/** 16px is Softball Gold's design grid. Tags snap to multiples of it. */
+const NAMETAG_BASE_PX = 16;
+
+function readUiScale(): number {
+  if (typeof document === 'undefined') return 1;
+  const raw = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue('--tb-ui-scale'),
+  );
+  return raw === 2 || raw === 3 ? raw : 1;
+}
 
 function applyPoint(tr: DOMMatrix, x: number, y: number): { x: number; y: number } {
   return { x: tr.a * x + tr.c * y + tr.e, y: tr.b * x + tr.d * y + tr.f };
@@ -251,13 +260,20 @@ function drawTagLabel(
     kind?: 'name' | 'speech';
   },
 ): TagBox | null {
-  const raw = text.trim();
+  const raw = text
+    .trim()
+    .replaceAll('\u00B7', '|')
+    .replaceAll('\u2026', '...')
+    .replaceAll('\u2014', '-')
+    .replaceAll('\u2013', '-');
   if (!raw) return null;
   const kind = opts?.kind ?? 'name';
   const tr = ctx.getTransform();
   const dpr = Math.max(0.5, Math.hypot(tr.a, tr.b) / Math.max(0.001, scale));
-  const screenPx = opts?.screenPx ?? NAMETAG_BASE_PX * (kind === 'speech' ? 2.8 : 2.5);
-  const fontPx = Math.max(8, screenPx * dpr);
+  const screenPx = opts?.screenPx ?? NAMETAG_BASE_PX * (kind === 'speech' ? 3 : 2);
+  const uiScale = readUiScale();
+  const cssPx = Math.max(16, Math.round((screenPx * uiScale) / 16) * 16);
+  const fontPx = cssPx * dpr;
   const origin = applyPoint(tr, x, y);
   const uy = Math.hypot(tr.c, tr.d) || dpr * scale;
   ctx.save();
@@ -266,13 +282,13 @@ function drawTagLabel(
   ctx.font = `${fontPx}px ${PIXEL_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const maxW = (kind === 'speech' ? 16 : 13.2) * screenPx * dpr;
+  const maxW = (kind === 'speech' ? 18 : 14) * cssPx * dpr;
   let label = raw;
   while (ctx.measureText(label).width > maxW && label.length > 5) label = label.slice(0, -1);
-  if (label !== raw) label = `${label.slice(0, -1)}…`;
+  if (label !== raw) label = `${label.slice(0, -1)}...`;
   const tw = ctx.measureText(label).width;
-  const padX = (kind === 'speech' ? 7.2 : 4.2) * dpr;
-  const padY = (kind === 'speech' ? 4.2 : 2.1) * dpr;
+  const padX = 12 * dpr * uiScale;
+  const padY = 8 * dpr * uiScale;
   const tail = kind === 'speech' ? 5.5 * dpr : 0;
   const boxW = tw + padX * 2;
   const boxH = fontPx + padY * 2;
@@ -326,42 +342,33 @@ function drawTagLabel(
   if (!best) {
     best = { x: origin.x - boxW / 2, y: aboveY - boxH / 2, w: boxW, h: boxH };
   }
-  const r = (kind === 'speech' ? 8 : 2.2) * dpr;
   ctx.beginPath();
-  if (typeof ctx.roundRect === 'function') ctx.roundRect(best.x, best.y, best.w, best.h, r);
-  else ctx.rect(best.x, best.y, best.w, best.h);
+  ctx.rect(best.x, best.y, best.w, best.h);
+  ctx.fillStyle = '#fff1d2';
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, 2 * dpr);
+  ctx.strokeStyle = '#3a2418';
+  ctx.stroke();
   if (kind === 'speech') {
-    ctx.fillStyle = 'rgba(248, 241, 226, 0.96)';
-    ctx.fill();
-    ctx.lineWidth = Math.max(1.5, 1.6 * dpr);
-    ctx.strokeStyle = 'rgba(42, 28, 16, 0.78)';
-    ctx.stroke();
     const midX = best.x + best.w / 2;
     ctx.beginPath();
     if (!flip) {
-      ctx.moveTo(midX - 5 * dpr, best.y + best.h - 0.5);
+      ctx.moveTo(midX - 6 * dpr, best.y + best.h - 0.5);
       ctx.lineTo(midX, best.y + best.h + tail);
-      ctx.lineTo(midX + 5 * dpr, best.y + best.h - 0.5);
+      ctx.lineTo(midX + 6 * dpr, best.y + best.h - 0.5);
     } else {
-      ctx.moveTo(midX - 5 * dpr, best.y + 0.5);
+      ctx.moveTo(midX - 6 * dpr, best.y + 0.5);
       ctx.lineTo(midX, best.y - tail);
-      ctx.lineTo(midX + 5 * dpr, best.y + 0.5);
+      ctx.lineTo(midX + 6 * dpr, best.y + 0.5);
     }
     ctx.closePath();
-    ctx.fillStyle = 'rgba(248, 241, 226, 0.96)';
+    ctx.fillStyle = '#fff1d2';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(42, 28, 16, 0.78)';
+    ctx.strokeStyle = '#3a2418';
     ctx.stroke();
-    ctx.fillStyle = '#2a1c12';
-  } else {
-    ctx.fillStyle = 'rgba(14, 11, 9, 0.82)';
-    ctx.fill();
-    ctx.lineWidth = Math.max(1, dpr);
-    ctx.strokeStyle = 'rgba(228, 196, 138, 0.35)';
-    ctx.stroke();
-    ctx.fillStyle = '#f3ead6';
   }
-  ctx.fillText(label, best.x + best.w / 2, best.y + best.h / 2 + 0.4 * dpr);
+  ctx.fillStyle = '#2a1d2c';
+  ctx.fillText(label, best.x + best.w / 2, best.y + best.h / 2 + fontPx / 32);
   ctx.restore();
   const occupied: TagBox = {
     x: best.x,
@@ -504,7 +511,7 @@ export class WorldRenderer {
   private isoLayer: HTMLCanvasElement | null = null;
   private fogLayer: HTMLCanvasElement | null = null;
   private blurLayer: HTMLCanvasElement | null = null;
-  private tagScreenPx = NAMETAG_BASE_PX * 2.5;
+  private tagScreenPx = NAMETAG_BASE_PX * 2;
   private heightWorld: WorldData | null = null;
   private heightBake: HTMLCanvasElement | null = null;
   private contourKey = '';
@@ -1246,7 +1253,7 @@ export class WorldRenderer {
     },
   ): void {
     this.chunkDestPx = Math.max(1, camera.scale * TILE);
-    this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2.5, 0.5, 4.5);
+    this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2, 0.5, 4.5);
     this.heroYaw = opts.heroYaw ?? 0;
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = '#151b22';
@@ -2303,23 +2310,20 @@ export class WorldRenderer {
     color: string,
     prominent: boolean,
   ): void {
-    const screen = prominent ? 34 : 22;
+    const ui = readUiScale();
+    const screen = (prominent ? 40 : 28) * ui;
     const s = screen / scale;
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(px, py, s * 0.72, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(246, 241, 230, 0.92)';
-    ctx.fill();
-    ctx.lineWidth = (prominent ? 3.2 : 2.2) / scale;
-    ctx.strokeStyle = '#1a120c';
-    ctx.stroke();
     ctx.translate(px, py);
     ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#fff1d2';
+    ctx.strokeStyle = '#3a2418';
+    ctx.lineWidth = (prominent ? 3 : 2) / scale;
+    ctx.fillRect(-s * 0.62, -s * 0.62, s * 1.24, s * 1.24);
+    ctx.strokeRect(-s * 0.62, -s * 0.62, s * 1.24, s * 1.24);
     ctx.fillStyle = color;
-    ctx.strokeStyle = '#1a120c';
-    ctx.lineWidth = (prominent ? 2.2 : 1.5) / scale;
-    ctx.fillRect(-s / 2, -s / 2, s, s);
-    ctx.strokeRect(-s / 2, -s / 2, s, s);
+    ctx.fillRect(-s * 0.36, -s * 0.36, s * 0.72, s * 0.72);
+    ctx.strokeRect(-s * 0.36, -s * 0.36, s * 0.72, s * 0.72);
     ctx.restore();
   }
 

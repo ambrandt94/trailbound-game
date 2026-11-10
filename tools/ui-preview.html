@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trailbound UI preview</title>
+    <link rel="stylesheet" href="/src/ui/styles.css" />
+    <link rel="stylesheet" href="/src/ui/theme/pixel-skin.css" />
+    <style>
+      html,
+      body,
+      #app {
+        height: 100%;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="mapbg" class="view"></canvas>
+      <div id="ui">
+        <section data-shot="wardrobe" class="creator tb-wardrobe" data-surface="paperdoll">
+          <div class="tb-wardrobe-head">
+            <p class="eyebrow tb-kicker">Character</p>
+            <h2 class="tb-heading">Wardrobe</h2>
+            <div class="preview-tools" role="group" aria-label="Region">
+              <button type="button" class="chip">All</button>
+              <button type="button" class="chip">Upper</button>
+              <button type="button" class="chip on" aria-pressed="true">Lower</button>
+              <button type="button" class="chip">Turn</button>
+            </div>
+            <p class="tb-heading">Skirt | Empty</p>
+          </div>
+          <div class="tb-wardrobe-columns">
+            <div class="tb-wardrobe-layers tb-scroll" role="listbox" aria-label="Layers">
+              <button type="button" class="action secondary">
+                <span>Legs</span><span class="slot-value">Pants</span>
+              </button>
+              <button type="button" class="action" aria-pressed="true">
+                <span>Skirt</span><span class="slot-value">empty</span>
+              </button>
+              <button type="button" class="action secondary">
+                <span>Shins</span><span class="slot-value">empty</span>
+              </button>
+              <button type="button" class="action secondary">
+                <span>Feet</span><span class="slot-value">Shoes</span>
+              </button>
+              <button type="button" class="action secondary">
+                <span>Socks</span><span class="slot-value">empty</span>
+              </button>
+            </div>
+            <div class="tb-wardrobe-detail tb-scroll">
+              <div class="tb-wardrobe-catalog" role="listbox" aria-label="Garments">
+                <button type="button" class="chip on" aria-pressed="true">Skirt</button>
+                <button type="button" class="chip">Pants</button>
+                <button type="button" class="chip">Greaves</button>
+              </div>
+              <div class="actions">
+                <button type="button" class="action secondary" disabled>Unequip</button>
+              </div>
+              <p class="note">Greaves left Shins</p>
+            </div>
+          </div>
+          <div class="actions tb-wardrobe-foot">
+            <button type="button" class="action secondary">Undo</button>
+            <button type="button" class="action secondary" disabled>Redo</button>
+            <button type="button" class="action secondary">Body</button>
+            <button type="button" class="action">Save avatar</button>
+            <button type="button" class="action secondary">Back</button>
+          </div>
+        </section>
+
+        <section data-shot="settings" class="screen tb-screen">
+          <div class="card settings-card tb-panel tb-scroll" id="settings-card">
+            <p class="eyebrow tb-kicker">Mix</p>
+            <h2 class="tb-heading">Settings</h2>
+            <label class="slider"
+              ><span>Master</span><input type="range" value="80" /><span class="value"
+                >80</span
+              ></label
+            >
+            <label class="slider"
+              ><span>Music</span><input type="range" value="60" /><span class="value"
+                >60</span
+              ></label
+            >
+            <label class="slider"
+              ><span>Effects</span><input type="range" value="70" /><span class="value"
+                >70</span
+              ></label
+            >
+            <label class="slider"
+              ><span>Voices</span><input type="range" value="50" /><span class="value"
+                >50</span
+              ></label
+            >
+            <label class="field"
+              >Map
+              <select aria-label="Map">
+                <option>Trailbound 48</option>
+                <option>Pixel Kingdom</option>
+              </select>
+            </label>
+            <label class="check"><input type="checkbox" /> Mute voices</label>
+            <label class="check"><input type="checkbox" checked /> Lock time of day</label>
+            <p class="lede tight">
+              The 3D view uses the same look, camera, and feel as the controller demo. Fog density
+              also sets how far the town draws.
+            </p>
+            <details class="look-group" open>
+              <summary>Camera</summary>
+              <div class="look-actions">
+                <p class="look-view">3rd person</p>
+                <button type="button" class="lock">Next zoom</button>
+                <button type="button" class="lock on">Overhead / 3rd</button>
+              </div>
+              <label class="slider"
+                ><span>FOV</span><input type="range" value="42" /><span class="value"
+                  >42</span
+                ></label
+              >
+              <label class="slider"
+                ><span>Distance</span><input type="range" value="18" /><span class="value"
+                  >18</span
+                ></label
+              >
+            </details>
+            <div class="actions">
+              <button type="button" class="action secondary">Edit avatar</button>
+              <button type="button" class="action secondary">Reset look</button>
+              <button type="button" class="action secondary">Copy look JSON</button>
+              <button type="button" class="action">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <section data-shot="minigames" class="screen tb-screen">
+          <div class="card settings-card tb-panel tb-scroll">
+            <p class="eyebrow tb-kicker">Mix</p>
+            <h2 class="tb-heading">Settings</h2>
+            <details class="look-group" open>
+              <summary>Minigames</summary>
+              <div class="wagon-rows">
+                <button type="button" class="action secondary">Apple Catch</button>
+                <button type="button" class="action secondary">Slime Arena</button>
+                <button type="button" class="action secondary">Crystal Cave</button>
+                <button type="button" class="action secondary">Woodchop</button>
+                <button type="button" class="action secondary">Fishing</button>
+                <button type="button" class="action secondary">Flappy Finch</button>
+                <button type="button" class="action secondary">Rune Stone</button>
+                <button type="button" class="action secondary">Tower Stack</button>
+                <button type="button" class="action secondary">Cook meal</button>
+                <button type="button" class="action secondary">Go hunting</button>
+                <button type="button" class="action secondary">Wash dishes</button>
+              </div>
+            </details>
+            <div class="actions">
+              <button type="button" class="action">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <div data-shot="wagon">
+          <div class="hud" data-map-hud></div>
+          <section class="wagon-menu" role="dialog" aria-label="Wagon">
+            <p class="eyebrow">Camp</p>
+            <h2>Wagon</h2>
+            <div class="wagon-rows">
+              <button type="button" class="action wagon-row">
+                <span>Go hunting</span><small>15 TU | food +8</small>
+              </button>
+              <button type="button" class="action wagon-row">
+                <span>Cook meal</span><small>10 TU | 1 food to 1 meal</small>
+              </button>
+              <button type="button" class="action wagon-row">
+                <span>Eat</span><small>5 TU | a meal, morale +1, a dirty dish</small>
+              </button>
+              <button type="button" class="action wagon-row">
+                <span>Wash dishes</span><small>8 TU | clear dishes, morale +1</small>
+              </button>
+            </div>
+            <button type="button" class="action secondary">Close</button>
+          </section>
+        </div>
+
+        <div data-shot="map">
+          <div class="hud" data-map-hud></div>
+        </div>
+
+        <div data-shot="popup" class="hud" data-map-hud></div>
+        <div data-shot="result" class="hud" data-map-hud></div>
+      </div>
+
+      <div id="mg" class="open demo pop2d" hidden>
+        <div class="mg-frame">
+          <header class="mg-bar">
+            <strong class="mg-name">Apple Catch</strong>
+            <button type="button" class="mg-quit">Quit</button>
+          </header>
+          <div class="mg-hud">
+            Use left / right or drag to move the basket | catch red apples, skip the rotten ones
+          </div>
+          <div class="mg-stage"></div>
+          <p class="mg-foot">Score 4</p>
+          <div class="mg-card" id="mg-card" hidden>
+            <p class="mg-message">Caught 8 apples.</p>
+            <p class="mg-lines">+3 coins</p>
+            <p class="mg-close">Space / F / tap to continue</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      const shot = new URLSearchParams(location.search).get('shot') || 'wardrobe';
+      for (const el of document.querySelectorAll('[data-shot]')) {
+        el.hidden = el.dataset.shot !== shot;
+      }
+      const mg = document.querySelector('#mg');
+      const showMg = shot === 'popup' || shot === 'result';
+      mg.hidden = !showMg;
+      document.querySelector('#mg-card').hidden = shot !== 'result';
+
+      const hud = `
+        <div class="night-veil" style="opacity:0"></div>
+        <div class="hud-bar">
+          <div class="pill clock">Day 3, 14:20<span class="rate">x1</span><span class="party">Food 12 | morale 8</span></div>
+          <label class="pill skin"><span>Map</span>
+            <select aria-label="Map skin"><option>Trailbound 48</option><option>Pixel Kingdom</option></select>
+          </label>
+          <button type="button" class="pill save">Save</button>
+          <button type="button" class="pill look">Settings</button>
+          <button type="button" class="pill avatar">Avatar</button>
+        </div>
+        <div class="hud-foot">
+          <section class="place">
+            <p class="eyebrow">Town</p>
+            <h2>Millford</h2>
+            <p class="stand">On the green, by the well</p>
+            <p class="nearest">Gate 40 m north</p>
+            <button type="button" class="action enter-place">Enter</button>
+          </section>
+          <p class="hint">WASD move | Shift sprint. Step through the gate.</p>
+          <p class="flash ok">Saved</p>
+        </div>`;
+      for (const el of document.querySelectorAll('[data-map-hud]')) {
+        const owner = el.closest('[data-shot]');
+        if (owner && !owner.hidden) el.innerHTML = hud;
+      }
+
+      const canvas = document.querySelector('#mapbg');
+      const rect = canvas.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.scale(dpr, dpr);
+      const w = rect.width;
+      const h = rect.height;
+      ctx.fillStyle = '#8fb56a';
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#c4a36a';
+      ctx.beginPath();
+      ctx.moveTo(0, h * 0.72);
+      ctx.lineTo(w, h * 0.58);
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.fill();
+      ctx.fillStyle = '#d7c48a';
+      ctx.fillRect(w * 0.2, h * 0.35, w * 0.55, 10);
+      const pins = [
+        ['Millford', w * 0.52, h * 0.36],
+        ['Oak Ford', w * 0.72, h * 0.22],
+        ['Camp', w * 0.62, h * 0.5],
+      ];
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '32px "Softball Gold", monospace';
+      for (const [name, x, y] of pins) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = '#fff1d2';
+        ctx.strokeStyle = '#3a2418';
+        ctx.lineWidth = 3;
+        ctx.fillRect(-16, -16, 32, 32);
+        ctx.strokeRect(-16, -16, 32, 32);
+        ctx.fillStyle = '#7a3a26';
+        ctx.fillRect(-9, -9, 18, 18);
+        ctx.strokeRect(-9, -9, 18, 18);
+        ctx.restore();
+        const tw = ctx.measureText(name).width;
+        const boxW = tw + 24;
+        const boxH = 48;
+        ctx.fillStyle = '#fff1d2';
+        ctx.fillRect(x - boxW / 2, y - 62, boxW, boxH);
+        ctx.strokeStyle = '#3a2418';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - boxW / 2, y - 62, boxW, boxH);
+        ctx.fillStyle = '#2a1d2c';
+        ctx.fillText(name, x, y - 38 + 1);
+      }
+    </script>
+  </body>
+</html>

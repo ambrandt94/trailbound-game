@@ -9,19 +9,26 @@ const css = readFileSync(join(root, 'src/ui/theme/pixel-skin.css'), 'utf8');
 const creator = readFileSync(join(root, 'src/ui/creator.tsx'), 'utf8');
 const slice = JSON.parse(readFileSync(join(root, 'src/ui/theme/ui_atlas_9slice.json'), 'utf8')) as {
   version: string;
+  display_scale: number;
   sprites: Record<string, { borders: { l: number; t: number; r: number; b: number } }>;
 };
 
 describe('pixel menu skin', () => {
-  test('bundles v2.1.2 sprites and does not point at concept urls', () => {
-    expect(slice.version).toBe('2.1.2');
+  test('bundles v3 sprites and does not point at concept urls', () => {
+    expect(slice.version).toBe('3.0.0');
     expect(css).not.toContain('/workspace');
     expect(css.toLowerCase()).not.toContain('#000');
     expect(css).toContain('#2a1d2c');
+    expect(css).toContain('#7a3a26');
+    expect(css).toContain('#4a332c');
+    expect(css).toContain('#d2c0a4');
     expect(css).toContain('SoftballGold.woff');
     expect(css).toContain('SoftballGold.ttf');
-    expect(css).toContain('font-size: 16px');
-    expect(css).toContain('font-size: 32px');
+    expect(css).toContain('calc(32px * var(--tb-ui-scale))');
+    expect(css).toContain('calc(48px * var(--tb-ui-scale))');
+    expect(css).toContain('ascent-override: 78.125%');
+    expect(css).toContain('descent-override: 21.875%');
+    expect(css).toContain('--tb-ui-scale');
 
     const urls = [...css.matchAll(/url\('\.\/sprites\/([^']+)'\)/g)].map((match) => match[1]);
     expect(urls.length).toBeGreaterThan(8);
@@ -34,16 +41,18 @@ describe('pixel menu skin', () => {
   });
 
   test('border slices follow the atlas metadata', () => {
-    expect(slice.sprites.frame?.borders).toEqual({ l: 16, t: 16, r: 16, b: 16 });
-    expect(slice.sprites.frame_light?.borders).toEqual({ l: 8, t: 8, r: 8, b: 8 });
-    expect(slice.sprites.title_bar?.borders).toEqual({ l: 16, t: 10, r: 16, b: 16 });
-    expect(slice.sprites.header_strip?.borders).toEqual({ l: 0, t: 2, r: 0, b: 2 });
+    expect(slice.display_scale).toBe(1);
+    expect(slice.sprites.frame?.borders).toEqual({ l: 10, t: 10, r: 10, b: 10 });
+    expect(slice.sprites.frame_light?.borders).toEqual({ l: 6, t: 6, r: 6, b: 6 });
+    expect(slice.sprites.title_bar?.borders).toEqual({ l: 12, t: 8, r: 12, b: 8 });
+    expect(slice.sprites.header_strip?.borders).toEqual({ l: 0, t: 4, r: 0, b: 4 });
     expect(slice.sprites.button_normal?.borders).toEqual({ l: 8, t: 6, r: 8, b: 6 });
-    expect(css).toContain('border-image-slice: 16;');
-    expect(css).toContain('border-image-slice: 8;');
-    expect(css).toContain('border-image-slice: 10 16 16 16;');
-    expect(css).toContain('border-image-slice: 2 0 2 0 fill;');
-    expect(css).toContain('border-image-slice: 6 8 6 8;');
+    expect(slice.sprites.button_primary?.borders).toEqual({ l: 8, t: 6, r: 8, b: 6 });
+    expect(css).toContain('border-image-slice: 10 fill;');
+    expect(css).toContain('border-image-slice: 6 fill;');
+    expect(css).toContain('border-image-slice: 8 12 8 12 fill;');
+    expect(css).toContain('border-image-slice: 4 0 4 0 fill;');
+    expect(css).toContain('border-image-slice: 6 8 6 8 fill;');
   });
 
   test('the paperdoll uses the menu skin', () => {

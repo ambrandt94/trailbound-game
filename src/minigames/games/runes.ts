@@ -132,7 +132,7 @@ export const runesGame: MinigameDef = {
     }
     if (g.hud) {
       const hint = facing ? '<b>a rune glows: press Space / F</b>' : note;
-      g.hud.innerHTML = `runes ${found}/3 &nbsp; ${(g.t + penalty).toFixed(1)}s &nbsp; ${hint}<br><small>◀ ▶ ▲ ▼ or drag to orbit the camera · tap when a rune glows</small>`;
+      g.hud.innerHTML = `runes ${found}/3 &nbsp; ${(g.t + penalty).toFixed(1)}s &nbsp; ${hint}<br><small>< > ^ v or drag to orbit the camera | tap when a rune glows</small>`;
     }
   },
   status() {

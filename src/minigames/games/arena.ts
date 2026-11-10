@@ -183,8 +183,8 @@ export const arenaGame: MinigameDef = {
 
 function hud(g: { hud: HTMLElement | null }): void {
   if (!g.hud) return;
-  const hearts = '♥'.repeat(Math.max(0, state.hp)) + '♡'.repeat(3 - Math.max(0, state.hp));
-  g.hud.innerHTML = `${hearts} &nbsp; slimes ${state.kills}/5<br><small>drag or stick to move · Space / F / tap to jump · land on the slimes</small>`;
+  const hearts = `${Math.max(0, state.hp)}/3`;
+  g.hud.innerHTML = `HP ${hearts} &nbsp; slimes ${state.kills}/5<br><small>drag or stick to move | Space / F / tap to jump | land on the slimes</small>`;
 }
 
 /** Five slimes in the camera's view, inside the walk disc. */

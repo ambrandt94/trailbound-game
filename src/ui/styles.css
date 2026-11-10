@@ -358,7 +358,7 @@ input:focus-visible {
   padding: 1.2rem 1.3rem 2rem;
   background: rgba(246, 241, 230, 0.96);
   border-left: 1px solid #e4d8c4;
-  font-family: 'Trailbound Pixel', Candara, sans-serif;
+  font-family: 'Softball Gold', 'Trailbound Pixel', monospace;
   font-size: 14px;
   line-height: 1.45;
 }
@@ -771,7 +771,7 @@ input:focus-visible {
 }
 
 #mg .mg-name {
-  font-family: 'Trailbound Pixel', ui-monospace, monospace;
+  font-family: 'Softball Gold', ui-monospace, monospace;
   font-size: 1.05rem;
 }
 
@@ -828,7 +828,7 @@ input:focus-visible {
 
 #mg .mg-lines {
   margin-top: 0.35rem;
-  font-family: 'Trailbound Pixel', ui-monospace, monospace;
+  font-family: 'Softball Gold', ui-monospace, monospace;
 }
 
 #mg .mg-close {

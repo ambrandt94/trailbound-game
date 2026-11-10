@@ -234,7 +234,7 @@ export class MinigameHost {
     if (!def) return '';
     if (this.phase === 'card') return 'Space, F, or tap to close';
     const status = this.snapshot();
-    return `${def.name} · ${status.detail} · Esc quits`;
+    return `${def.name} | ${status.detail} | Esc quits`;
   }
 
   snapshot(): MinigameStatus & { id: string; phase: string } {
@@ -305,7 +305,7 @@ export class MinigameHost {
       shell.id = 'mg';
       shell.hidden = true;
       shell.innerHTML =
-        '<div id="mgfade"></div><div class="mg-side"></div><div class="mg-frame"><header class="mg-bar"><strong class="mg-name"></strong><button type="button" class="mg-quit">✕ Quit</button></header><div class="mg-hud"></div><div class="mg-stage"><canvas class="mg-2d"></canvas><canvas class="mg-3d"></canvas></div><p class="mg-foot"></p><div class="mg-card" hidden><p class="mg-message"></p><p class="mg-lines"></p><p class="mg-close">Space / F / tap to continue</p></div></div>';
+        '<div id="mgfade"></div><div class="mg-side"></div><div class="mg-frame"><header class="mg-bar"><strong class="mg-name"></strong><button type="button" class="mg-quit">Quit</button></header><div class="mg-hud"></div><div class="mg-stage"><canvas class="mg-2d"></canvas><canvas class="mg-3d"></canvas></div><p class="mg-foot"></p><div class="mg-card" hidden><p class="mg-message"></p><p class="mg-lines"></p><p class="mg-close">Space / F / tap to continue</p></div></div>';
       this.options.root.append(shell);
       this.shell = shell;
       this.fadeEl = shell.querySelector('#mgfade');
