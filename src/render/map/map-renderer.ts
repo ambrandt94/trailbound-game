@@ -9,7 +9,9 @@ import {
 import type { MapSkinId } from '../../core/state/settings';
 import { AssetLibrary } from './assets';
 import { loadTrailbound, type RegionBake, type TrailboundTiles } from './trailbound-bake';
-import { WorldRenderer } from './wm-renderer';
+import { WorldRenderer, type MapCaravanDraw } from './wm-renderer';
+
+export type { MapCaravanDraw };
 
 export interface MapDrawState {
   seed: number;
@@ -24,6 +26,8 @@ export interface MapDrawState {
   player?: PlayerState;
   entities?: MapEntity[];
   chunks?: Map<string, ChunkData>;
+  /** Caravan wagon, route, and pins. Omit to draw no wagon. */
+  caravan?: MapCaravanDraw | null;
 }
 
 /**
@@ -130,6 +134,7 @@ export class MapRenderer {
       spriteBuildings: true,
       cloudAmt: 0,
       heroYaw: state.heroYaw,
+      caravan: state.caravan ?? null,
     });
     const paintMs = performance.now() - paintStarted;
     this.drawMs = this.drawMs === 0 ? paintMs : this.drawMs * 0.8 + paintMs * 0.2;

@@ -253,6 +253,7 @@
 #ui .tb-panel,
 #ui .tb-window,
 #ui .place,
+#ui .travel-panel,
 #ui .wagon-menu {
   color: var(--tb-ink);
   background: var(--tb-cream);
@@ -1253,4 +1254,14 @@
   #ui .slider input[type='range'] {
     grid-column: 1 / -1;
   }
+}
+
+#ui .travel-panel {
+  padding: calc(8px * var(--tb-ui-scale)) calc(10px * var(--tb-ui-scale));
+}
+
+#ui .travel-panel .action {
+  min-width: 0;
+  min-height: calc(40px * var(--tb-ui-scale));
+  padding: 0 calc(10px * var(--tb-ui-scale));
 }
