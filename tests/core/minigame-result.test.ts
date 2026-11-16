@@ -36,7 +36,7 @@ test('the wagon lists hunting, cooking, eating, and washing as separate rows', (
     'Wash dishes',
   ]);
   expect(wagonMenuRows(90).map((row) => row.id)).toEqual(['sleep']);
-  expect(EAT_TU + WASH_TU).toBe(6);
+  expect(EAT_TU + WASH_TU).toBe(18);
   expect(halfActivityTu('hunt')).toBe(Math.round(HUNT_TU / 2));
   expect(halfActivityTu('cook')).toBe(Math.round(COOK_TU / 2));
   expect(halfActivityTu('eat')).toBe(Math.round(EAT_TU / 2));
