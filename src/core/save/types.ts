@@ -1,4 +1,5 @@
 import type { PlayerAvatar } from '../people/avatar';
+import type { CaravanSave } from '../sim/caravan';
 
 /**
  * Save seam from the project plan. Platform backends implement this.
@@ -47,6 +48,8 @@ export interface PackedWorld {
   worldSeed: number;
   player: PlayerSave;
   party?: PartySave;
+  /** Caravan position, route, and role. Missing on older saves; it starts on the hero. */
+  caravan?: CaravanSave;
   gameVersion: string;
   cfPin: CfPin;
 }

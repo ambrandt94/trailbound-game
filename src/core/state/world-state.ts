@@ -16,19 +16,38 @@ import {
   type ResolvedMinigame,
   type WagonActionId,
 } from '../sim/party';
-import { hoursForTu, tuOfDay } from '../sim/time';
+import { HOURS_PER_TU, hoursForTu, tuOfDay } from '../sim/time';
+import {
+  advanceCaravan,
+  appendRoute,
+  canEditRoute,
+  caravanSave,
+  caravanSpeedMod,
+  clearRoute,
+  createCaravan,
+  hasRoute,
+  loadCaravan,
+  setRoute,
+  type CaravanEvent,
+  type CaravanPlace,
+  type CaravanState,
+  type CaravanTarget,
+} from '../sim/caravan';
+import { planRoute } from '../world/route-plan';
 import { exploredTileKeys, tileExplored } from '../sim/fog';
 import { defaultPlayerState } from '../sim/player';
 import { Rng } from '../world/noise';
 import { spawnEntities, spawnResidents, stepEntities, stepResidentRoutines } from '../sim/entities';
 import { generateChunk, neighborMap } from '../world/chunk-gen';
 import {
+  Biome,
   DEFAULT_WORLD_SETTINGS,
   GAME_HOURS_PER_REAL_SEC,
   TRAVEL_SIM_BUDGET_SEC,
   TRAVEL_SIM_STEP_SEC,
   TILE,
   chunkKey,
+  biomeAt,
   clamp,
   clampSettings,
   nodeContaining,
@@ -113,6 +132,14 @@ export class WorldState {
   footprint: PlaceFootprint | null = null;
   readonly chunks = new Map<string, ChunkData>();
   readonly visited = new Set<string>();
+  /** The party's wagons on the map. Separate from the hero, who may scout on foot. */
+  caravan: CaravanState = createCaravan(0, 0);
+  /** Hero rides with the caravan. Any map move key sets this false (scouting). */
+  heroAboard = true;
+  /** True while a 3D area is open. The caravan halts until the map is back. */
+  areaHold = false;
+  /** Arrivals and stops since the scene last read them. */
+  readonly caravanEvents: CaravanEvent[] = [];
   /** Where the hero stood when the current area was entered. */
   private entryPose: HeroPose | null = null;
   private readonly areaCache = new Map<string, AreaExport>();
@@ -140,6 +167,10 @@ export class WorldState {
       this.party = createParty();
       const start = defaultPlayerStart(this.data);
       this.hero = { x: start.x, y: start.y, yaw: 0 };
+      this.caravan = createCaravan(start.x, start.y);
+      this.caravan.todayDay = Math.floor(this.clockHours / 24);
+      this.heroAboard = true;
+      this.areaHold = false;
       const home = this.data.nodes.find((node) => node.id === 'ashfen') ?? this.data.nodes[0];
       if (home) this.rememberTown(home, false);
     } else {
@@ -182,7 +213,9 @@ export class WorldState {
     return applied;
   }
 
+  /** Walk the hero. Any real step leaves the caravan: the hero is scouting on foot. */
   moveHero(dx: number, dy: number): void {
+    if (dx !== 0 || dy !== 0) this.heroAboard = false;
     const world = this.data;
     if (!world) {
       this.hero = { ...this.hero, x: this.hero.x + dx, y: this.hero.y + dy };
@@ -264,6 +297,7 @@ export class WorldState {
       world ? { width: world.width, height: world.height } : null,
     );
     this.hero = landed;
+    if (!exit.cancel) this.heroAboard = false;
     this.syncPlayer();
     this.record({ type: 'area-exit', rev: this.bump(), exit: { ...exit } });
   }
@@ -276,7 +310,7 @@ export class WorldState {
     if (result.sleep) {
       const day = Math.floor(this.clockHours / 24);
       const target = (day + 1) * 24;
-      this.addHours(Math.max(sleepHours(this.clockHours), target - this.clockHours));
+      this.addHours(Math.max(sleepHours(this.clockHours), target - this.clockHours), false);
     }
     return result.message;
   }
@@ -309,6 +343,12 @@ export class WorldState {
         yaw: this.hero.yaw,
       };
     }
+    const loaded = loadCaravan(core.caravan, this.hero);
+    this.caravan = loaded.caravan;
+    // A hero saved away from the wagons is scouting, whatever the flag says.
+    const apart = Math.hypot(this.hero.x - this.caravan.x, this.hero.y - this.caravan.y) > 1;
+    this.heroAboard = loaded.heroAboard && !apart;
+    this.areaHold = false;
     this.syncPlayer();
     this.record({ type: 'loaded', rev: this.bump() });
   }
@@ -332,16 +372,117 @@ export class WorldState {
       worldSeed: this.seed,
       player,
       party: partySave(this.party),
+      caravan: caravanSave(this.caravan, this.heroAboard),
       gameVersion: meta.gameVersion,
       cfPin: { ...meta.cfPin },
     };
   }
 
-  private addHours(hours: number): void {
+  // ---------- caravan ----------
+
+  /** Speed modifier for the caravan at a point: morale, mountains, wagon hook. */
+  caravanSpeedAt(x = this.caravan.x, y = this.caravan.y): number {
+    const world = this.data;
+    const biome = world ? biomeAt(world, wrapX(x, world.width), y) : Biome.Plains;
+    return caravanSpeedMod({
+      morale: this.party.morale,
+      inMountains: biome === Biome.Mountain || biome === Biome.Snow,
+    });
+  }
+
+  /** Settlement under a point, for caravan stops. */
+  caravanPlaceAt(x: number, y: number): CaravanPlace | null {
+    const node = this.settlementAt(x, y);
+    return node ? { id: node.id, name: node.name } : null;
+  }
+
+  /**
+   * Route the caravan to a target. `append` adds a leg from the current
+   * route end (Shift+click waypoints). Passengers cannot change the route.
+   */
+  routeCaravanTo(target: CaravanTarget, append = false): { ok: boolean; message: string } {
+    const world = this.data;
+    if (!world) return { ok: false, message: 'No map yet.' };
+    if (!canEditRoute(this.caravan)) {
+      return { ok: false, message: 'You ride as a passenger. The leader sets the route.' };
+    }
+    const extend = append && hasRoute(this.caravan);
+    const lastTarget = this.caravan.targets.at(-1);
+    const from = extend && lastTarget ? lastTarget : { x: this.caravan.x, y: this.caravan.y };
+    const plan = planRoute(world, from, target);
+    const label = target.name ?? 'that spot';
+    if (!plan) return { ok: false, message: `No overland route to ${label}.` };
+    if (extend) {
+      this.caravan = appendRoute(this.caravan, plan.points, target);
+      return { ok: true, message: `Waypoint added: ${label}.` };
+    }
+    this.caravan = setRoute(
+      this.caravan,
+      plan.points,
+      [target],
+      this.caravanPlaceAt(this.caravan.x, this.caravan.y),
+    );
+    this.caravan.todayDay = Math.floor(this.clockHours / 24);
+    return { ok: true, message: `Route set to ${label}.` };
+  }
+
+  clearCaravanRoute(): boolean {
+    if (!canEditRoute(this.caravan)) return false;
+    this.caravan = clearRoute(this.caravan);
+    return true;
+  }
+
+  /** Halt or resume. Passengers cannot. */
+  setCaravanHalted(halted: boolean): boolean {
+    if (!canEditRoute(this.caravan)) return false;
+    this.caravan = { ...this.caravan, halted };
+    return true;
+  }
+
+  /** Snap the hero back onto the caravan and ride along. */
+  rejoinCaravan(): void {
+    this.heroAboard = true;
+    this.hero = { ...this.hero, x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
+    this.syncPlayer();
+  }
+
+  /** Step off the wagon to scout on foot. */
+  leaveCaravan(): void {
+    this.heroAboard = false;
+  }
+
+  /** Drain arrivals and stops for the HUD. */
+  takeCaravanEvents(): CaravanEvent[] {
+    return this.caravanEvents.splice(0, this.caravanEvents.length);
+  }
+
+  private rollCaravan(tu: number): void {
+    if (this.areaHold || !(tu > 0)) return;
+    const day = Math.floor((this.clockHours + 1e-9) / 24);
+    const stepped = advanceCaravan(this.caravan, tu, {
+      day,
+      speedAt: (x, y) => this.caravanSpeedAt(x, y),
+      settlementAt: (x, y) => this.caravanPlaceAt(x, y),
+    });
+    const world = this.data;
+    const moved = stepped.caravan;
+    if (world) moved.x = wrapX(moved.x, world.width);
+    this.caravan = moved;
+    for (const event of stepped.events) this.caravanEvents.push(event);
+    if (this.caravanEvents.length > 8) this.caravanEvents.splice(0, this.caravanEvents.length - 8);
+    if (this.heroAboard && stepped.units > 0) {
+      this.hero = { ...this.hero, x: moved.x, y: moved.y, yaw: moved.yaw };
+      this.syncPlayer();
+    }
+  }
+
+  /** `travel` false for sleep: the clock jumps but the wagons stay put. */
+  private addHours(hours: number, travel = true): void {
     if (!(hours > 0)) return;
     const beforeDay = Math.floor(this.clockHours / 24 + 1e-9);
     const before = Math.floor(this.clockHours * 60);
     this.clockHours += hours;
+    if (travel) this.rollCaravan(hours / HOURS_PER_TU);
     const afterDay = Math.floor((this.clockHours + 1e-6) / 24);
     const nights = Math.min(30, Math.max(0, afterDay - beforeDay));
     for (let i = 0; i < nights; i++) this.party = applyOvernight(this.party);
@@ -431,6 +572,7 @@ export function createWorld(town: TownRef, seed = DEFAULT_WORLD_SEED): WorldStat
   world.seed = seed;
   world.town = { ...town };
   world.hero = { x: town.x - 2.5, y: town.y, yaw: 0 };
+  world.caravan = createCaravan(world.hero.x, world.hero.y);
   world.clockHours = START_HOUR;
   return world;
 }
