@@ -19,27 +19,27 @@ Slots marked **tint** are coloured by the renderer: neutral gray pixels (R = G =
 
 ## Slots
 
-| File | Size (per frame) | Anchor | States | What it is |
-| --- | --- | --- | --- | --- |
-| `node_socket_empty.png` | 5x5 | 2,2 | default | Recessed bezel under every bead. Shows once a TU has drained. |
-| `node_gem_lit.png` | 5x5 | 2,2 | default | **tint.** Lit bead, drawn over the socket. Top-left white pixel is the specular. |
-| `node_leading_pulse.png` | 7x7 | 3,3 | f0, f1, f2 | Highlight ring over the active bead. Loops at 7 fps. |
-| `spine_link.png` | 5x5 | 2,2 | default | Chain link stamped 5 times between beads. |
-| `fog_shroud.png` | 7x7 | 3,3 | default | Translucent mist over a bead when pre-dawn fog is on. |
-| `anchor_left_moon.png` | 13x13 | 6,6 | default | Left end-cap. 0 TU, the wrap back to 05:00. |
-| `anchor_right_dawn.png` | 13x13 | 6,6 | default | Right end-cap. 100 TU, 05:00, start of day. |
-| `medallion_sunset.png` | 11x11 | 5,5 | lit, drained | On the sunset bead (34 TU in summer). |
-| `medallion_sunrise.png` | 9x9 | 4,4 | lit, drained | On the sunrise bead (97 TU in summer). |
-| `sub_node.png` | 9x9 | 4,4 | lit, drained | **tint.** Solar noon and midnight beads. Lit well is gray. |
-| `sky_sun.png` | 7x7 | 3,3 | default | Glides across the sky strip by day. |
-| `sky_moon.png` | 7x7 | 3,3 | default | Glides across the sky strip by night. A lunar phase sheet can replace it: add states and a frame pick in the renderer. |
-| `sky_frame.png` | 8x8, 9-slice 2 | 0,0 | default | Border around the sky strip. Centre must be transparent. |
-| `terrain_mask.png` | 36x8, tiles | 0,0 | default | **tint.** Hills silhouette along the sky floor. Three 12 px hills in a repeating strip. Gray, tinted by the hour's ground colour. |
-| `cursor_pill_day.png` | 9x9, 9-slice 3 | 4,4 | default | Tooltip box by day (gold). The TU and clock text sit inside. |
-| `cursor_pill_night.png` | 9x9, 9-slice 3 | 4,4 | default | Tooltip box by night (violet). |
-| `cursor_stem_day.png` | 1x6 | 0,0 | default | Stem from the pill to the active bead. Stretched vertically. |
-| `cursor_stem_night.png` | 1x6 | 0,0 | default | Night stem. |
-| `pixel_font.png` | glyph cells 3x5 | | | Font sheet: white glyphs on transparent, tinted at draw time. Order is `font.glyphs` in the manifest; `font.widths` gives the advance of narrow glyphs (`:` `.` space). Digits, A to Z, `- . / :` and space. |
+| File                     | Size (per frame) | Anchor | States       | What it is                                                                                                                                                                                                   |
+| ------------------------ | ---------------- | ------ | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `node_socket_empty.png`  | 5x5              | 2,2    | default      | Recessed bezel under every bead. Shows once a TU has drained.                                                                                                                                                |
+| `node_gem_lit.png`       | 5x5              | 2,2    | default      | **tint.** Lit bead, drawn over the socket. Top-left white pixel is the specular.                                                                                                                             |
+| `node_leading_pulse.png` | 7x7              | 3,3    | f0, f1, f2   | Highlight ring over the active bead. Loops at 7 fps.                                                                                                                                                         |
+| `spine_link.png`         | 5x5              | 2,2    | default      | Chain link stamped 5 times between beads.                                                                                                                                                                    |
+| `fog_shroud.png`         | 7x7              | 3,3    | default      | Translucent mist over a bead when pre-dawn fog is on.                                                                                                                                                        |
+| `anchor_left_moon.png`   | 13x13            | 6,6    | default      | Left end-cap. 0 TU, the wrap back to 05:00.                                                                                                                                                                  |
+| `anchor_right_dawn.png`  | 13x13            | 6,6    | default      | Right end-cap. 100 TU, 05:00, start of day.                                                                                                                                                                  |
+| `medallion_sunset.png`   | 11x11            | 5,5    | lit, drained | On the sunset bead (34 TU in summer).                                                                                                                                                                        |
+| `medallion_sunrise.png`  | 9x9              | 4,4    | lit, drained | On the sunrise bead (97 TU in summer).                                                                                                                                                                       |
+| `sub_node.png`           | 9x9              | 4,4    | lit, drained | **tint.** Solar noon and midnight beads. Lit well is gray.                                                                                                                                                   |
+| `sky_sun.png`            | 7x7              | 3,3    | default      | Glides across the sky strip by day.                                                                                                                                                                          |
+| `sky_moon.png`           | 7x7              | 3,3    | default      | Glides across the sky strip by night. A lunar phase sheet can replace it: add states and a frame pick in the renderer.                                                                                       |
+| `sky_frame.png`          | 8x8, 9-slice 2   | 0,0    | default      | Border around the sky strip. Centre must be transparent.                                                                                                                                                     |
+| `terrain_mask.png`       | 36x8, tiles      | 0,0    | default      | **tint.** Hills silhouette along the sky floor. Three 12 px hills in a repeating strip. Gray, tinted by the hour's ground colour.                                                                            |
+| `cursor_pill_day.png`    | 9x9, 9-slice 3   | 4,4    | default      | Tooltip box by day (gold). The TU and clock text sit inside.                                                                                                                                                 |
+| `cursor_pill_night.png`  | 9x9, 9-slice 3   | 4,4    | default      | Tooltip box by night (violet).                                                                                                                                                                               |
+| `cursor_stem_day.png`    | 1x6              | 0,0    | default      | Stem from the pill to the active bead. Stretched vertically.                                                                                                                                                 |
+| `cursor_stem_night.png`  | 1x6              | 0,0    | default      | Night stem.                                                                                                                                                                                                  |
+| `pixel_font.png`         | glyph cells 3x5  |        |              | Font sheet: white glyphs on transparent, tinted at draw time. Order is `font.glyphs` in the manifest; `font.widths` gives the advance of narrow glyphs (`:` `.` space). Digits, A to Z, `- . / :` and space. |
 
 The 100 beads sit on a wave of 2.5 cycles (11 px high), 3.2 px apart, so bead sprites overlap a little on purpose: they read as one chain. Keep bead sprites to 5x5.
 

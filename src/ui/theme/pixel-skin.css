@@ -564,6 +564,8 @@
 
   #ui .hud-bar > .dc-hud {
     grid-row: 1;
+    /* Room for the "Paused" tag that hangs under the HUD. */
+    margin-bottom: calc(28px * var(--tb-ui-scale));
   }
 
   #ui .hud-bar > .clock {
