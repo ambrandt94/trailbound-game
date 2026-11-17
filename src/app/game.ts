@@ -468,8 +468,9 @@ export class Game implements GameHost {
       const convoy = this.pendingArea?.convoy;
       const driver = convoy ? new ConvoyDriver(() => this.world, convoy) : null;
       const renderer = this.makeRenderer(driver);
-      // Start hidden; the dive cross-fades the 3D canvas in.
-      this.setLayers(1, this.stack.current()?.id === 'transition' ? 0 : 1);
+      // Under a dive the 3D canvas starts hidden (the dive set it) and the map
+      // stays magnified; the dive cross-fades it in. Otherwise show it.
+      if (this.stack.current()?.id !== 'transition') this.setLayers(1, 1);
       await renderer.start(areaExport, driver ? { convoyMode: 'walk' } : undefined);
       this.world.areaHold = true;
       const view = new AreaView(this, renderer, this.pendingArea, driver);

@@ -27,6 +27,7 @@ import {
   tickPartyWagon,
 } from '../party-wagon.ts';
 import {
+  CONVOY_BENCH,
   LEASH_HINT_M,
   convoyBench,
   convoySlot,
@@ -691,7 +692,7 @@ export async function createTownSession(canvas, hooks) {
       const drawn = convoyWagonPose();
       p.x = seat.x;
       p.z = seat.z;
-      p.y = (drawn ? drawn.y : seat.y - 1.18) + 1.18;
+      p.y = (drawn ? drawn.y : seat.y - CONVOY_BENCH.y) + CONVOY_BENCH.y;
       p.yaw = seat.yaw;
       p.vx = p.vz = p.vy = 0;
       p.g = true;

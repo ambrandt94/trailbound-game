@@ -11,6 +11,7 @@ import {
   type CaravanStepEnv,
 } from '../../src/core/sim/caravan';
 import {
+  BENCH_REACH_M,
   CONVOY_BENCH,
   CONVOY_RECUT_EDGE_M,
   CONVOY_SIDE_M,
@@ -185,6 +186,9 @@ test('convoy modes: walk until input, bench toggles, free re-latches or is pulle
   const free = { ...base, mode: 'free' as const, dist: 20, slotDist: 18 };
   expect(nextConvoyMode(free)).toBe('free');
   expect(nextConvoyMode({ ...free, rejoin: true })).toBe('walk');
+  // Too far to climb aboard: the bench key walks the hero back first.
+  expect(nextConvoyMode({ ...free, bench: true })).toBe('walk');
+  expect(nextConvoyMode({ ...free, dist: BENCH_REACH_M, bench: true })).toBe('bench');
   expect(nextConvoyMode({ ...free, dist: LEASH_PULL_M + 1 })).toBe('walk');
   expect(nextConvoyMode({ ...free, dist: LEASH_PULL_M + 1, hasInput: true })).toBe('free');
   expect(nextConvoyMode({ ...free, slotDist: 1, idleSec: 1 })).toBe('walk');

@@ -40,8 +40,10 @@ export const FOLLOW_SPRINT_MPS = 5.5;
 export const CONVOY_RECUT_EDGE_M = 16;
 /** A re-cut centres the new window this far ahead of the wagon along the route. */
 export const CONVOY_LOOKAHEAD_M = 24;
+/** The bench toggle only seats a hero this close to the wagon; farther, it walks them back. */
+export const BENCH_REACH_M = 6;
 /** Bench seat in wagon space (+Z tongue, +X the wagon's left), metres. */
-export const CONVOY_BENCH = { x: 0.32, y: 1.18, z: 1.42 } as const;
+export const CONVOY_BENCH = { x: 0.32, y: 1.32, z: 1.62 } as const;
 
 export type ConvoyMode = 'walk' | 'bench' | 'free';
 export type LeashState = 'ok' | 'hint' | 'pull';
@@ -194,7 +196,10 @@ export interface ConvoyModeInput {
  * by the slot. The bench toggles; a move key steps off it.
  */
 export function nextConvoyMode(input: ConvoyModeInput): ConvoyMode {
-  if (input.bench) return input.mode === 'bench' ? 'walk' : 'bench';
+  if (input.bench) {
+    if (input.mode === 'bench') return 'walk';
+    return input.dist <= BENCH_REACH_M ? 'bench' : 'walk';
+  }
   if (input.rejoin) return 'walk';
   if (input.mode === 'bench') return input.hasInput ? 'free' : 'bench';
   if (input.hasInput) return 'free';
