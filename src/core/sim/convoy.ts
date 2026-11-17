@@ -163,8 +163,6 @@ export function followVelocity(
     vx = (vx / len) * cap;
     vz = (vz / len) * cap;
   }
-  // Inside half a metre of the slot, never walk slower than the wagon's own
-  // drift, so the hero does not stutter between walk and idle.
   return { vx, vz, slotDist };
 }
 
