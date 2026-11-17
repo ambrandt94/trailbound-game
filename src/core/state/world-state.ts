@@ -1,5 +1,5 @@
 import { buildAreaExport, type AreaExport } from '../area/build-area';
-import { resolveAreaAt } from '../area/area-window';
+import { resolveAreaAt, resolveConvoyArea } from '../area/area-window';
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import type { CfPin, PackedWorld, PlayerSave, PartySave } from '../save/types';
@@ -19,6 +19,7 @@ import {
 import { HOURS_PER_TU, hoursForTu, tuOfDay } from '../sim/time';
 import {
   advanceCaravan,
+  advanceCaravanTiles,
   appendRoute,
   canEditRoute,
   caravanSave,
@@ -26,7 +27,9 @@ import {
   clearRoute,
   createCaravan,
   hasRoute,
+  isRolling,
   loadCaravan,
+  mapClockRuns,
   setRoute,
   type CaravanEvent,
   type CaravanPlace,
@@ -34,6 +37,7 @@ import {
   type CaravanTarget,
 } from '../sim/caravan';
 import { planRoute } from '../world/route-plan';
+import { tileToLocal, type AreaFrame, type ConvoyBounds } from '../sim/convoy';
 import { exploredTileKeys, tileExplored } from '../sim/fog';
 import { defaultPlayerState } from '../sim/player';
 import { Rng } from '../world/noise';
@@ -105,6 +109,14 @@ export interface AreaEntry {
 export interface AreaHandoff {
   areaExport: AreaExport;
   entry: AreaEntry;
+  /** Set when the area is a convoy window cut around the rolling caravan. */
+  convoy?: ConvoyHandoff;
+}
+
+/** Where a convoy window sits: local metres ↔ fine world tiles, and its playable box. */
+export interface ConvoyHandoff {
+  frame: AreaFrame;
+  bounds: ConvoyBounds;
 }
 
 export type WorldEvent =
@@ -136,7 +148,10 @@ export class WorldState {
   caravan: CaravanState = createCaravan(0, 0);
   /** Hero rides with the caravan. Any map move key sets this false (scouting). */
   heroAboard = true;
-  /** True while a 3D area is open. The caravan halts until the map is back. */
+  /**
+   * True while a 3D area is open. The clock no longer rolls the caravan; a
+   * convoy area moves it by the metres its wagon covers (`rollConvoy`).
+   */
   areaHold = false;
   /** Arrivals and stops since the scene last read them. */
   readonly caravanEvents: CaravanEvent[] = [];
@@ -256,6 +271,63 @@ export class WorldState {
     const resolved = resolveAreaAt(world, x, y);
     if (!resolved) return null;
     return this.bakeArea(world, resolved.node, resolved.cacheKey);
+  }
+
+  /**
+   * Convoy window centred on a point (the caravan, or a spot ahead of it on
+   * the route), with the route painted through it as a track. Not cached:
+   * the window moves with the wagons. Null in a settlement or on water.
+   */
+  buildConvoyHandoff(x = this.caravan.x, y = this.caravan.y): AreaHandoff | null {
+    const world = this.data;
+    if (!world || !hasRoute(this.caravan)) return null;
+    const resolved = resolveConvoyArea(world, x, y);
+    if (!resolved) return null;
+    this.entryPose = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
+    this.footprint = null;
+    const node = resolved.node;
+    this.town = { id: node.id, name: node.name, x: node.cx, y: node.cy };
+    const areaExport = buildAreaExport(world, node, {
+      timeOfDayHours: this.clockHours,
+      trail: this.caravan.route,
+    });
+    const frame: AreaFrame = {
+      innerOrigin: { ...areaExport.area.innerOrigin },
+      metersPerTile: areaExport.units.metersPerTile,
+    };
+    const min = tileToLocal(frame, resolved.minX, resolved.minY);
+    const max = tileToLocal(frame, resolved.maxX + 1, resolved.maxY + 1);
+    return {
+      areaExport,
+      entry: { placeId: node.id, placeName: node.name, tier: tierForKind(node.kind) },
+      convoy: { frame, bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z } },
+    };
+  }
+
+  /** True when the map clock should run this frame. See `mapClockRuns`. */
+  mapClockRuns(heroMoving: boolean): boolean {
+    return mapClockRuns(this.caravan, heroMoving);
+  }
+
+  /** Roll the caravan by the metres the 3D convoy wagon covered. */
+  rollConvoy(tiles: number): number {
+    if (!(tiles > 0) || !isRolling(this.caravan)) return 0;
+    return this.applyRoll(advanceCaravanTiles(this.caravan, tiles, this.caravanEnv()));
+  }
+
+  /** Put the hero back on the map after a convoy area: aboard, or where they walked to. */
+  leaveConvoy(at: { x: number; y: number; yaw: number }, aboard: boolean): void {
+    const world = this.data;
+    if (aboard) {
+      this.heroAboard = true;
+      this.hero = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
+    } else {
+      this.heroAboard = false;
+      const x = world ? wrapX(at.x, world.width) : at.x;
+      const y = world ? clamp(at.y, 0.5, world.height - 0.5) : at.y;
+      this.hero = { x, y, yaw: at.yaw };
+    }
+    this.syncPlayer();
   }
 
   isExplored(x: number, y: number): boolean {
@@ -458,12 +530,22 @@ export class WorldState {
 
   private rollCaravan(tu: number): void {
     if (this.areaHold || !(tu > 0)) return;
-    const day = Math.floor((this.clockHours + 1e-9) / 24);
-    const stepped = advanceCaravan(this.caravan, tu, {
-      day,
-      speedAt: (x, y) => this.caravanSpeedAt(x, y),
-      settlementAt: (x, y) => this.caravanPlaceAt(x, y),
-    });
+    this.applyRoll(advanceCaravan(this.caravan, tu, this.caravanEnv()));
+  }
+
+  private caravanEnv() {
+    return {
+      day: Math.floor((this.clockHours + 1e-9) / 24),
+      speedAt: (x: number, y: number) => this.caravanSpeedAt(x, y),
+      settlementAt: (x: number, y: number) => this.caravanPlaceAt(x, y),
+    };
+  }
+
+  private applyRoll(stepped: {
+    caravan: CaravanState;
+    events: CaravanEvent[];
+    units: number;
+  }): number {
     const world = this.data;
     const moved = stepped.caravan;
     if (world) moved.x = wrapX(moved.x, world.width);
@@ -474,6 +556,7 @@ export class WorldState {
       this.hero = { ...this.hero, x: moved.x, y: moved.y, yaw: moved.yaw };
       this.syncPlayer();
     }
+    return stepped.units;
   }
 
   /** `travel` false for sleep: the clock jumps but the wagons stay put. */

@@ -586,7 +586,18 @@ export interface AreaExportOptions {
    * world's settings are the defaults and no place override is applied.
    */
   residents?: ResidentDefaults & { override?: ResidentOverride | null };
+  /**
+   * Caravan route through the area, flat `[x0, y0, x1, y1, …]` in fine world
+   * tiles. Grass under it becomes a dirt track and loose props step aside,
+   * so the 3D convoy has a corridor to roll down.
+   */
+  trail?: readonly number[];
 }
+
+/** Half width of a painted caravan track, metres. */
+export const TRAIL_HALF_M = 2.1;
+/** Trees, rocks, and plants this close to the track centre are dropped. */
+export const TRAIL_CLEAR_M = 3.6;
 
 const NOTES = [
   'Street chunks are regenerated in (y, x) order for two passes. Edges do not depend on which neighbour the session generated first.',
@@ -758,6 +769,10 @@ export function buildAreaExport(
     if (plan.dropNotes.length)
       notes.push(`dropped ${plan.dropped}: ${plan.dropNotes.slice(0, 8).join('; ')}`);
     for (const warning of plan.warnings) notes.push(`layout: ${warning}`);
+  }
+  if (opts.trail && opts.trail.length >= 4) {
+    paintTrail(ground, gw, gh, originX, originY, opts.trail);
+    clearTrailProps(props, opts.trail);
   }
   for (let i = 0; i < ground.length; i++) {
     if (surface[i] === 0 && (ground[i] === GROUND.road || ground[i] === GROUND.dirt))
@@ -1621,6 +1636,90 @@ function pushSprite(
     ...(klass === 'tree' && spr.scale !== undefined ? { scale: spr.scale } : {}),
     ...(spr.variant ? { variant: spr.variant } : {}),
   });
+}
+
+/** Trail segments in absolute inner tiles (metres), clipped to a box with a margin. */
+function trailSegments(
+  trail: readonly number[],
+  box: { x0: number; y0: number; x1: number; y1: number },
+  pad: number,
+): Array<[number, number, number, number]> {
+  const out: Array<[number, number, number, number]> = [];
+  for (let i = 2; i + 1 < trail.length; i += 2) {
+    const ax = trail[i - 2]! * ZONE_SCALE;
+    const ay = trail[i - 1]! * ZONE_SCALE;
+    const bx = trail[i]! * ZONE_SCALE;
+    const by = trail[i + 1]! * ZONE_SCALE;
+    if (Math.max(ax, bx) < box.x0 - pad || Math.min(ax, bx) > box.x1 + pad) continue;
+    if (Math.max(ay, by) < box.y0 - pad || Math.min(ay, by) > box.y1 + pad) continue;
+    out.push([ax, ay, bx, by]);
+  }
+  return out;
+}
+
+function segmentDistance(px: number, py: number, seg: [number, number, number, number]): number {
+  const [ax, ay, bx, by] = seg;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 1e-9 ? Math.min(1, Math.max(0, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+/** Grass, field, and park cells under the route become dirt. Roads, lots, and water stay. */
+function paintTrail(
+  ground: Uint8Array,
+  gw: number,
+  gh: number,
+  originX: number,
+  originY: number,
+  trail: readonly number[],
+): void {
+  const segs = trailSegments(
+    trail,
+    { x0: originX, y0: originY, x1: originX + gw, y1: originY + gh },
+    TRAIL_HALF_M + 1,
+  );
+  if (!segs.length) return;
+  const soft = new Set<number>([GROUND.grass, GROUND.field, GROUND.park, GROUND.sand]);
+  for (const seg of segs) {
+    const minX = Math.max(0, Math.floor(Math.min(seg[0], seg[2]) - originX - TRAIL_HALF_M - 1));
+    const maxX = Math.min(gw - 1, Math.ceil(Math.max(seg[0], seg[2]) - originX + TRAIL_HALF_M + 1));
+    const minY = Math.max(0, Math.floor(Math.min(seg[1], seg[3]) - originY - TRAIL_HALF_M - 1));
+    const maxY = Math.min(gh - 1, Math.ceil(Math.max(seg[1], seg[3]) - originY + TRAIL_HALF_M + 1));
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const gi = x + y * gw;
+        if (!soft.has(ground[gi] ?? -1)) continue;
+        if (segmentDistance(originX + x + 0.5, originY + y + 0.5, seg) <= TRAIL_HALF_M) {
+          ground[gi] = GROUND.dirt;
+        }
+      }
+    }
+  }
+}
+
+function clearTrailProps(props: AreaProp[], trail: readonly number[]): void {
+  if (!props.length) return;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const prop of props) {
+    x0 = Math.min(x0, prop.x);
+    y0 = Math.min(y0, prop.y);
+    x1 = Math.max(x1, prop.x);
+    y1 = Math.max(y1, prop.y);
+  }
+  const segs = trailSegments(trail, { x0, y0, x1, y1 }, TRAIL_CLEAR_M);
+  if (!segs.length) return;
+  for (let i = props.length - 1; i >= 0; i--) {
+    const prop = props[i]!;
+    if (prop.class !== 'tree' && prop.class !== 'rock' && prop.class !== 'plant') continue;
+    if (segs.some((seg) => segmentDistance(prop.x, prop.y, seg) <= TRAIL_CLEAR_M)) {
+      props.splice(i, 1);
+    }
+  }
 }
 
 function reliefFor(

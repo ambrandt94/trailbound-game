@@ -249,6 +249,15 @@ export function splitRoute(caravan: CaravanState): { done: number[]; rest: numbe
 }
 
 /**
+ * The map clock runs only while something travels: the caravan is rolling
+ * (it has a route, is not halted, and has not arrived) or the hero walks
+ * under move input. Chores, minigames, and sleep still spend their own TU.
+ */
+export function mapClockRuns(caravan: CaravanState, heroMoving: boolean): boolean {
+  return heroMoving || isRolling(caravan);
+}
+
+/**
  * Roll the caravan for `tu` of clock time. Halted or routeless caravans do
  * not move. Entering a settlement that is not the destination halts the
  * caravan; reaching the route end clears the route.
@@ -258,21 +267,46 @@ export function advanceCaravan(
   tu: number,
   env: CaravanStepEnv,
 ): { caravan: CaravanState; events: CaravanEvent[]; units: number } {
+  return roll(caravan, env, tu, (next, step) => {
+    const speed = Math.max(0, env.speedAt(next.x, next.y));
+    return unitsToTiles(step * CARAVAN_UNITS_PER_TU * speed);
+  });
+}
+
+/**
+ * Roll the caravan a set distance in fine tiles, whatever the clock did.
+ * The 3D convoy uses this: the wagon on screen is the caravan, so the map
+ * advances by the metres the wagon covered. Stops and arrival match
+ * `advanceCaravan`.
+ */
+export function advanceCaravanTiles(
+  caravan: CaravanState,
+  tiles: number,
+  env: CaravanStepEnv,
+): { caravan: CaravanState; events: CaravanEvent[]; units: number } {
+  return roll(caravan, env, tiles, (_next, step) => step);
+}
+
+/** Shared sub-stepper. `budget` is TU or tiles; `tilesFor` turns a slice into tiles. */
+function roll(
+  caravan: CaravanState,
+  env: CaravanStepEnv,
+  budget: number,
+  tilesFor: (next: CaravanState, step: number) => number,
+): { caravan: CaravanState; events: CaravanEvent[]; units: number } {
   const events: CaravanEvent[] = [];
   let next = caravan;
   if (next.todayDay !== env.day) next = { ...next, todayDay: env.day, todayUnits: 0 };
-  if (!(tu > 0) || !isRolling(next)) return { caravan: next, events, units: 0 };
+  if (!(budget > 0) || !isRolling(next)) return { caravan: next, events, units: 0 };
   next = { ...next };
   const dest = next.targets.at(-1) ?? null;
-  let left = tu;
+  let left = budget;
   let units = 0;
   while (left > 1e-9) {
     const step = Math.min(left, ADVANCE_STEP_TU);
     left -= step;
-    const speed = Math.max(0, env.speedAt(next.x, next.y));
-    const du = step * CARAVAN_UNITS_PER_TU * speed;
     const before = next.along;
-    next.along = Math.min(next.length, next.along + unitsToTiles(du));
+    next.along = Math.min(next.length, next.along + Math.max(0, tilesFor(next, step)));
     units += tilesToUnits(next.along - before);
     const at = pointAlong(next.route, next.along);
     next.x = at.x;
