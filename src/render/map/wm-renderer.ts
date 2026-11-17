@@ -1453,9 +1453,12 @@ export class WorldRenderer {
       heroYaw?: number;
       /** The caravan: wagon at its real position, plus its route and pins. */
       caravan?: MapCaravanDraw | null;
+      /** Settlement outlines, names, and pins. Off for the dive's bare terrain frames. */
+      markers?: boolean;
     },
   ): void {
     this.caravanDraw = opts.caravan ?? null;
+    this.drawMarkers = opts.markers ?? true;
     this.chunkDestPx = Math.max(1, camera.scale * TILE);
     this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2, 0.5, 4.5);
     this.heroYaw = opts.heroYaw ?? 0;
@@ -2300,6 +2303,9 @@ export class WorldRenderer {
     return false;
   }
 
+  /** Cleared by a bare frame (the dive): no settlement outlines, names, or pins. */
+  private drawMarkers = true;
+
   private drawOutlines(
     ctx: CanvasRenderingContext2D,
     nodes: MapNode[],
@@ -2313,6 +2319,8 @@ export class WorldRenderer {
     camX = Number.NaN,
     camY = Number.NaN,
   ): void {
+    // Close-zoom pins draw even with outlines off; a bare frame drops them too.
+    if (!this.drawMarkers) return;
     const overlay = clamp(amt, 0, 1);
     if (overlay < 0.01 && !hoveredId && detailT < 0.35 && !context) return;
     const political = smoothstep(0.28, 1, overlay);

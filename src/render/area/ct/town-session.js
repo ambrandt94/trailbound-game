@@ -19,7 +19,23 @@ import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
 import { oakLoadMs, oakReady } from '../oak-batch.ts';
 import { updateCameraOcclusion } from '../occlusion-view.ts';
-import { mountPartyWagon, tickPartyWagon } from '../party-wagon.ts';
+import { DIVE_CAM_DIST_M, DIVE_CAM_PITCH_DEG, wrapDeg } from '../dive-camera.ts';
+import {
+  convoyWagonMounted,
+  convoyWagonPose,
+  driveConvoyWagon,
+  mountPartyWagon,
+  tickPartyWagon,
+} from '../party-wagon.ts';
+import {
+  CONVOY_BENCH,
+  LEASH_HINT_M,
+  convoyBench,
+  convoySlot,
+  followVelocity,
+  nextConvoyMode,
+  stickFor,
+} from '../../../core/sim/convoy.ts';
 import { signPlacement } from '../../../core/world/minigame-play.ts';
 
 const DEF = {
@@ -626,12 +642,88 @@ export async function createTownSession(canvas, hooks) {
       stepSnap: 0.45,
     };
   }
+  /* Convoy: the party wagon rolls along the caravan route and the hero walks
+     beside it, rides the bench, or walks free on a soft leash. */
+  let convoyFrame = null;
+  const cv = { mode: 'walk', idle: 0, dist: 0, slotDist: 0, bench: false, rejoin: false, leash: 'ok', auto: null };
+  function convoyPose() {
+    if (!convoyFrame || !convoyWagonMounted()) return null;
+    const drawn = convoyWagonPose();
+    return { x: convoyFrame.x, z: convoyFrame.z, yaw: drawn ? drawn.yaw : convoyFrame.yaw, speed: convoyFrame.speed };
+  }
+  function convoyStep(dt, p) {
+    const wagon = convoyPose();
+    cv.auto = null;
+    if (!wagon) return false;
+    const I = p.i;
+    const hasInput = Math.abs(I.r - I.l) > 0.05 || Math.abs(I.u - I.d) > 0.05 || !!I.jp;
+    cv.idle = hasInput ? 0 : cv.idle + dt;
+    cv.dist = Math.hypot(p.x - wagon.x, p.z - wagon.z);
+    const slot = convoySlot(wagon);
+    cv.slotDist = Math.hypot(p.x - slot.x, p.z - slot.z);
+    const was = cv.mode;
+    const next = nextConvoyMode({
+      mode: was,
+      hasInput,
+      dist: cv.dist,
+      slotDist: cv.slotDist,
+      idleSec: cv.idle,
+      bench: cv.bench,
+      rejoin: cv.rejoin,
+    });
+    cv.bench = false;
+    cv.rejoin = false;
+    if (p.hop) return false;
+    if (next === 'bench' && was !== 'bench') {
+      const seat = convoyBench(wagon, gAt(wagon.x, wagon.z, 0));
+      cv.mode = 'bench';
+      hopTo(p, seat.x, seat.z, seat.y, null, null, 0.42, 0.55);
+      return true;
+    }
+    if (was === 'bench' && next !== 'bench') {
+      const to = convoySlot(wagon);
+      cv.mode = next;
+      cv.idle = 0;
+      hopTo(p, to.x, to.z, gAt(to.x, to.z, 0), null, null, 0.42, 0.45);
+      return true;
+    }
+    cv.mode = next;
+    if (next === 'bench') {
+      const seat = convoyBench(wagon, gAt(wagon.x, wagon.z, 0));
+      const drawn = convoyWagonPose();
+      p.x = seat.x;
+      p.z = seat.z;
+      p.y = (drawn ? drawn.y : seat.y - CONVOY_BENCH.y) + CONVOY_BENCH.y;
+      p.yaw = seat.yaw;
+      p.vx = p.vz = p.vy = 0;
+      p.g = true;
+      if (p.st !== 'idle') {
+        p.st = 'idle';
+        p.t = 0;
+      }
+      return true;
+    }
+    if (next === 'walk') {
+      const want = followVelocity(p, wagon);
+      const stick = stickFor(want.vx, want.vz, P.camYaw);
+      cv.auto = stick.speed > 0 ? stick : { ix: 0, iz: 0, speed: 0 };
+    }
+    return false;
+  }
+  function convoyLeash() {
+    if (!convoyFrame) return 'ok';
+    if (cv.dist <= LEASH_HINT_M) return 'ok';
+    return cv.mode === 'walk' ? 'pull' : 'hint';
+  }
+
   function step(dt, p) {
     const I = p.i;
     if (!p.n) clock += dt;
+    if (!p.n && !p.fs && convoyStep(dt, p)) return;
     if (pre(p, dt)) return;
-    const ix = clamp(I.r - I.l + (I.gx || 0), -1, 1);
-    const iz = clamp(I.u - I.d - (I.gy || 0), -1, 1);
+    const auto = !p.n ? cv.auto : null;
+    const ix = auto ? auto.ix : clamp(I.r - I.l + (I.gx || 0), -1, 1);
+    const iz = auto ? auto.iz : clamp(I.u - I.d - (I.gy || 0), -1, 1);
     const jumpPressed = !!I.jp;
     const dodgePressed = !!I.dj;
     I.jp = false;
@@ -643,10 +735,10 @@ export async function createTownSession(canvas, hooks) {
         iz,
         jumpPressed,
         dodgePressed,
-        sneak: !!(I.c || I.gsn),
-        sprint: !!(I.s || I.gsp),
+        sneak: auto ? false : !!(I.c || I.gsn),
+        sprint: auto ? false : !!(I.s || I.gsp),
       },
-      motorParams(p),
+      auto ? { ...motorParams(p), walkMps: Math.max(0.05, auto.speed) } : motorParams(p),
       {
         groundY: (x, z, y) => gAt(x, z, y),
         clampXZ: (x, z, nx, nz) => {
@@ -658,6 +750,10 @@ export async function createTownSession(canvas, hooks) {
       },
       dt,
     );
+    if (auto && p.st === 'walk' && Math.hypot(p.vx, p.vz) > 2.2) {
+      p.st = 'run';
+      p.gear = 'run';
+    }
     if (p.y < -10 && window.TBArea && TBArea.active()) {
       const s = TBArea.spawn();
       p.x = s.x + (p.n ? 1.2 : 0);
@@ -772,6 +868,12 @@ export async function createTownSession(canvas, hooks) {
   }
 
   const cs = { d: P.camDist, p: P.camPitch, f: P.camFov, h: 0.8 };
+  /* Camera sweep for the map dive: { kind: 'in' | 'out', t, dur }. The view
+     also turns between north-up (the map) and the player's orbit yaw. */
+  let sweep = null;
+  let yawOff = 0;
+  const SWEEP_D = DIVE_CAM_DIST_M;
+  const SWEEP_P = DIVE_CAM_PITCH_DEG;
   const cq = { d: P.camDist, p: P.camPitch, f: P.camFov, h: 0.8 };
   const ctA = new THREE.Vector3();
   const ctB = new THREE.Vector3();
@@ -935,14 +1037,17 @@ export async function createTownSession(canvas, hooks) {
   }
   function placeCam(c, target, d, pitch, look) {
     const pth = pitch == null ? (cs.p * Math.PI) / 180 : pitch;
-    const th = (P.camYaw * Math.PI) / 180;
+    const th = ((P.camYaw + yawOff) * Math.PI) / 180;
     const lx = look ? look.x : target.x;
     const ly = look ? look.y : target.y;
     const lz = look ? look.z : target.z;
     c.fov = cs.f;
+    /* Soft floor at 0.4 m. Written overflow-safe: a high dive camera would
+       push exp() to Infinity. */
+    const soft = (ly + cs.h + Math.sin(pth) * d - 0.4) * 6;
     c.position.set(
       lx + Math.sin(th) * Math.cos(pth) * d,
-      0.4 + Math.log(1 + Math.exp((ly + cs.h + Math.sin(pth) * d - 0.4) * 6)) / 6,
+      0.4 + (soft > 30 ? soft : Math.log1p(Math.exp(soft))) / 6,
       lz + Math.cos(th) * Math.cos(pth) * d,
     );
     c.lookAt(lx, ly + cs.h, lz);
@@ -1043,9 +1148,19 @@ export async function createTownSession(canvas, hooks) {
       canvas.style.imageRendering = crisp ? 'pixelated' : 'auto';
     }
     const ink = !(vis && vis.outline === 0);
-    const ks = 1 - Math.exp(-fdt * 7);
-    cq.d += (P.camDist - cq.d) * ks;
-    cq.p += (P.camPitch - cq.p) * ks;
+    /* Dive in: the camera starts high over the scene and eases down to the
+       follow view. Rise out: it climbs back toward the map's top-down look. */
+    if (sweep) sweep.t += fdt;
+    const sweeping = !!sweep && sweep.t < sweep.dur;
+    const rising = sweeping && sweep.kind === 'out';
+    const ks = 1 - Math.exp(-fdt * (sweeping ? (rising ? 3.2 : 2.4) : 7));
+    if (sweep && !sweeping && sweep.kind === 'in') sweep = null;
+    yawOff += ((rising ? -wrapDeg(P.camYaw) : 0) - yawOff) * ks;
+    if (!sweep && Math.abs(yawOff) < 1e-3) yawOff = 0;
+    const wantD = rising ? SWEEP_D : P.camDist;
+    const wantP = rising ? SWEEP_P : P.camPitch;
+    cq.d += (wantD - cq.d) * ks;
+    cq.p += (wantP - cq.p) * ks;
     cq.f += (P.camFov - cq.f) * ks;
     cq.h += ((isTP() ? 1.35 : 0.8) - cq.h) * ks;
     cs.d += (cq.d - cs.d) * ks;
@@ -1187,8 +1302,10 @@ export async function createTownSession(canvas, hooks) {
       }
       if (entry) applyEntry(entry);
       const spawn = window.TBArea && TBArea.spawn ? TBArea.spawn() : { x: PLS[0].x, z: PLS[0].z, yaw: PLS[0].yaw };
+      convoyFrame = hooks.getConvoy ? hooks.getConvoy() : null;
       try {
         await mountPartyWagon({
+          pose: convoyFrame ? { x: convoyFrame.x, z: convoyFrame.z, yaw: convoyFrame.yaw } : null,
           scene,
           blocks: BX,
           things: TH,
@@ -1203,6 +1320,20 @@ export async function createTownSession(canvas, hooks) {
         console.warn('party wagon', error);
       }
       mountMinigameSigns();
+      if (convoyFrame && convoyWagonMounted()) {
+        const p = PLS[0];
+        const wagon = { x: convoyFrame.x, z: convoyFrame.z, yaw: convoyFrame.yaw, speed: 0 };
+        const start = entry && entry.pos && typeof entry.pos === 'object' ? entry.pos : convoySlot(wagon);
+        cv.mode = entry && entry.convoyMode ? entry.convoyMode : 'walk';
+        p.x = start.x;
+        p.z = start.z;
+        p.yaw = typeof entry?.yaw === 'number' ? entry.yaw : convoyFrame.yaw;
+        p.y = gAt(p.x, p.z, 2);
+        p.vx = p.vy = p.vz = 0;
+        p.g = true;
+        p.snap = true;
+        driveConvoyWagon(convoyFrame, (x, z) => (TBArea.groundY ? TBArea.groundY(x, z) : 0), 1);
+      }
       applyExternalLook();
       if (!hooks.getLook) goView(0);
       started = true;
@@ -1223,6 +1354,10 @@ export async function createTownSession(canvas, hooks) {
       }
       applyPad(PLS[0].i, actions.p1 || blankActions().p1);
       if (NP > 1) applyPad(PLS[1].i, actions.p2 || blankActions().p2);
+      convoyFrame = hooks.getConvoy ? hooks.getConvoy() : null;
+      if (convoyFrame && convoyWagonMounted()) {
+        driveConvoyWagon(convoyFrame, (x, z) => (TBArea.groundY ? TBArea.groundY(x, z) : 0), dt);
+      }
       const taken = takeSimSteps(simAcc, dt, P.slow);
       simAcc = taken.acc;
       const h = 1 / 120;
@@ -1308,6 +1443,27 @@ export async function createTownSession(canvas, hooks) {
     },
     indoors() {
       return zoneOf(PLS[0]) === 1;
+    },
+    cameraDistance() {
+      return cs.d;
+    },
+    convoyStatus() {
+      if (!convoyFrame || !convoyWagonMounted()) return null;
+      const p = PLS[0];
+      return { mode: cv.mode, leash: convoyLeash(), dist: cv.dist, x: p.x, z: p.z, yaw: p.yaw };
+    },
+    convoyCommand(command) {
+      if (command === 'bench') cv.bench = true;
+      else if (command === 'rejoin') cv.rejoin = true;
+    },
+    cameraSweep(kind, seconds) {
+      const dur = Math.max(0.05, +seconds || 1);
+      sweep = { kind: kind === 'out' ? 'out' : 'in', t: 0, dur };
+      if (sweep.kind === 'in') {
+        cq.d = cs.d = SWEEP_D;
+        cq.p = cs.p = SWEEP_P;
+        yawOff = -wrapDeg(P.camYaw);
+      }
     },
     bounds() {
       if (!window.TBArea || !TBArea.walkClamp) return null;

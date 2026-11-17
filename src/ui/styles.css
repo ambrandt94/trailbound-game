@@ -1060,6 +1060,33 @@ input:focus-visible {
   padding: 0.35rem 0.75rem;
 }
 
+.travel-paused {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #2e1510;
+  color: #ffd27a;
+  font-size: 0.85em;
+}
+
+.travel-mode {
+  color: #3f5a2a;
+}
+
+.travel-leash {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.6rem;
+  background: #2e1510;
+  color: #ffd27a;
+}
+
+.travel-panel .action.rejoin-wagon,
 .travel-panel .action.rejoin {
   background: #c65a24;
   border-color: #8a3412;

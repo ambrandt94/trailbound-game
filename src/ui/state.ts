@@ -50,6 +50,20 @@ export interface TravelHud {
   eta: string;
   /** Fable speed modifier right now. */
   speed: number;
+  /** The map clock is frozen: nothing is travelling. */
+  clockPaused: boolean;
+  /** Map HUD or the 3D convoy HUD. */
+  view: 'map' | 'area';
+  /** 3D convoy readout. Null on the map and in areas without a rolling route. */
+  convoy: ConvoyHud | null;
+}
+
+export interface ConvoyHud {
+  mode: 'walk' | 'bench' | 'free';
+  /** `hint` past 30 m, `pull` while walking back past 40 m. */
+  leash: 'ok' | 'hint' | 'pull';
+  /** Hero to the lead wagon, metres. */
+  dist: number;
 }
 export const travelHud = signal<TravelHud | null>(null);
 /** Registered minigames, filled by the app so settings can launch them. */
@@ -72,6 +86,10 @@ export interface UiCommands {
   rejoinCaravan(): void;
   fitRoute(): void;
   openWagon(): void;
+  /** 3D convoy: sit on the wagon bench, or step down to walk beside it. */
+  toggleBench(): void;
+  /** 3D convoy: walk back to the wagon. */
+  rejoinWagon(): void;
 }
 
 export const commands: UiCommands = {
@@ -120,6 +138,12 @@ export const commands: UiCommands = {
   fitRoute() {
     return;
   },
+  toggleBench() {
+    return;
+  },
+  rejoinWagon() {
+    return;
+  },
   openWagon() {
     return;
   },
@@ -142,4 +166,6 @@ export function bindCommands(next: UiCommands): void {
   commands.rejoinCaravan = next.rejoinCaravan;
   commands.fitRoute = next.fitRoute;
   commands.openWagon = next.openWagon;
+  commands.toggleBench = next.toggleBench;
+  commands.rejoinWagon = next.rejoinWagon;
 }

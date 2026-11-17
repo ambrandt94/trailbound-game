@@ -25,6 +25,7 @@ import {
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
   DRAFT_CLIP_NAMES,
+  DRAFT_PLAYBACK_CAP,
   HITCH_SOCKET,
   PACK_OX_PIN,
   PACK_OX_SCALE,
@@ -79,6 +80,12 @@ interface HitchState {
 }
 
 let hitch: HitchState | null = null;
+/** Mixer cap. The convoy raises it so a walking-pace wagon does not drag the ox's feet. */
+let playbackCap = DRAFT_PLAYBACK_CAP;
+
+export function setPackOxPlaybackCap(cap: number): void {
+  playbackCap = Number.isFinite(cap) && cap > 0 ? cap : DRAFT_PLAYBACK_CAP;
+}
 
 export function tickPackOx(dt: number): void {
   const live = hitch;
@@ -89,7 +96,7 @@ export function tickPackOx(dt: number): void {
   live.last = now;
   const name = draftClip(speed, live.hitched, DRAFT_CLIP_NAMES);
   const clip = live.ox.creature.clips[name];
-  const rate = name === 'Idle' || !clip ? 1 : draftTimeScale(speed, clip.speedMps);
+  const rate = name === 'Idle' || !clip ? 1 : draftTimeScale(speed, clip.speedMps, playbackCap);
   live.ox.present(name, rate);
   live.ox.update(dt);
   const at = live.ox.root.getWorldPosition(new Vector3());

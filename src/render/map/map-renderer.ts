@@ -28,6 +28,8 @@ export interface MapDrawState {
   chunks?: Map<string, ChunkData>;
   /** Caravan wagon, route, and pins. Omit to draw no wagon. */
   caravan?: MapCaravanDraw | null;
+  /** Terrain only (no labels, pins, hero, or wagon) while the dive magnifies the map. */
+  bare?: boolean;
 }
 
 /**
@@ -122,19 +124,20 @@ export class MapRenderer {
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.worldRenderer.draw(ctx, world, drawn, player, cssW, cssH, {
-      showOutlines: true,
-      showPois: true,
+      showOutlines: !state.bare,
+      showPois: !state.bare,
       hoveredId: null,
       hoveredPoiId: null,
       hoveredEntityId: null,
       detailNode: null,
-      entities: state.entities ?? [],
+      entities: state.bare ? [] : (state.entities ?? []),
       chunks: state.chunks,
-      showPlayer: true,
+      showPlayer: !state.bare,
       spriteBuildings: true,
       cloudAmt: 0,
       heroYaw: state.heroYaw,
-      caravan: state.caravan ?? null,
+      caravan: state.bare ? null : (state.caravan ?? null),
+      markers: !state.bare,
     });
     const paintMs = performance.now() - paintStarted;
     this.drawMs = this.drawMs === 0 ? paintMs : this.drawMs * 0.8 + paintMs * 0.2;

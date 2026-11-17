@@ -62,6 +62,7 @@ import {
   screen,
   settings,
   settingsOpen,
+  travelHud,
 } from '../ui/state';
 import {
   adoptPlayerBody,
@@ -77,7 +78,7 @@ import {
 import type { PlayerAvatar } from '../core/people/avatar';
 import type { Clock } from './fixed-step';
 import { FrameClock } from './fixed-step';
-import type { AppMode, GameHost } from './host';
+import type { AppMode, AreaLanding, GameHost } from './host';
 import { SceneStack } from './scene-stack';
 import { AreaView } from './scenes/area-view';
 import { MinigameScene } from './scenes/minigame-scene';
@@ -85,6 +86,12 @@ import { BootScene } from './scenes/boot';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
 import { TransitionScene } from './scenes/transition';
+import { DIVE_BARE_MAGNIFY, DIVE_MAP_MAGNIFY, DIVE_MAX_MAGNIFY, DiveScene } from './scenes/dive';
+import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
+import { ConvoyDriver } from './convoy-driver';
+import { resolveAreaAt } from '../core/area/area-window';
+import { hasRoute } from '../core/sim/caravan';
+import type { AreaEntry } from '../render/area/area-from-export';
 import { codeForTouchAction } from './touch-wire';
 import { CF_PIN, GAME_VERSION, PLAYER_NAME, SAVE_SLOT } from './version';
 
@@ -243,17 +250,137 @@ export class Game implements GameHost {
     if (this.mapScene && !this.mapScene.allowEnter()) return;
     // With the caravan, the area is cut where the wagons stand.
     const world = this.world;
-    const handoff = world.heroAboard
-      ? world.buildHandoffHere(world.caravan.x, world.caravan.y)
-      : world.buildHandoffHere();
-    if (!handoff) {
+    const at = this.diveTarget();
+    if (world.data && !resolveAreaAt(world.data, at.x, at.y)) {
       hint.value = 'Open water. Walk ashore to enter.';
       return;
     }
-    // The caravan halts while the player is in 3D (step 2 moves it there).
+    // The clock no longer rolls the caravan; a convoy area moves it by the wagon's metres.
     world.areaHold = true;
-    this.pendingArea = handoff;
-    void this.stack.push(new TransitionScene(this, 'to-area'));
+    this.pendingArea = null;
+    void this.stack.push(new DiveScene(this, 'to-area'));
+  }
+
+  mapReturnScale = 0.6;
+
+  diveTarget(): { x: number; y: number } {
+    const world = this.world;
+    return world.heroAboard
+      ? { x: world.caravan.x, y: world.caravan.y }
+      : { x: world.hero.x, y: world.hero.y };
+  }
+
+  mapPose(): { x: number; y: number; scale: number } {
+    return this.mapScene?.cameraPose() ?? { ...this.diveTarget(), scale: 1 };
+  }
+
+  mapCloseScale(): number {
+    return this.mapScene?.closestScale() ?? 1;
+  }
+
+  diveMap(x: number, y: number, scale: number): void {
+    this.mapScene?.diveTo(x, y, scale);
+  }
+
+  endMapDive(): void {
+    this.mapScene?.endDive();
+  }
+
+  settleMapReturn(): void {
+    this.mapScene?.settleAreaReturn();
+  }
+
+  setLayers(mapMagnify: number, areaOpacity: number): void {
+    // Magnified, the map's screen-sized labels and sprites would balloon.
+    this.mapScene?.setBare(mapMagnify > DIVE_BARE_MAGNIFY);
+    const map = this.options.mapCanvas.style;
+    if (Math.abs(mapMagnify - 1) < 1e-3) {
+      map.transform = '';
+      map.transformOrigin = '';
+    } else {
+      map.transformOrigin = '50% 50%';
+      map.transform = `scale(${mapMagnify.toFixed(4)})`;
+    }
+    const area = this.options.areaCanvas.style;
+    area.opacity = areaOpacity >= 0.999 ? '' : Math.max(0, areaOpacity).toFixed(3);
+    this.options.root.dataset.dive = Math.abs(mapMagnify - 1) < 1e-3 ? '' : mapMagnify.toFixed(2);
+  }
+
+  areaSweep(kind: 'in' | 'out', seconds: number): void {
+    this.areaScene?.sweep(kind, seconds);
+  }
+
+  areaCameraDistance(): number | null {
+    return this.areaScene?.cameraDistance() ?? null;
+  }
+
+  diveMagnify(): number {
+    const map = this.mapScene;
+    if (!map) return DIVE_MAP_MAGNIFY;
+    const mapPx = map.pxPerMetre(map.closestScale());
+    const view = this.options.areaCanvas.clientHeight || this.options.mapCanvas.clientHeight;
+    const areaPx = areaPxPerMetre(view, DIVE_CAM_DIST_M, settings.value.look.camFov);
+    const ratio = areaPx / mapPx;
+    return Number.isFinite(ratio)
+      ? Math.min(DIVE_MAX_MAGNIFY, Math.max(1.5, ratio))
+      : DIVE_MAP_MAGNIFY;
+  }
+
+  landFromArea(exit: AreaExit | undefined, landing: AreaLanding | null): void {
+    clearAreaLeaveOverlay(this.options.fade.ownerDocument);
+    if (landing) this.world.leaveConvoy(landing, landing.aboard);
+    else if (exit) this.world.placeHeroOutside(exit);
+  }
+
+  /** Bake the area the dive lands in: a convoy window when the hero rides a routed caravan. */
+  private bakeHere(): AreaHandoff | null {
+    const world = this.world;
+    if (!world.heroAboard) return world.buildHandoffHere();
+    const convoy = hasRoute(world.caravan) ? world.buildConvoyHandoff() : null;
+    return convoy ?? world.buildHandoffHere(world.caravan.x, world.caravan.y);
+  }
+
+  /**
+   * Re-cut the convoy window around `centre` (fine tiles) and boot a fresh
+   * renderer for it. The caller swaps it in under a short dip.
+   */
+  async recutConvoy(
+    centre: { x: number; y: number },
+    entry: (pos: ConvoyDriver) => AreaEntry,
+  ): Promise<{ renderer: AreaRenderer; driver: ConvoyDriver; handoff: AreaHandoff } | null> {
+    const handoff = this.world.buildConvoyHandoff(centre.x, centre.y);
+    if (!handoff?.convoy) return null;
+    const driver = new ConvoyDriver(() => this.world, handoff.convoy);
+    const renderer = this.makeRenderer(driver);
+    try {
+      await renderer.start(handoff.areaExport, entry(driver));
+    } catch (error) {
+      renderer.dispose();
+      console.warn('convoy recut', error);
+      return null;
+    }
+    return { renderer, driver, handoff };
+  }
+
+  private makeRenderer(driver: ConvoyDriver | null): AreaRenderer {
+    return new AreaRenderer(this.options.areaCanvas, {
+      getActions: () =>
+        this.minigames.locksAreaInput() ? lockedAreaActions() : this.keyboard.areaActions(),
+      onExit: (info) => {
+        this.areaScene?.leaveFromController(info);
+      },
+      getLook: () => this.areaLook(),
+      onLook: (patch) => {
+        this.applyLook(patch);
+      },
+      onWagon: () => {
+        this.openWagon();
+      },
+      onMinigame: (id: string) => {
+        this.openMinigame(id);
+      },
+      getConvoy: () => driver?.frame() ?? null,
+    });
   }
 
   /** Open a registered minigame. Instance games pause the area on the scene stack. */
@@ -353,9 +480,8 @@ export class Game implements GameHost {
 
   async buildArea(): Promise<void> {
     if (this.areaScene) return;
-    let view: AreaView | null = null;
     try {
-      if (!this.pendingArea && this.world.data) this.pendingArea = this.world.buildHandoffHere();
+      if (!this.pendingArea && this.world.data) this.pendingArea = this.bakeHere();
       const areaExport = this.pendingArea
         ? this.pendingArea.areaExport
         : !this.world.data || this.townFixture
@@ -364,47 +490,38 @@ export class Game implements GameHost {
             )
           : null;
       if (!areaExport) throw new Error('Open water. Walk ashore to enter.');
-      const renderer = new AreaRenderer(this.options.areaCanvas, {
-        getActions: () =>
-          this.minigames.locksAreaInput() ? lockedAreaActions() : this.keyboard.areaActions(),
-        onExit: (info) => {
-          view?.leaveFromController(info);
-        },
-        getLook: () => this.areaLook(),
-        onLook: (patch) => {
-          this.applyLook(patch);
-        },
-        onWagon: () => {
-          this.openWagon();
-        },
-        onMinigame: (id: string) => {
-          this.openMinigame(id);
-        },
-      });
-      await renderer.start(areaExport);
+      const convoy = this.pendingArea?.convoy;
+      const driver = convoy ? new ConvoyDriver(() => this.world, convoy) : null;
+      const renderer = this.makeRenderer(driver);
+      // Under a dive the 3D canvas starts hidden (the dive set it) and the map
+      // stays magnified; the dive cross-fades it in. Otherwise show it.
+      if (this.stack.current()?.id !== 'transition') this.setLayers(1, 1);
+      await renderer.start(areaExport, driver ? { convoyMode: 'walk' } : undefined);
       this.world.areaHold = true;
-      view = new AreaView(this, renderer, this.pendingArea);
+      const view = new AreaView(this, renderer, this.pendingArea, driver);
       this.areaScene = view;
       this.stack.insertUnderTop(view);
       this.setView('area');
     } catch (error) {
       this.world.areaHold = false;
+      this.setLayers(1, 1);
       hint.value = error instanceof Error ? error.message : 'Could not start the 3D view';
     }
   }
 
-  leaveArea(exit?: AreaExit): void {
+  leaveArea(exit?: AreaExit, opts: { landed?: boolean; keepLayers?: boolean } = {}): void {
     clearAreaLeaveOverlay(this.options.fade.ownerDocument);
     if (this.areaScene) {
       this.stack.remove(this.areaScene);
       this.areaScene = null;
     }
-    if (exit) this.world.placeHeroOutside(exit);
+    if (exit && !opts.landed) this.world.placeHeroOutside(exit);
     this.world.areaHold = false;
     this.mapScene?.noteAreaReturn();
     wagonOpen.value = false;
+    travelHud.value = null;
     this.setView('map');
-    this.setFade(1);
+    if (!opts.keepLayers) this.setFade(1);
     void this.persist();
   }
 
@@ -596,6 +713,12 @@ export class Game implements GameHost {
       },
       fitRoute: () => {
         this.mapScene?.fitRoute();
+      },
+      toggleBench: () => {
+        this.areaScene?.convoyCommand('bench');
+      },
+      rejoinWagon: () => {
+        this.areaScene?.convoyCommand('rejoin');
       },
       openWagon: () => {
         this.openWagon();

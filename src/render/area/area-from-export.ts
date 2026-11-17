@@ -15,6 +15,8 @@ export interface AreaEntry {
   side?: string;
   pos?: number | { x: number; z: number };
   yaw?: number;
+  /** Convoy areas: how the hero starts (beside the wagon, on the bench, or on foot). */
+  convoyMode?: 'walk' | 'bench' | 'free';
 }
 
 export type FixtureId = 'veldcross' | 'hollowmere' | 'jadewild';

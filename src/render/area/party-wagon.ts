@@ -20,7 +20,8 @@ import {
   type Object3D,
 } from 'three';
 import { oakTrunkRadius } from '../../core/world/oak-dress';
-import { hitchPackOx, tickPackOx } from './pack-ox';
+import { hitchPackOx, setPackOxPlaybackCap, tickPackOx } from './pack-ox';
+import { draftFootprint } from '../../core/content/creature-pack';
 import {
   WAGON_BOX,
   WAGON_USE_RADIUS_M,
@@ -33,6 +34,7 @@ import {
   wagonHitsBlock,
   wagonNearPoint,
   wagonSpotClear,
+  wagonWorld,
   type WagonBlock,
   type WagonCandidate,
 } from '../../core/world/wagon';
@@ -40,6 +42,8 @@ import { oakInstances } from './oak-batch';
 
 export interface WagonMount {
   scene: { add(object: unknown): void };
+  /** Convoy: stand here, on the route, instead of searching for a parking spot. */
+  pose?: { x: number; z: number; yaw: number } | null;
   blocks: WagonBlock[];
   things: Array<Record<string, unknown>>;
   spawn: { x: number; z: number; yaw?: number };
@@ -51,12 +55,15 @@ export interface WagonMount {
 }
 
 export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate | null> {
+  convoy = null;
+  setPackOxPlaybackCap(0);
   const yaw = Number.isFinite(mount.spawn.yaw) ? (mount.spawn.yaw as number) : 0;
-  const spots = wagonCandidates(mount.spawn.x, mount.spawn.z, yaw);
-  const spot =
-    chooseWagonSpot(spots, (candidate) => wagonSpotClear(clearance(mount, candidate))) ??
-    spots[0] ??
-    null;
+  const spots = mount.pose ? [] : wagonCandidates(mount.spawn.x, mount.spawn.z, yaw);
+  const spot = mount.pose
+    ? { x: mount.pose.x, z: mount.pose.z, yaw: mount.pose.yaw }
+    : (chooseWagonSpot(spots, (candidate) => wagonSpotClear(clearance(mount, candidate))) ??
+      spots[0] ??
+      null);
   if (!spot) return null;
   const y = mount.groundY(spot.x, spot.z);
   const group = new Group();
@@ -68,14 +75,16 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   group.add(model);
   mount.scene.add(group);
   const body = wagonBodyAabb(spot);
-  mount.blocks.push({
+  const wagonBlock = {
     x: body.x,
     z: body.z,
     w: body.w,
     d: body.d,
     h: y + body.h,
     y0: y,
-  } as WagonBlock & { h: number; y0: number });
+  } as MovingBlock;
+  mount.blocks.push(wagonBlock);
+  const before = mount.blocks.length;
   try {
     await hitchPackOx({
       group,
@@ -89,7 +98,7 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   }
   const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
   posted.__tbWagon = { x: spot.x, z: spot.z, y };
-  mount.things.push({
+  const thing: Record<string, unknown> = {
     k: 'fn',
     label: 'F: Wagon',
     x: spot.x,
@@ -101,8 +110,121 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
       mount.onOpen();
       return '';
     },
-  });
+  };
+  mount.things.push(thing);
+  if (mount.pose) {
+    const oxRoot = group.getObjectByName('pack-ox') ?? null;
+    const oxBlock =
+      mount.blocks.length > before ? (mount.blocks[mount.blocks.length - 1] as MovingBlock) : null;
+    convoy = {
+      group,
+      model,
+      wagonBlock,
+      oxBlock,
+      oxLocal: oxRoot ? { x: oxRoot.position.x, z: oxRoot.position.z } : null,
+      oxRoot,
+      thing,
+      phase: 0,
+      yaw: spot.yaw,
+    };
+    // PullWalk is authored at 0.32 m/s; let it play fast enough for a walking wagon.
+    setPackOxPlaybackCap(4.2);
+  }
   return spot;
+}
+
+type MovingBlock = WagonBlock & { h: number; y0: number };
+
+interface ConvoyRig {
+  group: Group;
+  model: Object3D;
+  wagonBlock: MovingBlock;
+  oxBlock: MovingBlock | null;
+  oxLocal: { x: number; z: number } | null;
+  oxRoot: Object3D | null;
+  thing: Record<string, unknown>;
+  phase: number;
+  yaw: number;
+}
+
+let convoy: ConvoyRig | null = null;
+
+/** True while the party wagon is the moving convoy wagon. */
+export function convoyWagonMounted(): boolean {
+  return convoy !== null;
+}
+
+/** Smoothed wagon pose as drawn (yaw eases through route corners). */
+export function convoyWagonPose(): { x: number; z: number; yaw: number; y: number } | null {
+  if (!convoy) return null;
+  const g = convoy.group.position;
+  return { x: g.x, z: g.z, yaw: convoy.yaw, y: g.y };
+}
+
+/**
+ * Put the convoy wagon on its route pose. Yaw eases through the route's
+ * corners, the body pitches with the ground under its wheels, and the bed
+ * bobs while it rolls. Collision boxes and the F prompt follow it.
+ */
+export function driveConvoyWagon(
+  pose: { x: number; z: number; yaw: number; speed: number },
+  groundY: (x: number, z: number) => number,
+  dt: number,
+): void {
+  const rig = convoy;
+  if (!rig) return;
+  const turn = 1 - Math.exp(-Math.max(0, dt) * 3.2);
+  let d = pose.yaw - rig.yaw;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  rig.yaw += d * turn;
+  const fx = Math.sin(rig.yaw);
+  const fz = Math.cos(rig.yaw);
+  const y = groundY(pose.x, pose.z);
+  const front = groundY(pose.x + fx * 1.6, pose.z + fz * 1.6);
+  const back = groundY(pose.x - fx * 1.6, pose.z - fz * 1.6);
+  const pitch = Math.atan2(front - back, 3.2);
+  const moving = pose.speed > 0.05;
+  if (moving) rig.phase += dt * Math.max(0.6, pose.speed) * 2.4;
+  const g = rig.group;
+  g.rotation.order = 'YXZ';
+  g.position.set(pose.x, y, pose.z);
+  g.rotation.set(-Math.max(-0.35, Math.min(0.35, pitch)), rig.yaw, 0);
+  const bob = moving ? Math.sin(rig.phase * Math.PI * 2) : 0;
+  rig.model.position.y = Math.abs(bob) * 0.035;
+  rig.model.rotation.z = (moving ? Math.sin(rig.phase * Math.PI) : 0) * 0.012;
+  const spot = { x: pose.x, z: pose.z, yaw: rig.yaw };
+  const body = wagonBodyAabb(spot);
+  Object.assign(rig.wagonBlock, {
+    x: body.x,
+    z: body.z,
+    w: body.w,
+    d: body.d,
+    h: y + body.h,
+    y0: y,
+  });
+  if (rig.oxRoot && rig.oxLocal) {
+    // Keep the ox's hooves on the ground under it, not on the wagon's plane.
+    const at = wagonWorld(spot, rig.oxLocal.x, rig.oxLocal.z);
+    const oxGround = groundY(at.x, at.z);
+    rig.oxRoot.position.y = (oxGround - y) * Math.cos(pitch);
+  }
+  if (rig.oxBlock && rig.oxLocal) {
+    const foot = draftFootprint(spot, rig.oxLocal);
+    const oxY = groundY(foot.x, foot.z);
+    Object.assign(rig.oxBlock, {
+      x: foot.x,
+      z: foot.z,
+      w: foot.w,
+      d: foot.d,
+      h: oxY + 1.25,
+      y0: oxY,
+    });
+  }
+  rig.thing.x = pose.x;
+  rig.thing.z = pose.z;
+  rig.thing.y = y;
+  const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
+  posted.__tbWagon = { x: pose.x, z: pose.z, y };
 }
 
 /** Advance the hitched ox. Stopped wagons idle; a moving wagon uses PullWalk. */

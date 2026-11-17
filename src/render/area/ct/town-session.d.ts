@@ -6,6 +6,22 @@ export interface TownExitInfo {
   yaw?: number;
 }
 
+export interface ConvoyFrame {
+  x: number;
+  z: number;
+  yaw: number;
+  speed: number;
+}
+
+export interface ConvoyStatus {
+  mode: 'walk' | 'bench' | 'free';
+  leash: 'ok' | 'hint' | 'pull';
+  dist: number;
+  x: number;
+  z: number;
+  yaw: number;
+}
+
 export interface TownSession {
   start(areaExport: AreaExport, entry?: AreaEntry): Promise<void>;
   step(dt: number): void;
@@ -17,6 +33,11 @@ export interface TownSession {
     draw(scene: import('three').Scene, camera: import('three').Camera): void;
   };
   indoors(): boolean;
+  convoyStatus(): ConvoyStatus | null;
+  convoyCommand(command: 'bench' | 'rejoin'): void;
+  cameraSweep(kind: 'in' | 'out', seconds: number): void;
+  /** Current follow-camera distance, metres. */
+  cameraDistance(): number;
   bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null;
   stats(): { fps: number; calls: number; triangles: number; view: string; name: string };
   dispose(): void;
@@ -58,5 +79,6 @@ export function createTownSession(
     onLook?: (patch: unknown) => void;
     onWagon?: () => void;
     onMinigame?: (id: string) => void;
+    getConvoy?: () => ConvoyFrame | null;
   },
 ): Promise<TownSession>;

@@ -103,6 +103,50 @@ export function cutAreaWindow(world: WorldData, x: number, y: number): AreaWindo
 }
 
 /**
+ * A window centred on a point rather than snapped to the grid. The 3D convoy
+ * cuts these around the rolling wagon, so the route runs through the middle.
+ * Same size, biome pick, and seed mix as `cutAreaWindow`.
+ */
+export function cutConvoyWindow(world: WorldData, x: number, y: number): AreaWindow {
+  const span = Math.max(1, Math.min(AREA_WINDOW_TILES, world.width, world.height));
+  let x0 = Math.round(x - span / 2);
+  let y0 = Math.round(y - span / 2);
+  x0 = Math.min(world.width - span, Math.max(0, x0));
+  y0 = Math.min(world.height - span, Math.max(0, y0));
+  const x1 = x0 + span;
+  const y1 = y0 + span;
+  const tiles: Vec2[] = [];
+  for (let yy = y0; yy < y1; yy++) {
+    for (let xx = x0; xx < x1; xx++) tiles.push({ x: xx, y: yy });
+  }
+  return {
+    id: `convoy-${x0}-${y0}`,
+    x0,
+    y0,
+    x1,
+    y1,
+    tiles,
+    biome: dominantLandBiome(world, tiles),
+    seed: windowSeed(world.seed, x0, y0),
+  };
+}
+
+/** Convoy area around a point. Null on deep water or inside a settlement. */
+export function resolveConvoyArea(world: WorldData, x: number, y: number): ResolvedArea | null {
+  if (settlementNodeAt(world, x, y)) return null;
+  if (!landStand(world, x, y)) return null;
+  const window = cutConvoyWindow(world, x, y);
+  return {
+    node: nodeFromWindow(window),
+    cacheKey: `convoy:${window.x0}:${window.y0}`,
+    minX: window.x0,
+    minY: window.y0,
+    maxX: window.x1 - 1,
+    maxY: window.y1 - 1,
+  };
+}
+
+/**
  * Settlement under the traveller, otherwise the snapped wilderness window.
  * Null when they are standing on deep water, or on shallow water with no land in reach.
  */

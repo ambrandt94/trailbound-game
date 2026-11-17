@@ -1,5 +1,13 @@
 import { areaFromExport, type AreaEntry, type AreaExport } from './area-from-export';
-import { createTownSession, type TownExitInfo, type TownSession } from './ct/town-session.js';
+import {
+  createTownSession,
+  type ConvoyFrame,
+  type ConvoyStatus,
+  type TownExitInfo,
+  type TownSession,
+} from './ct/town-session.js';
+
+export type { ConvoyFrame, ConvoyStatus };
 
 export interface AreaPose {
   x: number;
@@ -40,6 +48,8 @@ export interface AreaHooks {
   onWagon?(): void;
   /** F on a fish or chop sign. */
   onMinigame?(id: string): void;
+  /** Convoy wagon pose in area metres, read every step. Null parks the wagon. */
+  getConvoy?(): ConvoyFrame | null;
 }
 
 export class AreaRenderer {
@@ -82,6 +92,24 @@ export class AreaRenderer {
     return this.session?.indoors() ?? false;
   }
 
+  /** Hero mode and leash beside the convoy wagon. Null without a convoy. */
+  convoyStatus(): ConvoyStatus | null {
+    return this.session?.convoyStatus() ?? null;
+  }
+
+  convoyCommand(command: 'bench' | 'rejoin'): void {
+    this.session?.convoyCommand(command);
+  }
+
+  /** `in` starts high and eases down to the follow camera; `out` climbs back up. */
+  cameraDistance(): number | null {
+    return this.session ? this.session.cameraDistance() : null;
+  }
+
+  cameraSweep(kind: 'in' | 'out', seconds: number): void {
+    this.session?.cameraSweep(kind, seconds);
+  }
+
   bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
     return this.session?.bounds() ?? null;
   }
@@ -105,6 +133,7 @@ export class AreaRenderer {
       onLook: (patch: unknown) => this.hooks.onLook?.(patch),
       onWagon: () => this.hooks.onWagon?.(),
       onMinigame: (id: string) => this.hooks.onMinigame?.(id),
+      getConvoy: () => this.hooks.getConvoy?.() ?? null,
     });
     if (this.disposed) {
       session.dispose();
