@@ -136,7 +136,7 @@ function medallion(size, ring, ringLight, wellRows) {
 
 // ------------------------------------------------------------------ nodes
 
-const nodeSocketEmpty = grid(['.OOO.', 'OSssO', 'OsssO', 'OsssO', '.OOO.']);
+const nodeSocketEmpty = grid(['.qqq.', 'qSssq', 'qsssq', 'qsssq', '.qqq.']);
 
 const nodeGemLit = grid(['.....', '.WGa.', '.GGg.', '.agg.', '.....']);
 
