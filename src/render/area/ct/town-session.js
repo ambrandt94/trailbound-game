@@ -1038,9 +1038,12 @@ export async function createTownSession(canvas, hooks) {
     const ly = look ? look.y : target.y;
     const lz = look ? look.z : target.z;
     c.fov = cs.f;
+    /* Soft floor at 0.4 m. Written overflow-safe: a high dive camera would
+       push exp() to Infinity. */
+    const soft = (ly + cs.h + Math.sin(pth) * d - 0.4) * 6;
     c.position.set(
       lx + Math.sin(th) * Math.cos(pth) * d,
-      0.4 + Math.log(1 + Math.exp((ly + cs.h + Math.sin(pth) * d - 0.4) * 6)) / 6,
+      0.4 + (soft > 30 ? soft : Math.log1p(Math.exp(soft))) / 6,
       lz + Math.cos(th) * Math.cos(pth) * d,
     );
     c.lookAt(lx, ly + cs.h, lz);
