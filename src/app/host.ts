@@ -44,6 +44,8 @@ export interface GameHost {
   landFromArea(exit: AreaExit | undefined, landing: AreaLanding | null): void;
   /** Map point the dive lands on: the caravan when the hero rides with it. */
   diveTarget(): { x: number; y: number };
+  /** Map scale before the last dive in; the dive out pulls back to it. */
+  mapReturnScale: number;
   /** Map camera centre (fine tiles) and scale. */
   mapPose(): { x: number; y: number; scale: number };
   /** Closest scale the 2D map draws. */

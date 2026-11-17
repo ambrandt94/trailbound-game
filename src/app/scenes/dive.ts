@@ -12,7 +12,7 @@ export const DIVE_SWEEP_SEC = 1.6;
 /** Leaving: the 3D camera climbs while the map fades back in, seconds. */
 export const RISE_SEC = 0.8;
 /** Leaving: the magnified map pulls back out to its normal scale, seconds. */
-export const SETTLE_SEC = 0.8;
+export const SETTLE_SEC = 1.0;
 /** Fallback CSS magnification at the bottom of the dive (no map to measure). */
 export const DIVE_MAP_MAGNIFY = 3.2;
 /** Past this CSS magnification the map drops labels, pins, and sprites. */
@@ -85,6 +85,7 @@ export class DiveScene implements Scene {
     if (this.direction === 'to-area') {
       const target = this.host.diveTarget();
       this.from = this.host.mapPose();
+      this.host.mapReturnScale = this.from.scale;
       this.to = { x: target.x, y: target.y, scale: this.host.mapCloseScale() };
       this.phase = 'zoom';
       return;
@@ -149,9 +150,21 @@ export class DiveScene implements Scene {
         return;
       }
       case 'settle': {
-        const e = easeInOut(clamp01(this.elapsed / SETTLE_SEC));
-        this.host.setLayers(this.settleFrom ** (1 - e), 0);
-        if (e >= 1) this.finish('map');
+        // The dive in, played backwards: out of the CSS magnification, then
+        // the map scale eases back to where it was before Enter.
+        const u = clamp01(this.elapsed / SETTLE_SEC);
+        const hero = this.host.world.hero;
+        const close = this.host.mapCloseScale();
+        const back = Math.min(close, this.host.mapReturnScale);
+        const pose = divePose(
+          { x: hero.x, y: hero.y, scale: back },
+          { x: hero.x, y: hero.y, scale: close },
+          1 - u,
+          this.settleFrom,
+        );
+        this.host.diveMap(pose.x, pose.y, pose.scale);
+        this.host.setLayers(pose.magnify, 0);
+        if (u >= 1) this.finish('map');
         return;
       }
       default:
@@ -171,6 +184,8 @@ export class DiveScene implements Scene {
   private finish(next: 'map' | 'area'): void {
     if (this.phase === 'done') return;
     this.phase = 'done';
+    // Under the opaque 3D view, put the map back at its pre-dive scale.
+    if (next === 'area') this.host.diveMap(this.to.x, this.to.y, this.from.scale);
     this.host.setLayers(1, 1);
     this.host.endMapDive();
     this.host.enqueue(() => {

@@ -261,6 +261,8 @@ export class Game implements GameHost {
     void this.stack.push(new DiveScene(this, 'to-area'));
   }
 
+  mapReturnScale = 0.6;
+
   diveTarget(): { x: number; y: number } {
     const world = this.world;
     return world.heroAboard
