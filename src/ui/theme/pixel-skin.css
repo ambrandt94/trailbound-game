@@ -467,31 +467,122 @@
   outline-offset: calc(2px * var(--tb-ui-scale));
 }
 
+/*
+ * Top bar: supplies on the left, the day-cycle HUD in the middle, the buttons and
+ * caravan panel stacked on the right. The middle column is as wide as the HUD.
+ */
 #ui .hud-bar {
   position: absolute;
   z-index: 2;
   top: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-top, 0px));
   left: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-left, 0px));
   right: max(calc(12px * var(--tb-ui-scale)), env(safe-area-inset-right, 0px));
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: calc(10px * var(--tb-ui-scale));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: calc(10px * var(--tb-ui-scale));
+  row-gap: calc(10px * var(--tb-ui-scale));
   width: auto;
-  max-width: calc(100% - 24px * var(--tb-ui-scale));
+  max-width: none;
   margin: 0;
   transform: none;
   pointer-events: none;
 }
 
-#ui .hud-actions {
+#ui .hud-bar > .clock {
+  grid-column: 1;
+  justify-self: start;
+}
+
+#ui .hud-bar > .dc-hud {
+  grid-column: 2;
+}
+
+#ui .hud-right {
+  grid-column: 3;
+  justify-self: end;
+  width: 100%;
   display: flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
   gap: calc(10px * var(--tb-ui-scale));
+  min-width: 0;
   max-width: 100%;
+  pointer-events: none;
+}
+
+#ui .hud-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: calc(10px * var(--tb-ui-scale));
+  width: min(23rem, 100%);
+}
+
+#ui .hud-right .travel-panel .eyebrow {
+  flex-wrap: wrap;
+  white-space: normal;
+}
+
+#ui .hud-actions .pill.skin,
+#ui .hud-actions .pill.avatar {
+  grid-column: 1 / -1;
+}
+
+/* Wide screens have room for one row. */
+@media (min-width: 1900px) {
+  #ui .hud-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: auto;
+  }
+
+  #ui .hud-actions .pill.skin,
+  #ui .hud-actions .pill.avatar {
+    grid-column: auto;
+  }
+}
+
+#ui .hud-right .travel-panel {
+  position: static;
+  width: min(23rem, 100%);
+}
+
+/* Narrow screens: the HUD takes the top row, everything else drops below it. */
+@media (max-width: 1000px) {
+  #ui .hud-bar {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  #ui .hud-bar > .dc-hud,
+  #ui .hud-bar > .clock,
+  #ui .hud-right {
+    grid-column: 1;
+  }
+
+  #ui .hud-bar > .dc-hud {
+    grid-row: 1;
+  }
+
+  #ui .hud-bar > .clock {
+    grid-row: 2;
+    justify-self: center;
+  }
+
+  #ui .hud-right {
+    grid-row: 3;
+    justify-self: center;
+    align-items: center;
+  }
+
+  #ui .hud-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: auto;
+  }
 }
 
 #ui .hud-bar .pill {
@@ -527,11 +618,11 @@
 }
 
 #ui .pill.clock {
-  flex: 1 1 16rem;
   flex-direction: column;
   align-items: flex-start;
   max-width: 100%;
-  min-width: min(100%, 16rem);
+  min-width: 0;
+  min-height: 0;
   font-variant-numeric: tabular-nums;
   white-space: normal;
 }
@@ -541,8 +632,8 @@
   max-width: 100%;
   margin: 0;
   color: var(--tb-muted);
-  font-size: var(--tb-size-body);
-  line-height: var(--tb-line);
+  font-size: calc(16px * var(--tb-ui-scale));
+  line-height: calc(24px * var(--tb-ui-scale));
   white-space: normal;
   overflow-wrap: anywhere;
 }

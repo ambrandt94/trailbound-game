@@ -33,8 +33,9 @@ const PAL = {
   m: rgba('#b58938'), // frame mid
   l: rgba('#f3cf7a'), // frame light
   w: rgba('#0c0e16'), // well
-  s: rgba('#191e2e'), // empty socket
-  S: rgba('#10131f'), // empty socket, shaded
+  s: rgba('#3b4568'), // empty socket (slate, not black)
+  S: rgba('#2e3858'), // empty socket, shaded
+  q: rgba('#54425e'), // empty socket outline (plum, not black)
   W: rgba('#ffffff'), // specular
   G: rgba('#f4f4f4'), // tint body
   g: rgba('#c8c8c8'), // tint shade
@@ -135,21 +136,9 @@ function medallion(size, ring, ringLight, wellRows) {
 
 // ------------------------------------------------------------------ nodes
 
-const nodeSocketEmpty = grid([
-  '.OOO.',
-  'OSssO',
-  'OsssO',
-  'OsssO',
-  '.OOO.',
-]);
+const nodeSocketEmpty = grid(['.OOO.', 'OSssO', 'OsssO', 'OsssO', '.OOO.']);
 
-const nodeGemLit = grid([
-  '.....',
-  '.WGa.',
-  '.GGg.',
-  '.agg.',
-  '.....',
-]);
+const nodeGemLit = grid(['.....', '.WGa.', '.GGg.', '.agg.', '.....']);
 
 const pulseRing = (alpha, spark) => {
   const img = createImage(7, 7);
@@ -162,19 +151,23 @@ const pulseRing = (alpha, spark) => {
   }
   if (spark) {
     const white = rgba('#ffffff', 235);
-    for (const [x, y] of [[0, 0], [6, 0], [0, 6], [6, 6]]) img.px(x, y, white);
+    for (const [x, y] of [
+      [0, 0],
+      [6, 0],
+      [0, 6],
+      [6, 6],
+    ])
+      img.px(x, y, white);
   }
   return img;
 };
-const nodeLeadingPulse = sheet([pulseRing(235, false), pulseRing(255, true), pulseRing(150, false)]);
-
-const spineLink = grid([
-  '.OOO.',
-  'OdddO',
-  'OdmdO',
-  'OdddO',
-  '.OOO.',
+const nodeLeadingPulse = sheet([
+  pulseRing(235, false),
+  pulseRing(255, true),
+  pulseRing(150, false),
 ]);
+
+const spineLink = grid(['.OOO.', 'OdddO', 'OdmdO', 'OdddO', '.OOO.']);
 
 const fogShroud = (() => {
   const img = createImage(7, 7);
@@ -216,25 +209,11 @@ const dawnRows = [
 ];
 const anchorRightDawn = medallion(13, PAL.m, PAL.l, dawnRows);
 
-const sunsetRows = [
-  'vvvvvvv',
-  'vvoooov',
-  'ooooooo',
-  'ooyyyoo',
-  'oyyyyyo',
-  'vvvvvvv',
-  'vvvvvvv',
-];
+const sunsetRows = ['vvvvvvv', 'vvoooov', 'ooooooo', 'ooyyyoo', 'oyyyyyo', 'vvvvvvv', 'vvvvvvv'];
 const sunsetLit = medallion(11, rgba('#fb923c'), rgba('#fdba74'), sunsetRows);
 const medallionSunset = sheet([sunsetLit, drained(sunsetLit)]);
 
-const sunriseRows = [
-  'iiiii',
-  'iifii',
-  'iyyyi',
-  'ccccc',
-  'ppppp',
-];
+const sunriseRows = ['iiiii', 'iifii', 'iyyyi', 'ccccc', 'ppppp'];
 const sunriseLit = medallion(9, rgba('#fde047'), rgba('#fef08a'), sunriseRows);
 const medallionSunrise = sheet([sunriseLit, drained(sunriseLit)]);
 
@@ -245,25 +224,13 @@ const subNode = sheet([subLit, subDrained]);
 
 // -------------------------------------------------------------------- sky
 
-const skySun = grid([
-  '...c...',
-  '..ggg..',
-  '.gWWWg.',
-  'cgWWWgc',
-  '.gWWWg.',
-  '..ggg..',
-  '...c...',
-], { g: rgba('#fde047'), W: rgba('#ffffff'), c: rgba('#fb923c') });
+const skySun = grid(['...c...', '..ggg..', '.gWWWg.', 'cgWWWgc', '.gWWWg.', '..ggg..', '...c...'], {
+  g: rgba('#fde047'),
+  W: rgba('#ffffff'),
+  c: rgba('#fb923c'),
+});
 
-const skyMoon = grid([
-  '..eee..',
-  '.eEe...',
-  'eEu....',
-  'eEu....',
-  'eEu....',
-  '.eEu...',
-  '..eEu..',
-]);
+const skyMoon = grid(['..eee..', '.eEe...', 'eEu....', 'eEu....', 'eEu....', '.eEu...', '..eEu..']);
 
 const skyFrame = grid([
   '.OOOOOO.',
@@ -315,16 +282,16 @@ function stem(color) {
 // ------------------------------------------------------------------- font
 
 const GLYPHS = {
-  '0': ['111', '101', '101', '101', '111'],
-  '1': ['010', '110', '010', '010', '111'],
-  '2': ['111', '001', '111', '100', '111'],
-  '3': ['111', '001', '111', '001', '111'],
-  '4': ['101', '101', '111', '001', '001'],
-  '5': ['111', '100', '111', '001', '111'],
-  '6': ['111', '100', '111', '101', '111'],
-  '7': ['111', '001', '010', '010', '010'],
-  '8': ['111', '101', '111', '101', '111'],
-  '9': ['111', '101', '111', '001', '111'],
+  0: ['111', '101', '101', '101', '111'],
+  1: ['010', '110', '010', '010', '111'],
+  2: ['111', '001', '111', '100', '111'],
+  3: ['111', '001', '111', '001', '111'],
+  4: ['101', '101', '111', '001', '001'],
+  5: ['111', '100', '111', '001', '111'],
+  6: ['111', '100', '111', '101', '111'],
+  7: ['111', '001', '010', '010', '010'],
+  8: ['111', '101', '111', '101', '111'],
+  9: ['111', '101', '111', '001', '111'],
   ':': ['0', '1', '0', '1', '0'],
   A: ['010', '101', '111', '101', '101'],
   B: ['110', '101', '110', '101', '110'],
@@ -385,76 +352,137 @@ const font = (() => {
  */
 export const SLOTS = [
   {
-    id: 'node_socket_empty', img: nodeSocketEmpty, states: ['default'], anchor: [2, 2],
+    id: 'node_socket_empty',
+    img: nodeSocketEmpty,
+    states: ['default'],
+    anchor: [2, 2],
     note: 'Recessed bezel under every bead. Shows once a TU has drained.',
   },
   {
-    id: 'node_gem_lit', img: nodeGemLit, states: ['default'], anchor: [2, 2], tint: true,
+    id: 'node_gem_lit',
+    img: nodeGemLit,
+    states: ['default'],
+    anchor: [2, 2],
+    tint: true,
     note: 'Lit bead. Gray pixels take the phase colour, pure white is the specular pixel. Drawn over the socket.',
   },
   {
-    id: 'node_leading_pulse', img: nodeLeadingPulse, states: ['f0', 'f1', 'f2'], anchor: [3, 3],
+    id: 'node_leading_pulse',
+    img: nodeLeadingPulse,
+    states: ['f0', 'f1', 'f2'],
+    anchor: [3, 3],
     fps: 7,
     note: 'Highlight ring drawn over the active bead. Frames loop.',
   },
   {
-    id: 'spine_link', img: spineLink, states: ['default'], anchor: [2, 2],
+    id: 'spine_link',
+    img: spineLink,
+    states: ['default'],
+    anchor: [2, 2],
     note: 'Brass chain link, stamped 5 times between beads.',
   },
   {
-    id: 'fog_shroud', img: fogShroud, states: ['default'], anchor: [3, 3],
+    id: 'fog_shroud',
+    img: fogShroud,
+    states: ['default'],
+    anchor: [3, 3],
     note: 'Wispy mist over a bead when pre-dawn fog is on. Translucent.',
   },
   {
-    id: 'anchor_left_moon', img: anchorLeftMoon, states: ['default'], anchor: [6, 6],
+    id: 'anchor_left_moon',
+    img: anchorLeftMoon,
+    states: ['default'],
+    anchor: [6, 6],
     note: 'Left end-cap: 0 TU, the wrap back to 05:00.',
   },
   {
-    id: 'anchor_right_dawn', img: anchorRightDawn, states: ['default'], anchor: [6, 6],
+    id: 'anchor_right_dawn',
+    img: anchorRightDawn,
+    states: ['default'],
+    anchor: [6, 6],
     note: 'Right end-cap: 100 TU, the 05:00 start of the day.',
   },
   {
-    id: 'medallion_sunset', img: medallionSunset, states: ['lit', 'drained'], anchor: [5, 5],
+    id: 'medallion_sunset',
+    img: medallionSunset,
+    states: ['lit', 'drained'],
+    anchor: [5, 5],
     note: 'Sits on the sunset bead.',
   },
   {
-    id: 'medallion_sunrise', img: medallionSunrise, states: ['lit', 'drained'], anchor: [4, 4],
+    id: 'medallion_sunrise',
+    img: medallionSunrise,
+    states: ['lit', 'drained'],
+    anchor: [4, 4],
     note: 'Sits on the sunrise bead.',
   },
   {
-    id: 'sub_node', img: subNode, states: ['lit', 'drained'], anchor: [4, 4], tint: true,
+    id: 'sub_node',
+    img: subNode,
+    states: ['lit', 'drained'],
+    anchor: [4, 4],
+    tint: true,
     note: 'Solar noon and midnight beads. The lit well is gray and takes the phase colour.',
   },
   {
-    id: 'sky_sun', img: skySun, states: ['default'], anchor: [3, 3],
+    id: 'sky_sun',
+    img: skySun,
+    states: ['default'],
+    anchor: [3, 3],
     note: 'Glides across the sky strip while it is day.',
   },
   {
-    id: 'sky_moon', img: skyMoon, states: ['default'], anchor: [3, 3],
+    id: 'sky_moon',
+    img: skyMoon,
+    states: ['default'],
+    anchor: [3, 3],
     note: 'Glides across the sky strip at night. A lunar phase sheet can replace it later.',
   },
   {
-    id: 'sky_frame', img: skyFrame, states: ['default'], anchor: [0, 0], slice: [2, 2, 2, 2],
+    id: 'sky_frame',
+    img: skyFrame,
+    states: ['default'],
+    anchor: [0, 0],
+    slice: [2, 2, 2, 2],
     note: '9-slice border around the sky strip. Centre is transparent.',
   },
   {
-    id: 'terrain_mask', img: terrain, states: ['default'], anchor: [0, 0], tint: true, tile: true,
+    id: 'terrain_mask',
+    img: terrain,
+    states: ['default'],
+    anchor: [0, 0],
+    tint: true,
+    tile: true,
     note: 'Tileable hills silhouette along the bottom of the sky. Gray, tinted by the ground colour of the hour.',
   },
   {
-    id: 'cursor_pill_day', img: pillDay, states: ['default'], anchor: [4, 4], slice: [3, 3, 3, 3],
+    id: 'cursor_pill_day',
+    img: pillDay,
+    states: ['default'],
+    anchor: [4, 4],
+    slice: [3, 3, 3, 3],
     note: 'Tooltip box by day, 9-slice. Text sits inside.',
   },
   {
-    id: 'cursor_pill_night', img: pillNight, states: ['default'], anchor: [4, 4], slice: [3, 3, 3, 3],
+    id: 'cursor_pill_night',
+    img: pillNight,
+    states: ['default'],
+    anchor: [4, 4],
+    slice: [3, 3, 3, 3],
     note: 'Tooltip box by night (violet), 9-slice.',
   },
   {
-    id: 'cursor_stem_day', img: stem(rgba('#fde047')), states: ['default'], anchor: [0, 0],
+    id: 'cursor_stem_day',
+    img: stem(rgba('#fde047')),
+    states: ['default'],
+    anchor: [0, 0],
     note: '1 px stem from the pill down to the active bead. Stretched vertically.',
   },
   {
-    id: 'cursor_stem_night', img: stem(rgba('#a78bfa')), states: ['default'], anchor: [0, 0],
+    id: 'cursor_stem_night',
+    img: stem(rgba('#a78bfa')),
+    states: ['default'],
+    anchor: [0, 0],
     note: 'Night stem (violet).',
   },
 ];

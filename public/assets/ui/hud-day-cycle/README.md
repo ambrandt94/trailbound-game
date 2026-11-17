@@ -45,4 +45,4 @@ The 100 beads sit on a wave of 2.5 cycles (11 px high), 3.2 px apart, so bead sp
 
 ## Colours
 
-The placeholders use the blueprint palette: outline `#1c1610`, frame dark/mid/light `#6e4e24 #b58938 #f3cf7a`, well `#0c0e16`, empty socket `#191e2e`. Phase colours for the beads are set in code (`src/core/sim/day-cycle.ts`), not in the art. No large black fills: keep outlines tinted.
+The placeholders use the blueprint palette: outline `#1c1610`, frame dark/mid/light `#6e4e24 #b58938 #f3cf7a`, well `#0c0e16`, empty socket `#3b4568` with a plum outline `#54425e`. Phase colours for the beads are set in code (`src/core/sim/day-cycle.ts`), not in the art. No large black fills: keep outlines tinted.
