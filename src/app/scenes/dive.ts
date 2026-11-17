@@ -16,7 +16,7 @@ export const SETTLE_SEC = 1.0;
 /** Fallback CSS magnification at the bottom of the dive (no map to measure). */
 export const DIVE_MAP_MAGNIFY = 3.2;
 /** Past this CSS magnification the map drops labels, pins, and sprites. */
-export const DIVE_BARE_MAGNIFY = 1.8;
+export const DIVE_BARE_MAGNIFY = 1.25;
 /**
  * The map is never magnified past this. Beyond it the pixel art turns to
  * blocks, so the 3D view takes over (cross-fade) at this point instead.
