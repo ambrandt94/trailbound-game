@@ -188,6 +188,7 @@ export class DiveScene implements Scene {
     if (next === 'area') this.host.diveMap(this.to.x, this.to.y, this.from.scale);
     this.host.setLayers(1, 1);
     this.host.endMapDive();
+    if (next === 'map') this.host.settleMapReturn();
     this.host.enqueue(() => {
       void this.host.stack.pop();
       const top = this.host.stack.current();

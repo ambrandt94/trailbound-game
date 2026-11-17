@@ -141,6 +141,16 @@ export class MapView implements Scene {
     }
   }
 
+  /**
+   * The dive out has finished. The map did not tick under it, so the cooldown
+   * set at hand-back would only now start; the dive already kept the leaving
+   * key from re-entering, so drop stray presses and allow Enter at once.
+   */
+  settleAreaReturn(): void {
+    this.entryCooldown = 0;
+    this.host.keyboard.clearPresses();
+  }
+
   /** True once the post-exit cooldown has elapsed. */
   allowEnter(): boolean {
     return this.entryCooldown <= 0;
@@ -173,7 +183,8 @@ export class MapView implements Scene {
       this.publishTravel();
       const stand = describeMapStand(data, world.hero.x, world.hero.y);
       nearTown.value = stand.kind !== 'wilderness' && stand.kind !== 'water' && !!stand.tier;
-      canEnter.value = stand.canEnter;
+      // The Enter button is live only when Enter would act (not in the cooldown).
+      canEnter.value = stand.canEnter && this.allowEnter();
       placeName.value = stand.name;
       placeTier.value = stand.tier;
       placeKind.value = stand.kind;

@@ -53,6 +53,11 @@ export interface GameHost {
   /** Hold the map camera on a dive frame. */
   diveMap(x: number, y: number, scale: number): void;
   endMapDive(): void;
+  /**
+   * The dive out has landed on the map: drop keys typed during it and lift
+   * the re-entry cooldown, which the dive itself already covered.
+   */
+  settleMapReturn(): void;
   /** CSS magnification of the map canvas and opacity of the 3D canvas. */
   setLayers(mapMagnify: number, areaOpacity: number): void;
   /** 3D camera sweep for the dive: `in` eases down, `out` climbs. */

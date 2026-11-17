@@ -286,6 +286,10 @@ export class Game implements GameHost {
     this.mapScene?.endDive();
   }
 
+  settleMapReturn(): void {
+    this.mapScene?.settleAreaReturn();
+  }
+
   setLayers(mapMagnify: number, areaOpacity: number): void {
     // Magnified, the map's screen-sized labels and sprites would balloon.
     this.mapScene?.setBare(mapMagnify > DIVE_BARE_MAGNIFY);

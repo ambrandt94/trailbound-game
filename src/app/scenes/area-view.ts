@@ -91,7 +91,8 @@ export class AreaView implements Scene {
   /** Stack calls this with no args after the town is already loaded. */
   async enter(ctx?: AreaEnter): Promise<void> {
     this.host.keyboard.clearPresses();
-    this.host.setMode('area');
+    // Under a dive the transition still owns the mode; it sets 'area' when done.
+    if (this.host.stack.current()?.id !== 'transition') this.host.setMode('area');
     this.host.setView('area');
     if (ctx?.areaExport && this.renderer) {
       await this.renderer.start(ctx.areaExport, ctx.entry);
