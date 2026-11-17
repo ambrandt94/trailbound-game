@@ -36,6 +36,8 @@ export interface TownSession {
   convoyStatus(): ConvoyStatus | null;
   convoyCommand(command: 'bench' | 'rejoin'): void;
   cameraSweep(kind: 'in' | 'out', seconds: number): void;
+  /** Current follow-camera distance, metres. */
+  cameraDistance(): number;
   bounds(): { minX: number; maxX: number; minZ: number; maxZ: number } | null;
   stats(): { fps: number; calls: number; triangles: number; view: string; name: string };
   dispose(): void;

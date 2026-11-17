@@ -1,18 +1,19 @@
 import type { AreaExit } from '../area-exit';
 import type { AreaLanding, GameHost } from '../host';
 import type { Scene } from '../scene-stack';
+import { DIVE_CAM_DIST_M } from '../../render/area/dive-camera';
 
 /** Map camera dive from the current view down onto the target, seconds. */
-export const DIVE_ZOOM_SEC = 0.95;
+export const DIVE_ZOOM_SEC = 1.1;
 /** Cross-fade from the magnified map into the 3D view, seconds. */
-export const DIVE_REVEAL_SEC = 0.65;
+export const DIVE_REVEAL_SEC = 0.7;
 /** 3D camera ease from the overhead start down to the follow view, seconds. */
 export const DIVE_SWEEP_SEC = 1.6;
 /** Leaving: the 3D camera climbs while the map fades back in, seconds. */
-export const RISE_SEC = 0.7;
-/** Leaving: the magnified map settles back to its normal scale, seconds. */
-export const SETTLE_SEC = 0.45;
-/** CSS magnification of the map canvas at the bottom of the dive. */
+export const RISE_SEC = 0.8;
+/** Leaving: the magnified map pulls back out to its normal scale, seconds. */
+export const SETTLE_SEC = 0.8;
+/** Fallback CSS magnification at the bottom of the dive (no map to measure). */
 export const DIVE_MAP_MAGNIFY = 3.2;
 
 export type DiveDirection = 'to-area' | 'to-map';
@@ -21,29 +22,38 @@ const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
-/** Map scale and position at `u` (0..1) of the dive. Scale moves in log space. */
+/**
+ * Map frame at `u` (0..1) of the dive. The apparent zoom (map scale × CSS
+ * magnification) moves in log space from the current view to the closest
+ * scale × `magnify`; the map draws up to its closest scale and CSS carries
+ * the rest, so the zoom never stalls at the cap.
+ */
 export function divePose(
   from: { x: number; y: number; scale: number },
   to: { x: number; y: number; scale: number },
   u: number,
+  magnify = DIVE_MAP_MAGNIFY,
 ): { x: number; y: number; scale: number; magnify: number } {
   const e = easeInOut(clamp01(u));
   const s0 = Math.max(1e-4, from.scale);
   const s1 = Math.max(s0, to.scale);
+  const end = s1 * Math.max(1, magnify);
+  const apparent = s0 * (end / s0) ** e;
+  const scale = Math.min(apparent, s1);
   return {
     x: from.x + (to.x - from.x) * e,
     y: from.y + (to.y - from.y) * e,
-    scale: s0 * (s1 / s0) ** e,
-    magnify: 1 + (DIVE_MAP_MAGNIFY - 1) * e * e,
+    scale,
+    magnify: apparent / scale,
   };
 }
 
 /**
  * One continuous move between the map and a 3D area, with no black frame.
- * In: the map camera dives onto the caravan (or the hero), the area builds
- * under the held frame, then the 3D canvas cross-fades in while its camera
- * eases down from overhead. Out reverses it: the 3D camera climbs as the map,
- * already parked on the landing spot, fades back and settles.
+ * In: the map dives onto the caravan (or the hero) until its pixels are as
+ * big as the 3D view's metres, the area builds under the held frame, then the
+ * 3D canvas cross-fades in from overhead, north-up, and eases down and round
+ * to the follow view while the map keeps pace under it. Out reverses it.
  */
 export class DiveScene implements Scene {
   readonly id = 'transition';
@@ -51,6 +61,8 @@ export class DiveScene implements Scene {
   private elapsed = 0;
   private from = { x: 0, y: 0, scale: 1 };
   private to = { x: 0, y: 0, scale: 1 };
+  private magnify = DIVE_MAP_MAGNIFY;
+  private settleFrom = 1;
 
   constructor(
     private readonly host: GameHost,
@@ -62,6 +74,7 @@ export class DiveScene implements Scene {
   enter(): void {
     this.host.setMode('transition');
     this.host.setFade(0);
+    this.magnify = this.host.diveMagnify();
     if (this.direction === 'to-area') {
       const target = this.host.diveTarget();
       this.from = this.host.mapPose();
@@ -73,9 +86,16 @@ export class DiveScene implements Scene {
     this.host.landFromArea(this.exitPayload, this.landing ?? null);
     const hero = this.host.world.hero;
     this.host.diveMap(hero.x, hero.y, this.host.mapCloseScale());
-    this.host.setLayers(DIVE_MAP_MAGNIFY, 1);
-    this.host.areaSweep('out', RISE_SEC);
+    this.host.setLayers(this.tracked(), 1);
+    this.host.areaSweep('out', RISE_SEC + 0.2);
     this.phase = 'rise';
+  }
+
+  /** Map magnification that keeps pace with the 3D camera's distance. */
+  private tracked(): number {
+    const dist = this.host.areaCameraDistance();
+    if (!(dist !== null && dist > 1)) return this.magnify;
+    return Math.min(this.magnify * 6, (this.magnify * DIVE_CAM_DIST_M) / dist);
   }
 
   update(dt: number): void {
@@ -84,7 +104,7 @@ export class DiveScene implements Scene {
     switch (this.phase) {
       case 'zoom': {
         const u = this.elapsed / DIVE_ZOOM_SEC;
-        const pose = divePose(this.from, this.to, u);
+        const pose = divePose(this.from, this.to, u, this.magnify);
         this.host.diveMap(pose.x, pose.y, pose.scale);
         this.host.setLayers(pose.magnify, 0);
         if (u >= 1) {
@@ -106,15 +126,15 @@ export class DiveScene implements Scene {
         return;
       case 'reveal': {
         const u = clamp01(this.elapsed / DIVE_REVEAL_SEC);
-        this.host.setLayers(DIVE_MAP_MAGNIFY * (1 + 0.35 * easeOut(u)), easeOut(u));
+        this.host.setLayers(this.tracked(), easeOut(u));
         if (u >= 1) this.finish('area');
         return;
       }
       case 'rise': {
         const u = clamp01(this.elapsed / RISE_SEC);
-        const e = easeInOut(u);
-        this.host.setLayers(DIVE_MAP_MAGNIFY - (DIVE_MAP_MAGNIFY - 1.6) * e, 1 - e);
+        this.host.setLayers(this.tracked(), 1 - easeInOut(u));
         if (u >= 1) {
+          this.settleFrom = this.tracked();
           this.host.leaveArea(this.exitPayload, { landed: true, keepLayers: true });
           this.phase = 'settle';
           this.elapsed = 0;
@@ -122,9 +142,9 @@ export class DiveScene implements Scene {
         return;
       }
       case 'settle': {
-        const u = clamp01(this.elapsed / SETTLE_SEC);
-        this.host.setLayers(1.6 - 0.6 * easeOut(u), 0);
-        if (u >= 1) this.finish('map');
+        const e = easeInOut(clamp01(this.elapsed / SETTLE_SEC));
+        this.host.setLayers(this.settleFrom ** (1 - e), 0);
+        if (e >= 1) this.finish('map');
         return;
       }
       default:

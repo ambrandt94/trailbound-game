@@ -80,6 +80,10 @@ export class AreaView implements Scene {
     if (this.driver) this.renderer?.convoyCommand(command);
   }
 
+  cameraDistance(): number | null {
+    return this.renderer?.cameraDistance() ?? null;
+  }
+
   sweep(kind: 'in' | 'out', seconds: number): void {
     this.renderer?.cameraSweep(kind, seconds);
   }

@@ -55,6 +55,13 @@ export interface GameHost {
   setLayers(mapMagnify: number, areaOpacity: number): void;
   /** 3D camera sweep for the dive: `in` eases down, `out` climbs. */
   areaSweep(kind: 'in' | 'out', seconds: number): void;
+  /** 3D follow-camera distance in metres, or null with no area up. */
+  areaCameraDistance(): number | null;
+  /**
+   * CSS magnification of the map at its closest scale that matches the 3D
+   * view at the top of the dive, metre for metre.
+   */
+  diveMagnify(): number;
   enqueue(job: () => void): void;
   /** Short notice over the HUD. */
   toast(message: string): void;

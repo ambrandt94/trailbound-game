@@ -102,6 +102,10 @@ export class AreaRenderer {
   }
 
   /** `in` starts high and eases down to the follow camera; `out` climbs back up. */
+  cameraDistance(): number | null {
+    return this.session ? this.session.cameraDistance() : null;
+  }
+
   cameraSweep(kind: 'in' | 'out', seconds: number): void {
     this.session?.cameraSweep(kind, seconds);
   }

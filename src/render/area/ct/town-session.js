@@ -19,6 +19,7 @@ import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
 import { oakLoadMs, oakReady } from '../oak-batch.ts';
 import { updateCameraOcclusion } from '../occlusion-view.ts';
+import { DIVE_CAM_DIST_M, DIVE_CAM_PITCH_DEG, wrapDeg } from '../dive-camera.ts';
 import {
   convoyWagonMounted,
   convoyWagonPose,
@@ -867,10 +868,12 @@ export async function createTownSession(canvas, hooks) {
   }
 
   const cs = { d: P.camDist, p: P.camPitch, f: P.camFov, h: 0.8 };
-  /* Camera sweep for the map dive: { kind: 'in' | 'out', t, dur }. */
+  /* Camera sweep for the map dive: { kind: 'in' | 'out', t, dur }. The view
+     also turns between north-up (the map) and the player's orbit yaw. */
   let sweep = null;
-  const SWEEP_D = 120;
-  const SWEEP_P = 86;
+  let yawOff = 0;
+  const SWEEP_D = DIVE_CAM_DIST_M;
+  const SWEEP_P = DIVE_CAM_PITCH_DEG;
   const cq = { d: P.camDist, p: P.camPitch, f: P.camFov, h: 0.8 };
   const ctA = new THREE.Vector3();
   const ctB = new THREE.Vector3();
@@ -1034,7 +1037,7 @@ export async function createTownSession(canvas, hooks) {
   }
   function placeCam(c, target, d, pitch, look) {
     const pth = pitch == null ? (cs.p * Math.PI) / 180 : pitch;
-    const th = (P.camYaw * Math.PI) / 180;
+    const th = ((P.camYaw + yawOff) * Math.PI) / 180;
     const lx = look ? look.x : target.x;
     const ly = look ? look.y : target.y;
     const lz = look ? look.z : target.z;
@@ -1152,6 +1155,8 @@ export async function createTownSession(canvas, hooks) {
     const rising = sweeping && sweep.kind === 'out';
     const ks = 1 - Math.exp(-fdt * (sweeping ? (rising ? 3.2 : 2.4) : 7));
     if (sweep && !sweeping && sweep.kind === 'in') sweep = null;
+    yawOff += ((rising ? -wrapDeg(P.camYaw) : 0) - yawOff) * ks;
+    if (!sweep && Math.abs(yawOff) < 1e-3) yawOff = 0;
     const wantD = rising ? SWEEP_D : P.camDist;
     const wantP = rising ? SWEEP_P : P.camPitch;
     cq.d += (wantD - cq.d) * ks;
@@ -1439,6 +1444,9 @@ export async function createTownSession(canvas, hooks) {
     indoors() {
       return zoneOf(PLS[0]) === 1;
     },
+    cameraDistance() {
+      return cs.d;
+    },
     convoyStatus() {
       if (!convoyFrame || !convoyWagonMounted()) return null;
       const p = PLS[0];
@@ -1454,6 +1462,7 @@ export async function createTownSession(canvas, hooks) {
       if (sweep.kind === 'in') {
         cq.d = cs.d = SWEEP_D;
         cq.p = cs.p = SWEEP_P;
+        yawOff = -wrapDeg(P.camYaw);
       }
     },
     bounds() {

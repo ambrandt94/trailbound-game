@@ -294,6 +294,11 @@ export class MapView implements Scene {
     this.camera.lookAt(x, y, scale);
   }
 
+  /** Screen pixels per ground metre at a map scale. */
+  pxPerMetre(scale: number): number {
+    return (scale * TILE) / (this.camera.step * METERS_PER_WORLD_TILE);
+  }
+
   /** Camera pose for the 3D dive: centre in tiles and scale. */
   cameraPose(): { x: number; y: number; scale: number } {
     return {

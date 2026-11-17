@@ -86,7 +86,8 @@ import { BootScene } from './scenes/boot';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
 import { TransitionScene } from './scenes/transition';
-import { DiveScene } from './scenes/dive';
+import { DIVE_MAP_MAGNIFY, DiveScene } from './scenes/dive';
+import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
 import { ConvoyDriver } from './convoy-driver';
 import { resolveAreaAt } from '../core/area/area-window';
 import { hasRoute } from '../core/sim/caravan';
@@ -299,6 +300,20 @@ export class Game implements GameHost {
 
   areaSweep(kind: 'in' | 'out', seconds: number): void {
     this.areaScene?.sweep(kind, seconds);
+  }
+
+  areaCameraDistance(): number | null {
+    return this.areaScene?.cameraDistance() ?? null;
+  }
+
+  diveMagnify(): number {
+    const map = this.mapScene;
+    if (!map) return DIVE_MAP_MAGNIFY;
+    const mapPx = map.pxPerMetre(map.closestScale());
+    const view = this.options.areaCanvas.clientHeight || this.options.mapCanvas.clientHeight;
+    const areaPx = areaPxPerMetre(view, DIVE_CAM_DIST_M, settings.value.look.camFov);
+    const ratio = areaPx / mapPx;
+    return Number.isFinite(ratio) ? Math.min(64, Math.max(1.5, ratio)) : DIVE_MAP_MAGNIFY;
   }
 
   landFromArea(exit: AreaExit | undefined, landing: AreaLanding | null): void {
