@@ -17,16 +17,10 @@ import {
 } from '../../core/world/models';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
-import { dayLightAt, tuOfDay } from '../../core/sim/time';
-import {
-  CARAVAN_DAY_GOAL_UNITS,
-  canEditRoute,
-  etaTu,
-  hasRoute,
-  remainingUnits,
-  splitRoute,
-} from '../../core/sim/caravan';
-import { TILE } from '../../core/world/models';
+import { dayLightAt } from '../../core/sim/time';
+import { hasRoute, splitRoute } from '../../core/sim/caravan';
+import { travelHudFor, travelHudKey } from '../travel-hud';
+import { MAP_ZOOM_CAP, TILE } from '../../core/world/models';
 import type { MapCaravanDraw } from '../../render/map/map-renderer';
 import { attachRouteClicks, resolveRouteTarget, routeFrame } from '../map-route';
 import {
@@ -41,7 +35,6 @@ import {
   placeTier,
   standLine,
   travelHud,
-  type TravelHud,
 } from '../../ui/state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
@@ -59,6 +52,8 @@ export class MapView implements Scene {
   /** Route clicks in fine tiles, converted with the camera as it was when clicked. */
   private readonly clicks: Array<{ x: number; y: number; pick: number; append: boolean }> = [];
   private hudKey = '';
+  /** Hero walked under move input this frame. Drives the paused-clock readout. */
+  private walking = false;
 
   constructor(private readonly host: GameHost) {}
 
@@ -112,11 +107,15 @@ export class MapView implements Scene {
       );
       world.moveHero(step.dx, step.dy);
       const travelled = Math.hypot(step.dx, step.dy);
+      this.walking = travelled > 0;
       world.advanceTravel(travelled * METERS_PER_WORLD_TILE, travelChargePaceMps(0, sprint));
       if (step.holdId) this.settlementHold = step.holdId;
     } else {
       if (move.x === 0 && move.y === 0) this.settlementHold = null;
-      world.stepIdle(dt, rate);
+      this.walking = false;
+      // Time only moves while something travels: the rolling caravan here,
+      // or the hero's own walk above (charged by distance).
+      if (world.mapClockRuns(false)) world.stepIdle(dt, rate);
     }
     if (this.host.keyboard.consumePress('Equal') || this.host.keyboard.consumePress('NumpadAdd')) {
       this.zoom(1.12);
@@ -166,7 +165,7 @@ export class MapView implements Scene {
       nearestLine.value = '';
       clockRate.value = '';
       mapNight.value = 0;
-      if (travelHud.value) travelHud.value = null;
+      // The 3D view owns the travel HUD while it is up.
       this.hudKey = '';
     } else {
       this.publishTravel();
@@ -221,43 +220,12 @@ export class MapView implements Scene {
 
   private publishTravel(): void {
     const world = this.host.world;
-    const caravan = world.caravan;
-    const tu = tuOfDay(world.clockHours);
-    const day = Math.floor(world.clockHours / 24) + 1;
-    const speed = world.caravanSpeedAt();
-    const routed = hasRoute(caravan);
-    const eta = routed ? etaTu(caravan, speed) : null;
-    const today = caravan.todayDay === day - 1 ? caravan.todayUnits : 0;
-    const hud: TravelHud = {
-      role: caravan.role,
-      editable: canEditRoute(caravan),
-      hasRoute: routed,
-      halted: caravan.halted,
-      aboard: world.heroAboard,
-      day,
-      tu,
-      todayUnits: today,
-      goalUnits: CARAVAN_DAY_GOAL_UNITS,
-      destName: caravan.targets.at(-1)?.name ?? 'the marked spot',
-      waypoints: Math.max(0, caravan.targets.length - 1),
-      remainingUnits: remainingUnits(caravan),
-      eta: eta === null ? '' : formatEta(eta, day, tu, caravan.halted),
-      speed,
-    };
-    const key = [
-      hud.role,
-      hud.hasRoute,
-      hud.halted,
-      hud.aboard,
-      hud.day,
-      Math.floor(hud.tu),
-      Math.floor(hud.todayUnits),
-      hud.destName,
-      hud.waypoints,
-      Math.ceil(hud.remainingUnits),
-      hud.eta,
-      hud.speed.toFixed(2),
-    ].join('|');
+    const hud = travelHudFor(world, {
+      clockPaused: !world.mapClockRuns(this.walking),
+      view: 'map',
+      convoy: null,
+    });
+    const key = travelHudKey(hud);
     if (key === this.hudKey) return;
     this.hudKey = key;
     travelHud.value = hud;
@@ -326,6 +294,35 @@ export class MapView implements Scene {
     this.camera.lookAt(x, y, scale);
   }
 
+  /** Camera pose for the 3D dive: centre in tiles and scale. */
+  cameraPose(): { x: number; y: number; scale: number } {
+    return {
+      x: this.camera.x * this.camera.step,
+      y: this.camera.y * this.camera.step,
+      scale: this.camera.scale,
+    };
+  }
+
+  /**
+   * Hold the camera on a dive frame. `scale` may pass the zoom cap; the dive
+   * owns the camera until `endDive`, and the follow camera resumes after.
+   */
+  diveTo(x: number, y: number, scale: number): void {
+    this.camera.follow = false;
+    this.camera.x = this.camera.targetX = x / this.camera.step;
+    this.camera.y = this.camera.targetY = y / this.camera.step;
+    this.camera.scale = this.camera.targetScale = scale;
+  }
+
+  endDive(): void {
+    this.camera.follow = true;
+  }
+
+  /** Map scale at the zoom cap, the closest the 2D map draws. */
+  closestScale(): number {
+    return MAP_ZOOM_CAP;
+  }
+
   private zoom(factor: number): void {
     const canvas = this.host.mapCanvas;
     this.applyZoom(canvas.clientWidth / 2, canvas.clientHeight / 2, factor);
@@ -336,14 +333,4 @@ export class MapView implements Scene {
     const canvas = this.host.mapCanvas;
     this.camera.zoomAt(sx, sy, factor, canvas.clientWidth, canvas.clientHeight);
   }
-}
-
-/** "≈ 38 TU · Day 2, TU 12". Halted adds a note: the clock runs, the wagons do not. */
-function formatEta(tuLeft: number, day: number, tu: number, halted: boolean): string {
-  const left = Math.max(0, Math.ceil(tuLeft));
-  const at = tu + left;
-  const arriveDay = day + Math.floor(at / 100);
-  const arriveTu = Math.floor(at % 100);
-  const base = `≈ ${left} TU · Day ${arriveDay}, TU ${arriveTu}`;
-  return halted ? `${base} once rolling` : base;
 }

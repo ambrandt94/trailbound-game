@@ -162,13 +162,23 @@ function TravelPanel() {
   const pct = Math.max(0, Math.min(100, (t.todayUnits / Math.max(1, t.goalUnits)) * 100));
   const roleLabel = t.role === 'passenger' ? 'Passenger' : t.role === 'solo' ? 'Solo' : 'Leader';
   const status = !t.hasRoute ? 'No route' : t.halted ? 'Halted' : 'Rolling';
+  const inArea = t.view === 'area';
+  const convoy = t.convoy;
   return (
-    <section class="travel-panel" aria-label="Caravan">
+    <section class={inArea ? 'travel-panel in-area' : 'travel-panel'} aria-label="Caravan">
       <p class="eyebrow">
         {skinText(`Caravan · ${roleLabel}`)} <span class="travel-status">{skinText(status)}</span>
       </p>
       <p class="travel-line">
         {skinText(`Day ${t.day} · TU ${Math.floor(t.tu)} · pace ×${t.speed.toFixed(2)}`)}
+        {t.clockPaused && !inArea ? (
+          <span
+            class="travel-paused"
+            title="The map clock only runs while you or the caravan travel"
+          >
+            {skinText('Paused, not moving')}
+          </span>
+        ) : null}
       </p>
       <div class="travel-goal" title="Distance today against the day goal">
         <span>{skinText(`Today ${Math.floor(t.todayUnits)} / ${t.goalUnits}`)}</span>
@@ -191,8 +201,39 @@ function TravelPanel() {
           )}
         </p>
       )}
-      {t.eta ? <p class="travel-line travel-eta">{skinText(`ETA ${t.eta}`)}</p> : null}
-      {!t.aboard ? <p class="travel-line travel-scout">{skinText('Scouting on foot')}</p> : null}
+      {t.eta && !inArea ? <p class="travel-line travel-eta">{skinText(`ETA ${t.eta}`)}</p> : null}
+      {!t.aboard && !inArea ? (
+        <p class="travel-line travel-scout">{skinText('Scouting on foot')}</p>
+      ) : null}
+      {convoy ? (
+        <p class="travel-line travel-mode">
+          {skinText(
+            convoy.mode === 'bench'
+              ? 'Riding the bench · B to step down'
+              : convoy.mode === 'walk'
+                ? 'Walking beside the wagon · B to ride'
+                : `On foot · ${Math.round(convoy.dist)} m from the wagon`,
+          )}
+        </p>
+      ) : null}
+      {convoy && convoy.leash !== 'ok' ? (
+        <div class="travel-leash" role="status">
+          <span>
+            {skinText(
+              convoy.leash === 'pull' ? 'Falling behind, heading back' : 'Falling behind, rejoin?',
+            )}
+          </span>
+          {convoy.leash === 'hint' ? (
+            <button
+              type="button"
+              class="action travel-btn rejoin-wagon"
+              onClick={() => commands.rejoinWagon()}
+            >
+              Rejoin (G)
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <div class="travel-actions">
         {t.editable && t.hasRoute ? (
           <button
@@ -201,9 +242,10 @@ function TravelPanel() {
             onClick={() => commands.toggleHalt()}
           >
             {t.halted ? 'Resume' : 'Halt'}
+            {inArea ? ' (H)' : ''}
           </button>
         ) : null}
-        {t.editable && t.hasRoute ? (
+        {t.editable && t.hasRoute && !inArea ? (
           <button
             type="button"
             class="action secondary travel-btn clear-route"
@@ -212,7 +254,7 @@ function TravelPanel() {
             Clear route
           </button>
         ) : null}
-        {t.hasRoute ? (
+        {t.hasRoute && !inArea ? (
           <button
             type="button"
             class="action secondary travel-btn fit-route"
@@ -221,13 +263,22 @@ function TravelPanel() {
             Show route
           </button>
         ) : null}
-        {!t.aboard ? (
+        {!t.aboard && !inArea ? (
           <button
             type="button"
             class="action travel-btn rejoin"
             onClick={() => commands.rejoinCaravan()}
           >
             Rejoin caravan
+          </button>
+        ) : null}
+        {convoy ? (
+          <button
+            type="button"
+            class="action secondary travel-btn bench"
+            onClick={() => commands.toggleBench()}
+          >
+            {convoy.mode === 'bench' ? 'Walk (B)' : 'Ride bench (B)'}
           </button>
         ) : null}
         <button
