@@ -30,6 +30,28 @@ export const generating = signal(false);
 export const mapNight = signal(0);
 export const wagonOpen = signal(false);
 export const wagonRows = signal<WagonRow[]>([]);
+/** Caravan travel readout for the map HUD. Null outside the map. */
+export interface TravelHud {
+  role: 'leader' | 'solo' | 'passenger';
+  /** Leader or solo. A passenger cannot route, halt, or clear. */
+  editable: boolean;
+  hasRoute: boolean;
+  halted: boolean;
+  /** Hero riding with the caravan. False while scouting on foot. */
+  aboard: boolean;
+  day: number;
+  tu: number;
+  todayUnits: number;
+  goalUnits: number;
+  destName: string;
+  waypoints: number;
+  remainingUnits: number;
+  /** "≈ 38 TU · Day 2, TU 12", or empty without a route. */
+  eta: string;
+  /** Fable speed modifier right now. */
+  speed: number;
+}
+export const travelHud = signal<TravelHud | null>(null);
 /** Registered minigames, filled by the app so settings can launch them. */
 export const minigameCatalog = signal<Array<{ id: string; name: string }>>([]);
 
@@ -45,6 +67,11 @@ export interface UiCommands {
   wagonAct(id: WagonActionId): void;
   closeWagon(): void;
   launchMinigame(id: string): void;
+  clearRoute(): void;
+  toggleHalt(): void;
+  rejoinCaravan(): void;
+  fitRoute(): void;
+  openWagon(): void;
 }
 
 export const commands: UiCommands = {
@@ -81,6 +108,21 @@ export const commands: UiCommands = {
   launchMinigame(_id: string) {
     return;
   },
+  clearRoute() {
+    return;
+  },
+  toggleHalt() {
+    return;
+  },
+  rejoinCaravan() {
+    return;
+  },
+  fitRoute() {
+    return;
+  },
+  openWagon() {
+    return;
+  },
 };
 
 export function bindCommands(next: UiCommands): void {
@@ -95,4 +137,9 @@ export function bindCommands(next: UiCommands): void {
   commands.wagonAct = next.wagonAct;
   commands.closeWagon = next.closeWagon;
   commands.launchMinigame = next.launchMinigame;
+  commands.clearRoute = next.clearRoute;
+  commands.toggleHalt = next.toggleHalt;
+  commands.rejoinCaravan = next.rejoinCaravan;
+  commands.fitRoute = next.fitRoute;
+  commands.openWagon = next.openWagon;
 }

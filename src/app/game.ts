@@ -241,11 +241,17 @@ export class Game implements GameHost {
   enterArea(): void {
     if (this.stack.current()?.id !== 'map') return;
     if (this.mapScene && !this.mapScene.allowEnter()) return;
-    const handoff = this.world.buildHandoffHere();
+    // With the caravan, the area is cut where the wagons stand.
+    const world = this.world;
+    const handoff = world.heroAboard
+      ? world.buildHandoffHere(world.caravan.x, world.caravan.y)
+      : world.buildHandoffHere();
     if (!handoff) {
       hint.value = 'Open water. Walk ashore to enter.';
       return;
     }
+    // The caravan halts while the player is in 3D (step 2 moves it there).
+    world.areaHold = true;
     this.pendingArea = handoff;
     void this.stack.push(new TransitionScene(this, 'to-area'));
   }
@@ -376,11 +382,13 @@ export class Game implements GameHost {
         },
       });
       await renderer.start(areaExport);
+      this.world.areaHold = true;
       view = new AreaView(this, renderer, this.pendingArea);
       this.areaScene = view;
       this.stack.insertUnderTop(view);
       this.setView('area');
     } catch (error) {
+      this.world.areaHold = false;
       hint.value = error instanceof Error ? error.message : 'Could not start the 3D view';
     }
   }
@@ -392,6 +400,7 @@ export class Game implements GameHost {
       this.areaScene = null;
     }
     if (exit) this.world.placeHeroOutside(exit);
+    this.world.areaHold = false;
     this.mapScene?.noteAreaReturn();
     wagonOpen.value = false;
     this.setView('map');
@@ -401,6 +410,11 @@ export class Game implements GameHost {
 
   enqueue(job: () => void): void {
     this.jobs.push(job);
+  }
+
+  toast(message: string): void {
+    notice.value = message;
+    this.armNotice();
   }
 
   private writeSettings(partial: Partial<GameSettings>): void {
@@ -570,6 +584,21 @@ export class Game implements GameHost {
       },
       save: () => {
         void this.save();
+      },
+      clearRoute: () => {
+        this.mapScene?.clearRoute();
+      },
+      toggleHalt: () => {
+        this.mapScene?.toggleHalt();
+      },
+      rejoinCaravan: () => {
+        this.mapScene?.rejoinCaravan();
+      },
+      fitRoute: () => {
+        this.mapScene?.fitRoute();
+      },
+      openWagon: () => {
+        this.openWagon();
       },
       editAvatar: () => {
         void this.editAvatar();

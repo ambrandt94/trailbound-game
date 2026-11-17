@@ -32,4 +32,6 @@ export interface GameHost {
   enterTownNow(fixtureId: string): Promise<void>;
   leaveArea(exit?: AreaExit): void;
   enqueue(job: () => void): void;
+  /** Short notice over the HUD. */
+  toast(message: string): void;
 }

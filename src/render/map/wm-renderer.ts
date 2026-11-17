@@ -29,7 +29,6 @@ import {
   NEAR_POI_TILES,
   fineToDisplay,
   markerDisplay,
-  wagonTrailFine,
 } from '../../core/world/map-grid';
 import { type ChatBubble, peerMarkerColor } from './markers';
 import { LOCAL_PLAYER_ID } from '../../core/sim/player';
@@ -667,8 +666,25 @@ function drawBoatMarker(
   ctx.restore();
 }
 
+/** What the map needs to draw the caravan. Coordinates are fine world tiles. */
+export interface MapCaravanDraw {
+  x: number;
+  y: number;
+  yaw: number;
+  /** Travelled part of the route, flat `[x, y, …]`. */
+  done: number[];
+  /** Remainder of the route, flat. */
+  rest: number[];
+  /** Waypoints, then the destination last. */
+  targets: Array<{ x: number; y: number; name: string | null }>;
+  /** Hero is scouting on foot: draw a tether and a scout pin. */
+  heroApart: boolean;
+}
+
 export class WorldRenderer {
   worldBake: CanvasImageSource | null = null;
+  /** Caravan for this frame. Set at the top of `draw`. */
+  private caravanDraw: MapCaravanDraw | null = null;
   /** Fine tiles per map tile. The sheet is this many times coarser than the world. */
   mapStep = 1;
   private mapWidth = 0;
@@ -1433,10 +1449,13 @@ export class WorldRenderer {
       interior?: InteriorPlan | null;
       /** Town Tale PNGs instead of tile roofs. Yards stay either way. */
       spriteBuildings?: boolean;
-      /** Hero facing, radians. The wagon trails behind this yaw. */
+      /** Hero facing, radians. */
       heroYaw?: number;
+      /** The caravan: wagon at its real position, plus its route and pins. */
+      caravan?: MapCaravanDraw | null;
     },
   ): void {
+    this.caravanDraw = opts.caravan ?? null;
     this.chunkDestPx = Math.max(1, camera.scale * TILE);
     this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2, 0.5, 4.5);
     this.heroYaw = opts.heroYaw ?? 0;
@@ -1709,6 +1728,8 @@ export class WorldRenderer {
         player,
         opts.visiblePoiIds,
       );
+      // Route, pins, and wagon sit above place labels so the trip reads at any zoom.
+      if (this.caravanDraw) this.drawCaravan(ctx, this.caravanDraw, player, camera.scale);
       ctx.restore();
     }
     ctx.restore();
@@ -2608,7 +2629,7 @@ export class WorldRenderer {
       frame?: number;
       lead?: boolean;
     };
-    const marks: Mark[] = showPlayer ? [{ y: player.y, kind: 'player' }] : [];
+    const marks: Mark[] = showPlayer ? [{ y: this.toMap(player.y), kind: 'player' }] : [];
     for (const guest of remotePlayers) {
       if (
         this.toMap(guest.x) < x0 ||
@@ -2719,7 +2740,6 @@ export class WorldRenderer {
             clearBelow,
           });
         }
-        this.drawWagon(ctx, player, scale);
         continue;
       }
       if (mark.kind === 'guest' && mark.guest) {
@@ -2861,14 +2881,24 @@ export class WorldRenderer {
     }
   }
 
-  /** Pixel cart trailing the hero. 16 px tile language, sized in screen pixels. */
-  private drawWagon(ctx: CanvasRenderingContext2D, player: PlayerState, scale: number): void {
-    const trail = wagonTrailFine(player.x, player.y, this.heroYaw, this.mapStep, scale);
-    const px = this.toMap(trail.x) * TILE;
-    const py = this.toMap(trail.y) * TILE;
-    const s = 18 / Math.max(scale, 0.05);
+  /** Pixel cart at the caravan's map position. 16 px tile language, sized in screen pixels. */
+  private drawWagon(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    yaw: number,
+    scale: number,
+  ): void {
+    const px = this.toMap(x) * TILE;
+    const py = this.toMap(y) * TILE;
+    const s = 24 / Math.max(scale, 0.05);
     ctx.save();
     ctx.translate(px, py);
+    // Dark backing so the cart reads over busy terrain at any zoom.
+    ctx.fillStyle = 'rgba(46, 21, 16, 0.75)';
+    ctx.fillRect(-s * 0.72, -s * 0.7, s * 1.44, s * 1.15);
+    // Face the way the caravan rolls: mirror for westward legs.
+    if (Math.sin(yaw) < -0.2) ctx.scale(-1, 1);
     ctx.fillStyle = '#6b3d18';
     ctx.fillRect(-s * 0.55, -s * 0.15, s * 1.1, s * 0.55);
     ctx.fillStyle = '#e6d3a1';
@@ -2879,6 +2909,140 @@ export class WorldRenderer {
     ctx.strokeStyle = '#1a120c';
     ctx.lineWidth = Math.max(1, 1.4 / scale);
     ctx.strokeRect(-s * 0.55, -s * 0.15, s * 1.1, s * 0.55);
+    ctx.restore();
+  }
+
+  private drawCaravan(
+    ctx: CanvasRenderingContext2D,
+    caravan: MapCaravanDraw,
+    player: PlayerState,
+    scale: number,
+  ): void {
+    this.drawCaravanRoute(ctx, caravan, scale);
+    if (caravan.heroApart) {
+      // Dotted tether from the scout back to the wagons.
+      const k = 1 / Math.max(scale, 1e-4);
+      const hx = this.toMap(player.x) * TILE;
+      const hy = this.toMap(player.y) * TILE;
+      const wx = this.toMap(caravan.x) * TILE;
+      const wy = this.toMap(caravan.y) * TILE;
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.lineTo(wx, wy);
+      ctx.strokeStyle = 'rgba(46, 21, 16, 0.8)';
+      ctx.lineWidth = 5 * k;
+      ctx.setLineDash([4 * k, 5 * k]);
+      ctx.stroke();
+      ctx.strokeStyle = '#fff1d2';
+      ctx.lineWidth = 2.5 * k;
+      ctx.stroke();
+      ctx.restore();
+    }
+    this.drawWagon(ctx, caravan.x, caravan.y, caravan.yaw, scale);
+    if (caravan.heroApart) {
+      // The hero sprite sits under place labels; a small pin keeps the scout findable.
+      const k = 1 / Math.max(scale, 1e-4);
+      const px = this.toMap(player.x) * TILE;
+      const py = this.toMap(player.y) * TILE;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(px, py, 8 * k, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffd23a';
+      ctx.fill();
+      ctx.lineWidth = 3 * k;
+      ctx.strokeStyle = '#2e1510';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(px, py, 3 * k, 0, Math.PI * 2);
+      ctx.fillStyle = '#2e1510';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Fable's route line: the stretch already travelled solid #ffb030, the rest
+   * dashed #fff1d2, both on a dark outline. Pins mark waypoints and the
+   * destination. Line widths are screen pixels.
+   */
+  private drawCaravanRoute(
+    ctx: CanvasRenderingContext2D,
+    caravan: MapCaravanDraw,
+    scale: number,
+  ): void {
+    const k = 1 / Math.max(scale, 1e-4);
+    const lw = 4 * k;
+    const path = (flat: readonly number[]): boolean => {
+      if (flat.length < 4) return false;
+      ctx.beginPath();
+      ctx.moveTo(this.toMap(flat[0]!) * TILE, this.toMap(flat[1]!) * TILE);
+      for (let i = 2; i + 1 < flat.length; i += 2) {
+        ctx.lineTo(this.toMap(flat[i]!) * TILE, this.toMap(flat[i + 1]!) * TILE);
+      }
+      return true;
+    };
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (path(caravan.rest)) {
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#2e1510';
+      ctx.lineWidth = lw + 4 * k;
+      ctx.stroke();
+      ctx.setLineDash([lw * 2, lw * 2]);
+      ctx.strokeStyle = '#fff1d2';
+      ctx.lineWidth = lw;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    if (path(caravan.done)) {
+      ctx.strokeStyle = '#2e1510';
+      ctx.lineWidth = lw + 4 * k;
+      ctx.stroke();
+      ctx.strokeStyle = '#ffb030';
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
+    const targets = caravan.targets;
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i]!;
+      const last = i === targets.length - 1;
+      const x = this.toMap(t.x) * TILE;
+      const y = this.toMap(t.y) * TILE;
+      const r = (last ? 7 : 5) * k;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - r * 0.7, y - r * 1.6);
+      ctx.lineTo(x + r * 0.7, y - r * 1.6);
+      ctx.closePath();
+      ctx.fillStyle = '#2e1510';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y - r * 2, r, 0, Math.PI * 2);
+      ctx.fillStyle = last ? '#e8554e' : '#5ab8f0';
+      ctx.fill();
+      ctx.lineWidth = 2 * k;
+      ctx.strokeStyle = '#2e1510';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y - r * 2, r * 0.36, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff1d2';
+      ctx.fill();
+      if (t.name) {
+        const fs = (last ? 15 : 13) * k;
+        ctx.font = `bold ${fs}px sans-serif`;
+        const tw = ctx.measureText(t.name).width;
+        const bx = x + r * 1.4;
+        const by = y - r * 2 - fs * 0.75;
+        ctx.fillStyle = 'rgba(46, 21, 16, 0.88)';
+        ctx.fillRect(bx, by, tw + fs * 0.8, fs * 1.5);
+        ctx.fillStyle = '#fff1d2';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(t.name, bx + fs * 0.4, by + fs * 0.78);
+      }
+    }
     ctx.restore();
   }
 

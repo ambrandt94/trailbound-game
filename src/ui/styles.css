@@ -992,3 +992,76 @@ input:focus-visible {
   border-radius: 0.5rem;
   background: #fffaf2;
 }
+
+/* Caravan travel panel on the map. */
+.travel-panel {
+  position: absolute;
+  z-index: 1;
+  right: 1rem;
+  top: 4.4rem;
+  width: min(23rem, calc(100% - 2rem));
+  padding: 0.75rem 0.95rem 0.85rem;
+  background: rgba(246, 241, 230, 0.94);
+  border: 1px solid #e4d8c4;
+  border-radius: 1rem;
+  pointer-events: auto;
+  color: #2c261f;
+}
+
+.travel-panel .eyebrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin: 0 0 0.35rem;
+  white-space: nowrap;
+}
+
+.travel-status {
+  color: #c65a24;
+}
+
+.travel-line {
+  margin: 0 0 0.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.travel-help,
+.travel-scout {
+  color: #6d6458;
+}
+
+.travel-goal {
+  margin: 0 0 0.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.travel-bar {
+  height: 0.55rem;
+  margin-top: 0.2rem;
+  background: #2e1510;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.travel-fill {
+  height: 100%;
+  background: #ffb030;
+}
+
+.travel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.travel-panel .action {
+  min-width: 0;
+  padding: 0.35rem 0.75rem;
+}
+
+.travel-panel .action.rejoin {
+  background: #c65a24;
+  border-color: #8a3412;
+  color: #f6f1e6;
+}

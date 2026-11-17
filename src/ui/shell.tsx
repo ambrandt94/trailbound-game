@@ -23,6 +23,7 @@ import {
   settings,
   settingsOpen,
   standLine,
+  travelHud,
   wagonOpen,
   wagonRows,
 } from './state';
@@ -125,6 +126,7 @@ function Hud() {
           </button>
         </div>
       </div>
+      <TravelPanel />
       <div class="hud-foot">
         {placeName.value ? (
           <section class="place">
@@ -154,6 +156,92 @@ function Hud() {
   );
 }
 
+function TravelPanel() {
+  const t = travelHud.value;
+  if (!t) return null;
+  const pct = Math.max(0, Math.min(100, (t.todayUnits / Math.max(1, t.goalUnits)) * 100));
+  const roleLabel = t.role === 'passenger' ? 'Passenger' : t.role === 'solo' ? 'Solo' : 'Leader';
+  const status = !t.hasRoute ? 'No route' : t.halted ? 'Halted' : 'Rolling';
+  return (
+    <section class="travel-panel" aria-label="Caravan">
+      <p class="eyebrow">
+        {skinText(`Caravan · ${roleLabel}`)} <span class="travel-status">{skinText(status)}</span>
+      </p>
+      <p class="travel-line">
+        {skinText(`Day ${t.day} · TU ${Math.floor(t.tu)} · pace ×${t.speed.toFixed(2)}`)}
+      </p>
+      <div class="travel-goal" title="Distance today against the day goal">
+        <span>{skinText(`Today ${Math.floor(t.todayUnits)} / ${t.goalUnits}`)}</span>
+        <div class="travel-bar">
+          <div class="travel-fill" style={{ width: `${pct.toFixed(1)}%` }} />
+        </div>
+      </div>
+      {t.hasRoute ? (
+        <p class="travel-line travel-dest">
+          {skinText(
+            `To ${t.destName}${t.waypoints > 0 ? ` (+${t.waypoints} stop${t.waypoints > 1 ? 's' : ''})` : ''} · ${Math.ceil(t.remainingUnits)} left`,
+          )}
+        </p>
+      ) : (
+        <p class="travel-line travel-help">
+          {skinText(
+            t.editable
+              ? 'Click a town, site, or land to route. Shift+click adds a stop.'
+              : 'The leader sets the route.',
+          )}
+        </p>
+      )}
+      {t.eta ? <p class="travel-line travel-eta">{skinText(`ETA ${t.eta}`)}</p> : null}
+      {!t.aboard ? <p class="travel-line travel-scout">{skinText('Scouting on foot')}</p> : null}
+      <div class="travel-actions">
+        {t.editable && t.hasRoute ? (
+          <button
+            type="button"
+            class="action secondary travel-btn halt"
+            onClick={() => commands.toggleHalt()}
+          >
+            {t.halted ? 'Resume' : 'Halt'}
+          </button>
+        ) : null}
+        {t.editable && t.hasRoute ? (
+          <button
+            type="button"
+            class="action secondary travel-btn clear-route"
+            onClick={() => commands.clearRoute()}
+          >
+            Clear route
+          </button>
+        ) : null}
+        {t.hasRoute ? (
+          <button
+            type="button"
+            class="action secondary travel-btn fit-route"
+            onClick={() => commands.fitRoute()}
+          >
+            Show route
+          </button>
+        ) : null}
+        {!t.aboard ? (
+          <button
+            type="button"
+            class="action travel-btn rejoin"
+            onClick={() => commands.rejoinCaravan()}
+          >
+            Rejoin caravan
+          </button>
+        ) : null}
+        <button
+          type="button"
+          class="action secondary travel-btn wagon"
+          onClick={() => commands.openWagon()}
+        >
+          Wagon
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function WagonMenu() {
   if (!wagonOpen.value) return null;
   return (
@@ -166,6 +254,7 @@ function WagonMenu() {
             key={row.id}
             type="button"
             class="action wagon-row"
+            disabled={row.disabled === true}
             onClick={() => commands.wagonAct(row.id)}
           >
             <span>{skinText(row.label)}</span>

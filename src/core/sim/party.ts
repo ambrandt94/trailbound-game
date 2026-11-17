@@ -6,12 +6,20 @@ import { hoursUntilNextDawn, SLEEP_ONLY_TU, tuOfDay } from './time';
 
 export const START_RAW_FOOD = 40;
 export const START_MORALE = 0;
-export const HUNT_TU = 15;
+/**
+ * Activity time is about 3× Fable's (hunt 15, cook 10, eat 3, wash 3), so a
+ * chore takes a real bite out of the day while the caravan keeps rolling.
+ * Fable's read and scout (10 TU, so 30 here) have no game in this build yet.
+ */
+export const HUNT_TU = 45;
 export const HUNT_FOOD = 10;
-export const COOK_TU = 10;
-/** Split from the old 5 TU eat-and-wash stub. */
-export const EAT_TU = 3;
-export const WASH_TU = 3;
+export const COOK_TU = 30;
+export const EAT_TU = 9;
+export const WASH_TU = 9;
+/** Fable `missTuFactor`. A miss or a quit spends this share, rounded half up. */
+export const MISS_TU_FACTOR = 0.5;
+/** From this TU on, Sleep is offered alongside the chores. */
+export const SLEEP_OFFER_TU = 60;
 export const EAT_MORALE = 5;
 /** A clean camp is a smaller lift than a hot meal. */
 export const WASH_MORALE = 2;
@@ -37,6 +45,8 @@ export interface WagonRow {
   id: WagonActionId;
   label: string;
   detail: string;
+  /** Shown but not playable: the full activity would run past midnight. */
+  disabled?: boolean;
 }
 
 export interface WagonResult {
@@ -112,11 +122,10 @@ export function applyOvernight(party: PartyState): PartyState {
 
 export function wagonMenuRows(tu: number): WagonRow[] {
   const t = ((tu % 100) + 100) % 100;
-  if (t >= SLEEP_ONLY_TU) {
-    return [{ id: 'sleep', label: 'Sleep', detail: 'Skip to dawn' }];
-  }
-  return [
-    { id: 'hunt', label: 'Go hunting', detail: `${HUNT_TU} TU · food +${HUNT_FOOD}` },
+  const sleep: WagonRow = { id: 'sleep', label: 'Sleep', detail: 'Skip to dawn' };
+  if (t >= SLEEP_ONLY_TU) return [sleep];
+  const rows: WagonRow[] = [
+    { id: 'hunt', label: 'Go hunting', detail: `${HUNT_TU} TU · musket · food +${HUNT_FOOD}` },
     { id: 'cook', label: 'Cook meal', detail: `${COOK_TU} TU · 1 food → 1 meal` },
     {
       id: 'eat',
@@ -129,6 +138,26 @@ export function wagonMenuRows(tu: number): WagonRow[] {
       detail: `${WASH_TU} TU · clear dishes, morale +${WASH_MORALE}`,
     },
   ];
+  for (const row of rows) {
+    if (!fitsToday(row.id, t)) {
+      row.disabled = true;
+      row.detail = `${activityTu(row.id)} TU · not enough day left`;
+    }
+  }
+  if (t >= SLEEP_OFFER_TU) rows.push(sleep);
+  return rows;
+}
+
+/** A chore fits when its full cost ends by midnight (TU 100). */
+export function fitsToday(id: WagonActionId, tu: number): boolean {
+  const t = ((tu % 100) + 100) % 100;
+  return t + activityTu(id) <= 100 + 1e-9;
+}
+
+/** Fable `missTu`: half the cost, rounded half up (45 → 23, 9 → 5). */
+export function missTu(cost: number): number {
+  if (!Number.isFinite(cost) || cost <= 0) return 0;
+  return Math.floor(cost * MISS_TU_FACTOR + 0.5);
 }
 
 export function activityTu(id: WagonActionId): number {
@@ -150,15 +179,16 @@ export function activityTu(id: WagonActionId): number {
   }
 }
 
-/** Half the activity, rounded. A miss or a quit spends this and nothing else. */
+/** Half the activity, rounded half up. A miss or a quit spends this and nothing else. */
 export function halfActivityTu(id: WagonActionId): number {
-  return Math.round(activityTu(id) / 2);
+  return missTu(activityTu(id));
 }
 
 /** Why the row should not open. Null means the minigame may start. */
 export function wagonRefusal(party: PartyState, id: WagonActionId, tu: number): string | null {
   const offered = wagonMenuRows(tu).some((row) => row.id === id);
   if (!offered) return 'Not now.';
+  if (!fitsToday(id, tu)) return 'Not enough day left.';
   if (id === 'cook' && party.rawFood < 1) return 'No food to cook.';
   if (id === 'eat' && party.meals < 1) return 'No meal ready.';
   if (id === 'wash' && party.dirtyDishes < 1) return 'No dishes to wash.';
