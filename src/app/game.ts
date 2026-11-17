@@ -86,7 +86,7 @@ import { BootScene } from './scenes/boot';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
 import { TransitionScene } from './scenes/transition';
-import { DIVE_MAP_MAGNIFY, DiveScene } from './scenes/dive';
+import { DIVE_BARE_MAGNIFY, DIVE_MAP_MAGNIFY, DIVE_MAX_MAGNIFY, DiveScene } from './scenes/dive';
 import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
 import { ConvoyDriver } from './convoy-driver';
 import { resolveAreaAt } from '../core/area/area-window';
@@ -285,6 +285,8 @@ export class Game implements GameHost {
   }
 
   setLayers(mapMagnify: number, areaOpacity: number): void {
+    // Magnified, the map's screen-sized labels and sprites would balloon.
+    this.mapScene?.setBare(mapMagnify > DIVE_BARE_MAGNIFY);
     const map = this.options.mapCanvas.style;
     if (Math.abs(mapMagnify - 1) < 1e-3) {
       map.transform = '';
@@ -313,7 +315,9 @@ export class Game implements GameHost {
     const view = this.options.areaCanvas.clientHeight || this.options.mapCanvas.clientHeight;
     const areaPx = areaPxPerMetre(view, DIVE_CAM_DIST_M, settings.value.look.camFov);
     const ratio = areaPx / mapPx;
-    return Number.isFinite(ratio) ? Math.min(64, Math.max(1.5, ratio)) : DIVE_MAP_MAGNIFY;
+    return Number.isFinite(ratio)
+      ? Math.min(DIVE_MAX_MAGNIFY, Math.max(1.5, ratio))
+      : DIVE_MAP_MAGNIFY;
   }
 
   landFromArea(exit: AreaExit | undefined, landing: AreaLanding | null): void {

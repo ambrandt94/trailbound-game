@@ -15,6 +15,13 @@ export const RISE_SEC = 0.8;
 export const SETTLE_SEC = 0.8;
 /** Fallback CSS magnification at the bottom of the dive (no map to measure). */
 export const DIVE_MAP_MAGNIFY = 3.2;
+/** Past this CSS magnification the map drops labels, pins, and sprites. */
+export const DIVE_BARE_MAGNIFY = 1.8;
+/**
+ * The map is never magnified past this. Beyond it the pixel art turns to
+ * blocks, so the 3D view takes over (cross-fade) at this point instead.
+ */
+export const DIVE_MAX_MAGNIFY = 4;
 
 export type DiveDirection = 'to-area' | 'to-map';
 
@@ -74,7 +81,7 @@ export class DiveScene implements Scene {
   enter(): void {
     this.host.setMode('transition');
     this.host.setFade(0);
-    this.magnify = this.host.diveMagnify();
+    this.magnify = Math.min(DIVE_MAX_MAGNIFY, this.host.diveMagnify());
     if (this.direction === 'to-area') {
       const target = this.host.diveTarget();
       this.from = this.host.mapPose();
@@ -95,7 +102,7 @@ export class DiveScene implements Scene {
   private tracked(): number {
     const dist = this.host.areaCameraDistance();
     if (!(dist !== null && dist > 1)) return this.magnify;
-    return Math.min(this.magnify * 6, (this.magnify * DIVE_CAM_DIST_M) / dist);
+    return Math.min(DIVE_MAX_MAGNIFY, (this.magnify * DIVE_CAM_DIST_M) / dist);
   }
 
   update(dt: number): void {

@@ -54,6 +54,7 @@ export class MapView implements Scene {
   private hudKey = '';
   /** Hero walked under move input this frame. Drives the paused-clock readout. */
   private walking = false;
+  private bare = false;
 
   constructor(private readonly host: GameHost) {}
 
@@ -198,7 +199,13 @@ export class MapView implements Scene {
       entities: world.entities,
       chunks: world.chunks,
       caravan: this.caravanDraw(),
+      bare: this.bare,
     });
+  }
+
+  /** Terrain-only frames while the dive magnifies the map. */
+  setBare(bare: boolean): void {
+    this.bare = bare;
   }
 
   /** Caravan wagon, route halves, and pins for the renderer. */
