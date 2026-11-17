@@ -55,6 +55,7 @@ export class MapView implements Scene {
   /** Hero walked under move input this frame. Drives the paused-clock readout. */
   private walking = false;
   private bare = false;
+  private barePainted = false;
 
   constructor(private readonly host: GameHost) {}
 
@@ -185,6 +186,9 @@ export class MapView implements Scene {
         : 'Enter walks this ground in 3D.';
     }
     this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(3);
+    // Under the 3D view the dive holds the map still: keep its last bare frame.
+    if (this.bare && this.host.view !== 'map' && this.barePainted) return;
+    this.barePainted = this.bare;
     this.host.paintMap({
       seed: world.seed,
       heroX: world.hero.x,
@@ -320,6 +324,7 @@ export class MapView implements Scene {
    * owns the camera until `endDive`, and the follow camera resumes after.
    */
   diveTo(x: number, y: number, scale: number): void {
+    this.barePainted = false;
     this.camera.follow = false;
     this.camera.x = this.camera.targetX = x / this.camera.step;
     this.camera.y = this.camera.targetY = y / this.camera.step;
