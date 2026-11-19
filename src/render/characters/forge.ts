@@ -1,10 +1,13 @@
 /**
- * The only Character Forge caller. Everyone else asks this module for a body.
+ * Game-facing character API. The vendored runtime is behind `backends/`.
+ * This file does not import `cf-runtime` or call `cf.*`.
  * Recipes stay opaque: generate from a seed plus a profile entry, then build.
  */
 import * as THREE from 'three';
-import type { PlayerProfileEntry } from '../../core/people/avatar';
-import { CF_PIN, characterForgePaths } from './cf-pin';
+import type { AvatarEngine, PlayerProfileEntry } from '../../core/people/avatar';
+import { createCharacterBackend } from './backends/select';
+import type { BuiltCharacter, CharacterBackend } from './backends/types';
+import { characterForgePaths } from './cf-pin';
 
 export interface ForgeStatus {
   ok: boolean;
@@ -31,6 +34,11 @@ export interface ForgeCatalog {
   flyerRaces: string[];
   generatorVersion: number;
   version: string;
+  /**
+   * Metres, keyed by race id. A Character Forge 2 backend fills this from its
+   * catalog. The v1 backend leaves it unset.
+   */
+  raceMetrics?: Readonly<Record<string, { heightM: number; strideM: number }>>;
 }
 
 /** Public fields the API documents, plus the untouched engine recipe. */
@@ -189,19 +197,14 @@ export interface ForgeTimings {
 interface InitOptions {
   baseUrl?: string;
   runtimeUrl?: string;
-  /** Pass false to force the placeholder path. `?cf=0` does the same. */
+  /**
+   * Pass false to force the placeholder path. `?cf=0` does the same.
+   * `?cf=2` (also `v2` / `cf2`) reserves the Character Forge 2 backend and
+   * falls back to v1 with a console warning.
+   */
   enabled?: boolean;
   profile?: unknown;
   force?: boolean;
-}
-
-interface CfBody {
-  object3D: THREE.Group;
-  mixer: THREE.AnimationMixer;
-  clips?: Record<string, THREE.AnimationClip>;
-  play(name: 'Idle' | 'Walk', phase?: number): void;
-  dispose(): void;
-  info?: { ms?: number; hash?: string; clipMap?: Record<string, string> };
 }
 
 interface EngineRecipe {
@@ -214,59 +217,11 @@ interface EngineRecipe {
   gender?: string;
 }
 
-interface CfApi {
-  api: number;
-  version: string | null;
-  bundle: {
-    engine?: { version?: string };
-    generator?: { version?: number };
-    tags?: {
-      races?: string[];
-      styles?: string[];
-      styleKinds?: Record<string, string>;
-      slots?: string[];
-      garments?: Record<string, { slot?: string }>;
-      regalia?: { minRichness?: number; styles?: string[]; garments?: string[]; races?: string[] };
-      edit?: unknown;
-    };
-    clips?: { flyer?: unknown; flyerRaces?: string[] };
-  };
-  init(options: { THREE: typeof import('three'); baseUrl: string }): Promise<unknown>;
-  /**
-   * Default true discards CPU arrays and the atlas image after the first GPU
-   * upload. The adopted body outlives the renderer that uploaded it, so this
-   * stays false.
-   */
-  freeCpuGeometry?: boolean;
-  generate(
-    seed: number,
-    profileEntry: PlayerProfileEntry,
-    options?: { generatorVersion?: number; race?: string; gender?: string },
-  ): EngineRecipe;
-  packsFor(recipes: unknown[]): string[];
-  build(recipe: unknown, options?: { budgetMs?: number; atlasSize?: number }): Promise<CfBody>;
-  recipeHash(recipe: unknown): string;
-  validateProfile(profile: unknown): ProfileReport;
-  stats(): Record<string, number>;
-  pixelSun?(camera: THREE.Camera): void;
-  options?(race: string, gender: string, opts?: { age?: string }): unknown;
-  describe?(recipe: unknown): unknown;
-  checkEdit?(
-    recipe: unknown,
-    patch: unknown,
-    opts?: { strict?: boolean },
-  ): { ok: boolean; recipe: EngineRecipe | null; errors: EditIssue[]; warnings: EditIssue[] };
-  edit?(recipe: unknown, patch: unknown, opts?: { strict?: boolean }): EngineRecipe;
-  editCatalog?(): unknown;
-}
-
 const BUDGET_MS = 8;
 
-let cf: CfApi | null = null;
-let pixelSun: ((camera: THREE.Camera) => void) | null = null;
+let backend: CharacterBackend | null = null;
 let pending: Promise<ForgeStatus> | null = null;
 let status: ForgeStatus = { ok: false, reason: 'not started', initMs: 0 };
-let catalog: ForgeCatalog | null = null;
 let adopted: AvatarBody | null = null;
 let buildMs = 0;
 let buildError = '';
@@ -281,15 +236,22 @@ export function forgeReady(): ForgeStatus {
   return status;
 }
 
+/** Active engine after a successful init. Null when the placeholder path is in use. */
+export function characterEngine(): AvatarEngine | null {
+  if (!status.ok || !backend) return null;
+  return backend.id;
+}
+
 export function forgeCatalog(): ForgeCatalog | null {
-  return catalog;
+  if (!status.ok || !backend) return null;
+  return backend.catalog();
 }
 
 /** Live edit catalog, including slot regions and garment occupation when the pin provides them. */
 export function forgeEditCatalog(): unknown | null {
-  if (!cf?.editCatalog || !status.ok) return null;
+  if (!feature('editCatalog') || !backend) return null;
   try {
-    return cf.editCatalog();
+    return backend.editCatalog();
   } catch {
     return null;
   }
@@ -304,17 +266,17 @@ export function forgeBuildError(): string {
 }
 
 export function forgeStats(): Record<string, number> | null {
-  if (!cf || !status.ok) return null;
+  if (!backend || !status.ok) return null;
   try {
-    return cf.stats();
+    return backend.stats();
   } catch {
     return null;
   }
 }
 
 export function validateGameProfile(profile: unknown): ProfileReport {
-  if (!cf || !status.ok) return { ok: false, errors: ['forge is not ready'], warnings: [] };
-  return cf.validateProfile(profile);
+  if (!backend || !status.ok) return { ok: false, errors: ['forge is not ready'], warnings: [] };
+  return backend.validateProfile(profile);
 }
 
 export function generateRecipe(options: {
@@ -324,14 +286,16 @@ export function generateRecipe(options: {
   race?: string;
   gender?: 'm' | 'f';
 }): CharacterRecipe {
-  if (!cf || !status.ok) throw new Error(status.reason || 'forge is not ready');
-  const generatorVersion = options.generatorVersion ?? catalog?.generatorVersion ?? 1;
-  const engine = cf.generate(options.seed >>> 0, options.profileEntry, {
+  if (!backend || !status.ok) throw new Error(status.reason || 'forge is not ready');
+  const generatorVersion = options.generatorVersion ?? backend.catalog()?.generatorVersion ?? 1;
+  const engine = backend.generate({
+    seed: options.seed >>> 0,
+    profileEntry: options.profileEntry,
     generatorVersion,
     race: options.race,
     gender: options.gender,
   });
-  return wrapRecipe(engine, options.seed, generatorVersion);
+  return wrapRecipe(engine as EngineRecipe, options.seed, generatorVersion);
 }
 
 /** Wrap a recipe that was stored in a save. The object is not edited here. */
@@ -341,8 +305,8 @@ export function recipeFromStored(engine: unknown, seed = 0): CharacterRecipe {
 }
 
 export function describeRecipe(recipe: CharacterRecipe): EditSnapshot {
-  if (!cf?.describe || !status.ok) throw new Error(status.reason || 'forge is not ready');
-  return normalizeSnapshot(cf.describe(recipe.engine));
+  if (!feature('describe') || !backend) throw new Error(status.reason || 'forge is not ready');
+  return normalizeSnapshot(backend.describe(recipe.engine));
 }
 
 export function optionsFor(
@@ -350,14 +314,14 @@ export function optionsFor(
   gender: 'm' | 'f',
   age: 'adult' | 'child' = 'adult',
 ): EditOptions {
-  if (cf?.options && status.ok) return normalizeOptions(cf.options(race, gender, { age }));
+  if (feature('options') && backend) return normalizeOptions(backend.options(race, gender, age));
   const offline = offlineOptions(race, gender, age);
   if (offline) return offline;
   throw new Error(status.reason || 'forge is not ready');
 }
 
 export function checkRecipeEdit(recipe: CharacterRecipe, patch: EditPatch): EditReport {
-  if (!cf?.checkEdit || !status.ok) {
+  if (!feature('checkEdit') || !backend) {
     return {
       ok: false,
       recipe: null,
@@ -365,10 +329,10 @@ export function checkRecipeEdit(recipe: CharacterRecipe, patch: EditPatch): Edit
       warnings: [],
     };
   }
-  const report = cf.checkEdit(recipe.engine, patch);
+  const report = backend.checkEdit(recipe.engine, patch);
   const next =
     report.ok && report.recipe
-      ? wrapRecipe(report.recipe, recipe.seed, recipe.generatorVersion)
+      ? wrapRecipe(report.recipe as EngineRecipe, recipe.seed, recipe.generatorVersion)
       : null;
   return {
     ok: report.ok,
@@ -379,19 +343,23 @@ export function checkRecipeEdit(recipe: CharacterRecipe, patch: EditPatch): Edit
 }
 
 export function editRecipe(recipe: CharacterRecipe, patch: EditPatch): CharacterRecipe {
-  if (!cf?.edit || !status.ok) throw new Error(status.reason || 'forge is not ready');
-  return wrapRecipe(cf.edit(recipe.engine, patch), recipe.seed, recipe.generatorVersion);
+  if (!feature('edit') || !backend) throw new Error(status.reason || 'forge is not ready');
+  return wrapRecipe(
+    backend.edit(recipe.engine, patch) as EngineRecipe,
+    recipe.seed,
+    recipe.generatorVersion,
+  );
 }
 
 export function recipeHashOf(recipe: CharacterRecipe): string {
-  if (!cf || !status.ok) return `ph:${recipe.seed >>> 0}`;
-  return cf.recipeHash(recipe.engine);
+  if (!backend || !status.ok) return `ph:${recipe.seed >>> 0}`;
+  return backend.recipeHash(recipe.engine);
 }
 
 export function packsForRecipe(recipe: CharacterRecipe): string[] {
-  if (!cf || !status.ok) return [];
+  if (!backend || !status.ok) return [];
   try {
-    return cf.packsFor([recipe.engine]);
+    return backend.packsFor([recipe.engine]);
   } catch {
     return [];
   }
@@ -402,16 +370,16 @@ export async function buildAvatar(
   recipe: CharacterRecipe,
   options: { budgetMs?: number } = {},
 ): Promise<AvatarBody> {
-  if (!cf || !status.ok) return placeholderAvatar(recipe.seed);
+  if (!backend || !status.ok) return placeholderAvatar(recipe.seed);
   const started = now();
   buildError = '';
   try {
-    const built = await cf.build(recipe.engine, {
+    const built = await backend.build(recipe.engine, {
       budgetMs: options.budgetMs ?? BUDGET_MS,
       atlasSize: 256,
     });
     buildMs = now() - started;
-    return wrapForge(built, cf.recipeHash(recipe.engine));
+    return wrapForge(built, backend.recipeHash(recipe.engine));
   } catch (error) {
     buildMs = now() - started;
     buildError = error instanceof Error ? error.message : 'build failed';
@@ -490,50 +458,32 @@ export function tickPlayerBody(dt: number): void {
 }
 
 export function aimForgeSun(camera: THREE.Camera): void {
-  pixelSun?.(camera);
+  if (!status.ok) return;
+  backend?.aimSun(camera);
 }
 
 async function runInit(options: InitOptions): Promise<ForgeStatus> {
   const started = now();
-  catalog = null;
-  cf = null;
-  pixelSun = null;
+  backend?.dispose();
+  backend = null;
   if (options.enabled === false || queryDisablesForge()) {
     status = { ok: false, reason: 'cf=0', initMs: now() - started };
     return status;
   }
+  let selected: CharacterBackend | null = null;
   try {
-    const runtimeUrl = options.runtimeUrl ?? defaultRuntimeUrl();
-    const loaded = (await import(/* @vite-ignore */ runtimeUrl)) as { default: CfApi };
-    const api = loaded.default;
-    if (!api || typeof api.init !== 'function' || api.api !== 1) {
-      throw new Error('character runtime api mismatch');
-    }
-    // Keep the bake on the CPU. The area renderer is disposed on every return
-    // to the map, which deletes the GPU buffers, and a later visit has to
-    // upload this same body again.
-    api.freeCpuGeometry = false;
-    await api.init({ THREE, baseUrl: options.baseUrl ?? defaultBaseUrl() });
-    const runtimeVersion = api.bundle?.engine?.version ?? api.version ?? '';
-    const generatorVersion = api.bundle?.generator?.version;
-    if (runtimeVersion !== CF_PIN.version || generatorVersion !== Number(CF_PIN.generatorVersion)) {
-      throw new Error(
-        `character runtime ${runtimeVersion} generator ${String(generatorVersion)} does not match pin ${CF_PIN.version} generator ${CF_PIN.generatorVersion}`,
-      );
-    }
-    if (api.api !== 1) throw new Error('character runtime api mismatch');
-    cf = api;
-    pixelSun = typeof api.pixelSun === 'function' ? api.pixelSun.bind(api) : null;
-    catalog = readCatalog(api);
-    if (options.profile) {
-      const report = api.validateProfile(options.profile);
-      if (!report.ok) console.warn('trailbound character profile', report.errors);
-    }
+    selected = createCharacterBackend();
+    await selected.init({
+      runtimeUrl: options.runtimeUrl ?? defaultRuntimeUrl(),
+      baseUrl: options.baseUrl ?? defaultBaseUrl(),
+      profile: options.profile,
+    });
+    backend = selected;
     status = { ok: true, reason: '', initMs: now() - started };
     return status;
   } catch (error) {
-    cf = null;
-    catalog = null;
+    selected?.dispose();
+    backend = null;
     status = {
       ok: false,
       reason: error instanceof Error ? error.message : 'forge init failed',
@@ -543,13 +493,18 @@ async function runInit(options: InitOptions): Promise<ForgeStatus> {
   }
 }
 
-function actionFor(built: CfBody, name: 'Idle' | 'Walk'): THREE.AnimationAction | null {
+function feature(name: 'describe' | 'options' | 'checkEdit' | 'edit' | 'editCatalog'): boolean {
+  if (!status.ok || !backend) return false;
+  return backend.features()[name];
+}
+
+function actionFor(built: BuiltCharacter, name: 'Idle' | 'Walk'): THREE.AnimationAction | null {
   const clip = built.clips?.[name];
   if (!clip) return null;
   return built.mixer.clipAction(clip);
 }
 
-function wrapForge(built: CfBody, hash: string): AvatarBody {
+function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
   const state = { clip: 'Idle' as 'Idle' | 'Walk', disposed: false };
   built.object3D.name = 'CF_avatar';
   // The town, the creator, and instance games all borrow this one object.
@@ -597,40 +552,6 @@ function wrapForge(built: CfBody, hash: string): AvatarBody {
     },
   };
   return body;
-}
-
-function readCatalog(api: CfApi): ForgeCatalog {
-  const tags = api.bundle?.tags ?? {};
-  const garmentsBySlot: Record<string, string[]> = {};
-  for (const slot of tags.slots ?? []) garmentsBySlot[slot] = [];
-  for (const [id, info] of Object.entries(tags.garments ?? {})) {
-    const slot = info?.slot;
-    if (!slot) continue;
-    const list = garmentsBySlot[slot] ?? [];
-    list.push(id);
-    garmentsBySlot[slot] = list;
-  }
-  for (const list of Object.values(garmentsBySlot)) list.sort();
-  const regalia = tags.regalia ?? {};
-  const flyerRaces = Array.isArray(api.bundle?.clips?.flyerRaces)
-    ? api.bundle.clips.flyerRaces
-    : api.bundle?.clips?.flyer
-      ? ['pixie']
-      : [];
-  return {
-    races: [...(tags.races ?? [])],
-    genders: ['m', 'f'],
-    styles: [...(tags.styles ?? [])],
-    styleKinds: { ...(tags.styleKinds ?? {}) },
-    slots: [...(tags.slots ?? [])],
-    garmentsBySlot,
-    regaliaMinRichness: typeof regalia.minRichness === 'number' ? regalia.minRichness : 0.85,
-    regaliaStyles: [...(regalia.styles ?? [])],
-    regaliaGarments: [...(regalia.garments ?? [])],
-    flyerRaces,
-    generatorVersion: api.bundle?.generator?.version ?? 1,
-    version: api.version ?? api.bundle?.engine?.version ?? '',
-  };
 }
 
 function wrapRecipe(engine: EngineRecipe, seed: number, generatorVersion: number): CharacterRecipe {
@@ -767,7 +688,7 @@ function offlineOptions(
   gender: 'm' | 'f',
   age: 'adult' | 'child',
 ): EditOptions | null {
-  const edit = cf?.bundle?.tags?.edit;
+  const edit = backend?.offlineEditSource();
   if (!isRecord(edit) || !isRecord(edit.options) || !isRecord(edit.catalog)) return null;
   const byRace = edit.options[race];
   if (!isRecord(byRace)) return null;

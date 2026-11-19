@@ -46,7 +46,7 @@ export async function expectSaveRoundTrip(
   });
 
   const manifest = await save.readManifest(slot);
-  expect(manifest?.schema).toBe(4);
+  expect(manifest?.schema).toBe(5);
   expect(manifest?.worldSeed).toBe(7741);
   expect(manifest?.clockHours).toBe(9.5);
   expect(manifest?.player).toMatchObject({ name: 'Traveller', mapX: 3, mapY: 4, yaw: 0.2 });
@@ -54,6 +54,7 @@ export async function expectSaveRoundTrip(
     seed: 77,
     race: 'human',
     recipeHash: '0123456789abcdef',
+    engine: 'cf1',
   });
   expect(manifest?.cfPin).toEqual({ version: '1.2.0', generatorVersion: '1' });
   expect(manifest?.gameVersion).toBe('0.0.0');
@@ -96,7 +97,7 @@ export async function expectSaveRoundTrip(
 
   const slots = await save.listSlots();
   expect(slots.map((item) => item.slot)).toEqual([slot]);
-  expect(slots[0]?.manifest.schema).toBe(4);
+  expect(slots[0]?.manifest.schema).toBe(5);
   expect(slots[0]?.manifest.clockHours).toBe(11);
 
   const again = await save.readCore(slot);

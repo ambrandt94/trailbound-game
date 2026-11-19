@@ -21,7 +21,7 @@ This is enforced twice:
 
 - `src/input/touch/` — **touch-controls agent** (Alex's separate agent; the same one that owns the controller touch pad). Other agents only wire `attachTouchControls` from `src/app`. Do not change the pad implementation.
 - `public/vendor/character-forge/` — written only by `tools/sync-character-bundle.mjs`. Never hand-edit vendored files.
-- `src/render/characters/forge.ts` — the only file that imports `cf-runtime.mjs` or calls `CF.*`. Other agents ask `getPlayerBody()` / `tickPlayerBody()` (see `src/render/characters/README.md`). Do not import the runtime anywhere else.
+- `src/render/characters/backends/v1.ts` — the only file that imports `cf-runtime.mjs` or calls `CF.*`. `forge.ts` is the game-facing seam (`?cf=` selects the backend; v1 today, v2 reserved). Other agents ask `getPlayerBody()` / `tickPlayerBody()` (see `src/render/characters/README.md`). Do not import the runtime anywhere else.
 - Other agents may edit the rest of the repo, inside the dependency rule.
 
 ## Assets

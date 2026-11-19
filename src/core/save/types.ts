@@ -15,7 +15,10 @@ export interface PlayerSave {
   mapX: number;
   mapY: number;
   yaw: number;
-  /** Present from schema 4. Schema 3 saves gain one in the migration. */
+  /**
+   * Present from schema 4. Schema 3 saves gain one in the migration.
+   * Schema 5 adds `engine` and, when a recipe was stored, `legacyRecipe`.
+   */
   avatar?: PlayerAvatar;
 }
 
