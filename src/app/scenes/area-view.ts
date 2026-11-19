@@ -149,17 +149,21 @@ export class AreaView implements Scene {
     if (!this.renderer) return;
     const games = this.host.minigames;
     if (!games.isOpen() || games.kind === 'world') this.renderer.frame();
-    if (this.recut?.phase === 'snap') this.beginSwap();
+    // Copy the still now, in the same task as the draw, while the buffer is readable.
+    const swap = this.recut?.phase === 'snap';
+    if (swap) this.host.holdFrame();
     const mix = settings.value;
     music.setVolume((mix.music / 100) * (mix.master / 100));
     music.setMuffle(this.renderer.indoors() ? 1 : 0);
     if (games.isOpen()) {
       hint.value = games.hint();
-      return;
+    } else {
+      const line = this.renderer.prompt();
+      const controls = this.driver ? `${CONVOY_CONTROLS}  ·  ${CONTROLS}` : CONTROLS;
+      hint.value = line ? `${line}  ·  ${controls}` : controls;
     }
-    const line = this.renderer.prompt();
-    const controls = this.driver ? `${CONVOY_CONTROLS}  ·  ${CONTROLS}` : CONTROLS;
-    hint.value = line ? `${line}  ·  ${controls}` : controls;
+    // Last: opening the next window tears this renderer down.
+    if (swap) this.beginSwap();
   }
 
   exit(): void {
@@ -239,9 +243,8 @@ export class AreaView implements Scene {
     this.advanceAreaClock(dt);
   }
 
-  /** Right after a render: copy the frame as a still, then open the next window behind it. */
+  /** The still is held; open the next window behind it. */
   private beginSwap(): void {
-    this.host.holdFrame();
     this.recut = { phase: 'load' };
     void this.loadRecut();
   }
