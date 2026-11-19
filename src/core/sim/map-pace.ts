@@ -53,18 +53,35 @@ export function mapTimeRuns(
 }
 
 /**
- * Status word on the caravan panel. On the map the wagons wait for the hero
- * whenever the clock is paused; in 3D they simply roll.
+ * Status word on the chip and the caravan card. It is the leader's command and
+ * nothing else: Rolling after Roll out, Halted after Halt. Whether the map clock
+ * is idle is a separate setting (`mapWaitsForHero`).
  */
 export function caravanStatus(hud: {
   hasRoute: boolean;
   halted: boolean;
+}): 'No route' | 'Halted' | 'Rolling' {
+  if (!hud.hasRoute) return 'No route';
+  return hud.halted ? 'Halted' : 'Rolling';
+}
+
+/**
+ * On the map with "time moves only when I move", a rolling caravan waits for
+ * the hero's walk. That is the pause-when-idle setting, not a halt: the state
+ * above stays Rolling. True when the readout should say so.
+ */
+export function mapWaitsForHero(hud: {
+  hasRoute: boolean;
+  halted: boolean;
   clockPaused: boolean;
   view: 'map' | 'area';
-}): 'No route' | 'Halted' | 'Waiting' | 'Rolling' {
-  if (!hud.hasRoute) return 'No route';
-  if (hud.halted) return 'Halted';
-  return hud.view === 'map' && hud.clockPaused ? 'Waiting' : 'Rolling';
+}): boolean {
+  return hud.hasRoute && !hud.halted && hud.view === 'map' && hud.clockPaused;
+}
+
+/** The leader's button label: what pressing it does next. */
+export function haltLabel(halted: boolean): 'Roll out' | 'Halt' {
+  return halted ? 'Roll out' : 'Halt';
 }
 
 /** On-foot speed on the map, as a multiple of the wagon's map pace. */

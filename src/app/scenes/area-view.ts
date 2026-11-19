@@ -19,6 +19,7 @@ import {
 import type { ConvoyDriver } from '../convoy-driver';
 import type { AreaLanding, GameHost } from '../host';
 import type { Scene } from '../scene-stack';
+import { leaderToggleHalt } from '../leader-halt';
 import { travelHudFor, travelHudKey } from '../travel-hud';
 import { DiveScene } from './dive';
 
@@ -29,7 +30,7 @@ export interface AreaEnter {
 
 const CONTROLS =
   'WASD walk · Shift jog, hold to sprint · Ctrl sneak · Space jump · Alt roll · F use · Q/E orbit · Z/X pitch · V zoom · C overhead/3rd · wheel zoom. Walk off the edge to leave.';
-const CONVOY_CONTROLS = 'B ride the bench · H halt/resume · G rejoin the wagon';
+const CONVOY_CONTROLS = 'B ride the bench · H halt / roll out · G rejoin the wagon';
 
 /** The held still of the old window dissolves over the new one in this long. */
 export const RECUT_DISSOLVE_SEC = 0.3;
@@ -227,22 +228,10 @@ export class AreaView implements Scene {
     if (!renderer || !this.driver) return;
     if (keys.consumePress('KeyB')) renderer.convoyCommand('bench');
     if (keys.consumePress('KeyG')) renderer.convoyCommand('rejoin');
-    if (keys.consumePress('KeyH')) this.toggleHalt();
+    if (keys.consumePress('KeyH')) leaderToggleHalt(this.host);
     for (const event of this.driver.step(dt)) {
-      if (event.type === 'stopped') this.host.toast(`The caravan halts at ${event.name}.`);
-      else this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
+      this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
     }
-  }
-
-  private toggleHalt(): void {
-    const world = this.host.world;
-    if (!hasRoute(world.caravan)) return;
-    const halted = !world.caravan.halted;
-    if (!world.setCaravanHalted(halted)) {
-      this.host.toast('The leader decides when to stop.');
-      return;
-    }
-    this.host.toast(halted ? 'The caravan halts.' : 'The caravan rolls on.');
   }
 
   /**
@@ -299,9 +288,10 @@ export class AreaView implements Scene {
   private stepRecut(dt: number): void {
     const driver = this.driver;
     if (!driver) return;
+    // The leader can still halt or roll out while the next window opens.
+    if (this.host.keyboard.consumePress('KeyH')) leaderToggleHalt(this.host);
     for (const event of driver.step(dt)) {
-      if (event.type === 'stopped') this.host.toast(`The caravan halts at ${event.name}.`);
-      else this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
+      this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
     }
     this.advanceAreaClock(dt);
   }

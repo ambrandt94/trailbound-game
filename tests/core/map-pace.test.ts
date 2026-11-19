@@ -8,6 +8,8 @@ import {
 import {
   MAP_SPEEDS,
   caravanStatus,
+  haltLabel,
+  mapWaitsForHero,
   formatMapSpeed,
   mapTimeRuns,
   normalizeMapSpeed,
@@ -33,7 +35,6 @@ function rolling(): CaravanState {
       { x: 2 + tiles, y: 20.5 },
     ],
     [{ x: 2 + tiles, y: 20.5, name: 'Far', placeId: null }],
-    null,
   );
 }
 
@@ -100,13 +101,18 @@ test('map time: hero walking always runs it; the rolling caravan only when the s
   expect(mapTimeRuns({ ...car, halted: true }, true, true)).toBe(true);
 });
 
-test('caravan status says Waiting on the map while the clock is paused, Rolling in 3D', () => {
+test('the chip says what the leader commanded; the idle map clock is a separate note', () => {
   const base = { hasRoute: true, halted: false, clockPaused: true, view: 'map' as const };
-  expect(caravanStatus(base)).toBe('Waiting');
-  expect(caravanStatus({ ...base, clockPaused: false })).toBe('Rolling');
-  expect(caravanStatus({ ...base, view: 'area' })).toBe('Rolling');
+  // Rolling stays Rolling while the map waits for the hero: that is the pace setting, not a halt.
+  expect(caravanStatus(base)).toBe('Rolling');
+  expect(mapWaitsForHero(base)).toBe(true);
+  expect(mapWaitsForHero({ ...base, clockPaused: false })).toBe(false);
+  expect(mapWaitsForHero({ ...base, view: 'area' })).toBe(false);
   expect(caravanStatus({ ...base, halted: true })).toBe('Halted');
+  expect(mapWaitsForHero({ ...base, halted: true })).toBe(false);
   expect(caravanStatus({ ...base, hasRoute: false })).toBe('No route');
+  expect(haltLabel(true)).toBe('Roll out');
+  expect(haltLabel(false)).toBe('Halt');
 });
 
 test('on: an idle hero leaves the clock, caravan, and travellers frozen', () => {

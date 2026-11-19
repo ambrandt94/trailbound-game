@@ -33,7 +33,6 @@ function flatWorld(): WorldState {
       { x: 10 + tiles, y: 40.5 },
     ],
     [{ x: 10 + tiles, y: 40.5, name: 'Far', placeId: null }],
-    null,
   );
   return world;
 }
@@ -109,7 +108,6 @@ test('a new route throws the cached crossing away', () => {
       { x: 10, y: 40.5 + 60 * CARAVAN_TILES_PER_UNIT },
     ],
     [{ x: 10, y: 40.5 + 60 * CARAVAN_TILES_PER_UNIT, name: 'South', placeId: null }],
-    null,
   );
   const b = driver.recutCentre();
   expect(Math.abs(b.y - a.y)).toBeGreaterThan(5);

@@ -14,6 +14,8 @@ function newGameRouted(): WorldState {
   const node = world.data!.nodes.find((n) => n.name === 'Saltgate')!;
   const res = world.routeCaravanTo({ x: node.cx, y: node.cy, name: node.name, placeId: node.id });
   expect(res.ok).toBe(true);
+  // A new route waits for the leader's Roll out; these tests are about a rolling caravan.
+  world.setCaravanHalted(false);
   return world;
 }
 
@@ -53,7 +55,6 @@ function flatWorld(): WorldState {
       { x: 10 + tiles, y: 80.5 },
     ],
     [{ x: 10 + tiles, y: 80.5, name: 'Far', placeId: null }],
-    null,
   );
   world.rejoinCaravan();
   return world;

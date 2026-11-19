@@ -22,7 +22,7 @@ import {
 } from '../../src/core/sim/party';
 import { WorldState } from '../../src/core/state/world-state';
 
-const even: CaravanStepEnv = { day: 0, speedAt: () => 1, settlementAt: () => null };
+const even: CaravanStepEnv = { day: 0, speedAt: () => 1 };
 
 function straight(units: number) {
   const tiles = units * CARAVAN_TILES_PER_UNIT;
@@ -33,7 +33,6 @@ function straight(units: number) {
       { x: tiles, y: 0 },
     ],
     [{ x: tiles, y: 0, name: 'Far', placeId: null }],
-    null,
   );
 }
 
@@ -73,21 +72,31 @@ test('the caravan stops at the destination and clears the route', () => {
   expect(step.caravan.x).toBeCloseTo(5 * CARAVAN_TILES_PER_UNIT, 6);
 });
 
-test('the caravan halts on entering a settlement that is not the destination', () => {
-  const town = { id: 'mid', name: 'Midway' };
-  const env: CaravanStepEnv = {
-    ...even,
-    settlementAt: (x) => (x >= 20 && x <= 28 ? town : null),
-  };
-  const step = advanceCaravan(straight(100), 50, env);
-  expect(step.caravan.halted).toBe(true);
-  expect(step.events).toEqual([{ type: 'stopped', name: 'Midway' }]);
-  expect(step.caravan.x).toBeGreaterThanOrEqual(20);
-  expect(step.caravan.x).toBeLessThan(22);
-  // Resume rolls through the same town without halting again.
-  const resumed = advanceCaravan({ ...step.caravan, halted: false }, 20, env);
-  expect(resumed.caravan.halted).toBe(false);
-  expect(resumed.caravan.x).toBeGreaterThan(28);
+test('the caravan rolls through settlements on its way and never halts itself', () => {
+  // `advanceCaravan` has no settlement input at all: a town, a waypoint, or a
+  // zone edge cannot halt it. Only arrival ends the route.
+  const step = advanceCaravan(straight(100), 50, even);
+  expect(step.caravan.halted).toBe(false);
+  expect(step.events).toEqual([]);
+  expect(step.caravan.along).toBeCloseTo(50 * CARAVAN_TILES_PER_UNIT, 6);
+});
+
+test('setRoute: the leader command for the new route is passed in, default rolls', () => {
+  const pts = [
+    { x: 0, y: 0 },
+    { x: 40, y: 0 },
+  ];
+  const t = [{ x: 40, y: 0, name: 'Far', placeId: null }];
+  expect(setRoute(createCaravan(0, 0), pts, t).halted).toBe(false);
+  expect(setRoute(createCaravan(0, 0), pts, t, true).halted).toBe(true);
+});
+
+test('an older save with a stopId still loads, and the field is gone', () => {
+  const caravan = straight(20);
+  const saved = { ...caravanSave(caravan, true), stopId: 'old-town', halted: true };
+  const loaded = loadCaravan(saved, { x: 0, y: 0 }).caravan;
+  expect(loaded.halted).toBe(true);
+  expect('stopId' in loaded).toBe(false);
 });
 
 test('distance today resets on a new day', () => {

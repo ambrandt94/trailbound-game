@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { caravanStatus } from '../core/sim/map-pace';
+import { caravanStatus, haltLabel, mapWaitsForHero } from '../core/sim/map-pace';
 import type { HudPrefs } from '../core/state/settings';
 import { CreatorScreen } from './creator';
 import { skinText } from './glyphs';
@@ -148,8 +148,8 @@ function Toolbar() {
       {canHalt ? (
         <ToolButton
           icon={t.halted ? 'play' : 'pause'}
-          label={t.halted ? 'Resume' : 'Halt'}
-          title={t.halted ? 'Resume the caravan' : 'Halt the caravan'}
+          label={haltLabel(t.halted)}
+          title={t.halted ? 'Roll out the caravan (H)' : 'Halt the caravan (H)'}
           onClick={() => commands.toggleHalt()}
         />
       ) : null}
@@ -271,6 +271,11 @@ function StatusChip() {
             </span>
           </>
         ) : null}
+        {t && mapWaitsForHero(t) ? (
+          <span class="chip-sub" title="Time moves only when you walk (Settings)">
+            {skinText('Time waits for you')}
+          </span>
+        ) : null}
         {supplies ? <span class="chip-sub">{skinText(supplies)}</span> : null}
         {clockRate.value ? (
           <span class="chip-sub" title="Game clock. Walk stays 5 km/h.">
@@ -312,6 +317,11 @@ function CaravanCard() {
         </button>
       </p>
       <p class="travel-line">{skinText(`${caravanStatus(t)} · Pace x${t.speed.toFixed(2)}`)}</p>
+      {mapWaitsForHero(t) ? (
+        <p class="travel-line travel-wait">
+          {skinText('Time waits until you walk (Settings: time moves only when I move)')}
+        </p>
+      ) : null}
       <p class="travel-line" title="Distance today against the day goal">
         {skinText(`Today ${Math.floor(t.todayUnits)} / ${t.goalUnits}`)}
       </p>
@@ -356,8 +366,7 @@ function CaravanCard() {
             class="action secondary travel-btn halt"
             onClick={() => commands.toggleHalt()}
           >
-            {t.halted ? 'Resume' : 'Halt'}
-            {inArea ? ' (H)' : ''}
+            {`${haltLabel(t.halted)} (H)`}
           </button>
         ) : null}
         {t.editable && t.hasRoute && !inArea ? (
@@ -579,7 +588,7 @@ function isTyping(target: EventTarget | null): boolean {
 
 /**
  * HUD shortcuts while playing: U hides or shows every HUD element, I the caravan
- * card, O settings, K the controls. H stays the 3D halt key.
+ * card, O settings, K the controls. H is the caravan's Halt / Roll out, on the map and in 3D.
  */
 function useHudKeys(): void {
   useEffect(() => {
