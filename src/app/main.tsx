@@ -3,6 +3,7 @@ import { createFetchContentSource } from '../platform/content-source';
 import { createBrowserSettings } from '../platform/settings';
 import { createIdbSaveBackend } from '../platform/storage/idb';
 import { Shell } from '../ui/shell';
+import { commands, settings } from '../ui/state';
 import '../ui/styles.css';
 import '../ui/theme/pixel-skin.css';
 import { systemClock } from './fixed-step';
@@ -42,4 +43,16 @@ const game = new Game({
 
 render(<Shell />, ui);
 Object.assign(globalThis, { __TRAILBOUND__: game });
+// Debug hook, like the other `__tb*` globals: `__tbPace.set({ mapSpeed: 8, timeOnlyWhenMoving: false })`.
+Object.assign(globalThis, {
+  __tbPace: {
+    get: () => ({
+      mapSpeed: settings.value.mapSpeed,
+      timeOnlyWhenMoving: settings.value.timeOnlyWhenMoving,
+    }),
+    set: (partial: { mapSpeed?: number; timeOnlyWhenMoving?: boolean }) => {
+      commands.changeSettings(partial as Parameters<typeof commands.changeSettings>[0]);
+    },
+  },
+});
 void game.start();

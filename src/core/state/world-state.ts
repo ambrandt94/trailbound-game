@@ -4,6 +4,7 @@ import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import type { CfPin, PackedWorld, PlayerSave, PartySave } from '../save/types';
 import { GAME_HOURS_PER_REAL_SECOND, START_HOUR } from '../sim/clock';
+import { mapTimeRuns } from '../sim/map-pace';
 import {
   applyOvernight,
   applyWagonAction,
@@ -29,7 +30,6 @@ import {
   hasRoute,
   isRolling,
   loadCaravan,
-  mapClockRuns,
   setRoute,
   type CaravanEvent,
   type CaravanPlace,
@@ -210,13 +210,31 @@ export class WorldState {
   }
 
   /**
-   * Charge a walk on the clock and step travellers by that same game time.
-   * Distance is metres; pace is metres per game second.
+   * Idle map frame under the pace settings. With "time moves only when I
+   * move" on this does nothing; off, a rolling caravan runs the clock at the
+   * zoomed map rate times the map speed step. Returns whether time ran.
    */
-  advanceTravel(distanceMeters: number, paceMps: number): number {
+  stepMapIdle(
+    realSeconds: number,
+    hoursPerRealSec: number,
+    speed: number,
+    onlyWhenMoving: boolean,
+  ) {
+    if (!this.mapClockRuns(false, onlyWhenMoving)) return false;
+    this.stepIdle(realSeconds, hoursPerRealSec * Math.max(1, speed));
+    return true;
+  }
+
+  /**
+   * Charge a walk on the clock and step travellers by that same game time.
+   * Distance is metres; pace is metres per game second. `speed` is the map
+   * speed step: a faster walk covers more game time per frame, so the sim
+   * budget grows with it instead of cutting the walk short.
+   */
+  advanceTravel(distanceMeters: number, paceMps: number, speed = 1): number {
     const hours = travelGameHours(distanceMeters, paceMps);
     if (hours <= 0) return 0;
-    const budgetHours = TRAVEL_SIM_BUDGET_SEC * GAME_HOURS_PER_REAL_SEC;
+    const budgetHours = TRAVEL_SIM_BUDGET_SEC * Math.max(1, speed) * GAME_HOURS_PER_REAL_SEC;
     const applied = Math.min(hours, budgetHours);
     let simSec = applied / GAME_HOURS_PER_REAL_SEC;
     while (simSec > 1e-8) {
@@ -305,8 +323,8 @@ export class WorldState {
   }
 
   /** True when the map clock should run this frame. See `mapClockRuns`. */
-  mapClockRuns(heroMoving: boolean): boolean {
-    return mapClockRuns(this.caravan, heroMoving);
+  mapClockRuns(heroMoving: boolean, onlyWhenMoving = false): boolean {
+    return mapTimeRuns(this.caravan, heroMoving, onlyWhenMoving);
   }
 
   /** Roll the caravan by the metres the 3D convoy wagon covered. */

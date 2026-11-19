@@ -1,3 +1,4 @@
+import { MAP_SPEEDS, formatMapSpeed, normalizeMapSpeed } from '../core/sim/map-pace';
 import type { GameSettings, MapSkinId } from '../core/state/settings';
 import {
   cycleZoom,
@@ -207,6 +208,43 @@ export function SettingsPanel(props: { dock?: boolean }) {
           />
           Lock time of day
         </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            aria-label="Time moves only when I move"
+            checked={current.timeOnlyWhenMoving}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) {
+                change({ timeOnlyWhenMoving: target.checked });
+              }
+            }}
+          />
+          Time moves only when I move
+        </label>
+        <label class="field">
+          Overworld speed
+          <select
+            aria-label="Overworld speed"
+            value={String(current.mapSpeed)}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (!(target instanceof HTMLSelectElement)) return;
+              change({ mapSpeed: normalizeMapSpeed(target.value) });
+            }}
+          >
+            {MAP_SPEEDS.map((speed) => (
+              <option key={speed} value={String(speed)}>
+                {formatMapSpeed(speed)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p class="lede tight">
+          {skinText(
+            'Both apply on the overworld map only. In 3D the clock keeps running at 1x. Overworld speed scales the hero, the caravan, everyone else on the map, and the clock together.',
+          )}
+        </p>
         <p class="lede tight">
           {skinText(
             'The 3D view uses the same look, camera, and feel as the controller demo. Fog density also sets how far the town draws. Changes apply immediately.',
