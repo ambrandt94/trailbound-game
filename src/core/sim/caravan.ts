@@ -26,7 +26,7 @@ export const MOOD_SPEED_RANGE = 0.2;
 export const MOUNTAIN_SPEED = 0.8;
 /** Party morale that maps to the top and bottom of the mood range. */
 export const MORALE_SPEED_SPAN = 20;
-/** Sub-step so a settlement edge or mountain line is not skipped. */
+/** Sub-step so a mountain line (speed change) is not skipped. */
 const ADVANCE_STEP_TU = 0.25;
 
 /**
@@ -64,17 +64,15 @@ export interface CaravanState {
   length: number;
   /** Destination is the last target. Earlier ones are waypoints. */
   targets: CaravanTarget[];
+  /**
+   * The leader's command: true is Halt, false is Roll out. Nothing else sets it
+   * while a route is active (no town, waypoint, zone change or scene hop does).
+   * A caravan with no route stands still whatever this says.
+   */
   halted: boolean;
-  /** Settlement the caravan is stopped in or set out from. It will not re-halt there. */
-  stopId: string | null;
   /** Day index (`floor(clockHours / 24)`) that `todayUnits` counts. */
   todayDay: number;
   todayUnits: number;
-}
-
-export interface CaravanPlace {
-  id: string;
-  name: string;
 }
 
 export interface CaravanStepEnv {
@@ -82,12 +80,13 @@ export interface CaravanStepEnv {
   day: number;
   /** Speed modifier at a fine-tile point. */
   speedAt(x: number, y: number): number;
-  /** Settlement under a point, if any. */
-  settlementAt(x: number, y: number): CaravanPlace | null;
 }
 
-export type CaravanEvent =
-  { type: 'arrived'; name: string | null } | { type: 'stopped'; name: string };
+/**
+ * The caravan only reports arrival. It never stops by itself on the way: a
+ * town, waypoint or zone edge does not halt it. Only the leader's command does.
+ */
+export type CaravanEvent = { type: 'arrived'; name: string | null };
 
 export function createCaravan(x: number, y: number, role: CaravanRole = 'leader'): CaravanState {
   return {
@@ -101,7 +100,6 @@ export function createCaravan(x: number, y: number, role: CaravanRole = 'leader'
     length: 0,
     targets: [],
     halted: false,
-    stopId: null,
     todayDay: 0,
     todayUnits: 0,
   };
@@ -156,14 +154,16 @@ export function etaTu(caravan: CaravanState, speedMod: number): number | null {
 }
 
 /**
- * Replace the route. `points` start at the caravan. A route set inside a
- * settlement remembers it so the caravan does not halt before it leaves.
+ * Replace the route. `points` start at the caravan. `halted` is the leader's
+ * command for the new route: pass `!isRolling(caravan)` to keep a rolling
+ * caravan rolling and leave an idle one waiting for Roll out (the game does).
+ * Without it the new route rolls at once.
  */
 export function setRoute(
   caravan: CaravanState,
   points: readonly Vec2[],
   targets: readonly CaravanTarget[],
-  startPlace: CaravanPlace | null,
+  halted = false,
 ): CaravanState {
   const route = flatten(points);
   return {
@@ -172,8 +172,7 @@ export function setRoute(
     along: 0,
     length: flatLength(route),
     targets: targets.map((t) => ({ ...t })),
-    halted: false,
-    stopId: startPlace?.id ?? null,
+    halted,
   };
 }
 
@@ -259,8 +258,8 @@ export function mapClockRuns(caravan: CaravanState, heroMoving: boolean): boolea
 
 /**
  * Roll the caravan for `tu` of clock time. Halted or routeless caravans do
- * not move. Entering a settlement that is not the destination halts the
- * caravan; reaching the route end clears the route.
+ * not move. It rolls through every settlement on the way; reaching the route
+ * end clears the route.
  */
 export function advanceCaravan(
   caravan: CaravanState,
@@ -276,7 +275,7 @@ export function advanceCaravan(
 /**
  * Roll the caravan a set distance in fine tiles, whatever the clock did.
  * The 3D convoy uses this: the wagon on screen is the caravan, so the map
- * advances by the metres the wagon covered. Stops and arrival match
+ * advances by the metres the wagon covered. Arrival matches
  * `advanceCaravan`.
  */
 export function advanceCaravanTiles(
@@ -314,20 +313,9 @@ function roll(
     next.yaw = at.yaw;
     if (next.along >= next.length - 1e-6) {
       events.push({ type: 'arrived', name: dest?.name ?? null });
-      const place = env.settlementAt(next.x, next.y);
-      next = { ...clearRoute(next), stopId: place?.id ?? null };
+      next = clearRoute(next);
       break;
     }
-    const place = env.settlementAt(next.x, next.y);
-    if (!place) {
-      next.stopId = null;
-      continue;
-    }
-    if (place.id === next.stopId || place.id === dest?.placeId) continue;
-    next.stopId = place.id;
-    next.halted = true;
-    events.push({ type: 'stopped', name: place.name });
-    break;
   }
   next.todayUnits += units;
   return { caravan: next, events, units };
@@ -343,7 +331,6 @@ export interface CaravanSave {
   along: number;
   targets: CaravanTarget[];
   halted: boolean;
-  stopId: string | null;
   todayDay: number;
   todayUnits: number;
   /** Hero riding with the caravan rather than scouting on foot. */
@@ -361,7 +348,6 @@ export function caravanSave(caravan: CaravanState, heroAboard: boolean): Caravan
     along: caravan.along,
     targets: caravan.targets.map((t) => ({ ...t })),
     halted: caravan.halted,
-    stopId: caravan.stopId,
     todayDay: caravan.todayDay,
     todayUnits: caravan.todayUnits,
     heroAboard,
@@ -394,7 +380,6 @@ export function loadCaravan(
     length: route.length >= 4 ? length : 0,
     targets: Array.isArray(raw.targets) ? raw.targets.filter(isTarget).map((t) => ({ ...t })) : [],
     halted: raw.halted === true,
-    stopId: typeof raw.stopId === 'string' ? raw.stopId : null,
     todayDay: Math.max(0, Math.floor(finite(raw.todayDay, 0))),
     todayUnits: Math.max(0, finite(raw.todayUnits, 0)),
   };

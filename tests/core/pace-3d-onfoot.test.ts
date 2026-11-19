@@ -71,7 +71,6 @@ function rollingWorld(): WorldState {
       { x: 2 + tiles, y: 20.5 },
     ],
     [{ x: 2 + tiles, y: 20.5, name: 'Far', placeId: null }],
-    null,
   );
   world.areaHold = true;
   return world;

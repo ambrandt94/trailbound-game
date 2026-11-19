@@ -32,7 +32,6 @@ import {
   loadCaravan,
   setRoute,
   type CaravanEvent,
-  type CaravanPlace,
   type CaravanState,
   type CaravanTarget,
 } from '../sim/caravan';
@@ -330,12 +329,13 @@ export class WorldState {
 
   /**
    * The road about a zone-width ahead of `from` (the caravan by default): the
-   * point a zone cut should lean toward. Null with no route, halted, arrived,
-   * or when the road ends right here. Fine tiles.
+   * point a zone cut should lean toward. Null with no route, arrived, or when
+   * the road ends right here. Fine tiles. A halted caravan still leans: the
+   * leader will roll out, and the wagon needs the road ahead of it.
    */
   convoyAhead(from?: { x: number; y: number }): { x: number; y: number } | null {
     const c = this.caravan;
-    if (!isRolling(c)) return null;
+    if (!hasRoute(c) || c.along >= c.length) return null;
     return convoyAheadPoint(c.route, c.along, c.length, AREA_WINDOW_TILES, from);
   }
 
@@ -620,12 +620,6 @@ export class WorldState {
     });
   }
 
-  /** Settlement under a point, for caravan stops. */
-  caravanPlaceAt(x: number, y: number): CaravanPlace | null {
-    const node = this.settlementAt(x, y);
-    return node ? { id: node.id, name: node.name } : null;
-  }
-
   /**
    * Route the caravan to a target. `append` adds a leg from the current
    * route end (Shift+click waypoints). Passengers cannot change the route.
@@ -646,14 +640,18 @@ export class WorldState {
       this.caravan = appendRoute(this.caravan, plan.points, target);
       return { ok: true, message: `Waypoint added: ${label}.` };
     }
-    this.caravan = setRoute(
-      this.caravan,
-      plan.points,
-      [target],
-      this.caravanPlaceAt(this.caravan.x, this.caravan.y),
-    );
+    // The leader decides when the wagon moves. A caravan that is already
+    // rolling keeps rolling on the new route; an idle or halted one waits for
+    // Roll out, so setting a route never starts the wagon behind the leader's back.
+    const rolling = isRolling(this.caravan);
+    this.caravan = setRoute(this.caravan, plan.points, [target], !rolling);
     this.caravan.todayDay = Math.floor(this.clockHours / 24);
-    return { ok: true, message: `Route set to ${label}.` };
+    return {
+      ok: true,
+      message: rolling
+        ? `Route set to ${label}. Still rolling.`
+        : `Route set to ${label}. Halted: press H to roll out.`,
+    };
   }
 
   clearCaravanRoute(): boolean {
@@ -662,11 +660,37 @@ export class WorldState {
     return true;
   }
 
-  /** Halt or resume. Passengers cannot. */
+  /** Halt or roll out. Passengers cannot. */
   setCaravanHalted(halted: boolean): boolean {
     if (!canEditRoute(this.caravan)) return false;
     this.caravan = { ...this.caravan, halted };
     return true;
+  }
+
+  /**
+   * The leader's one Halt / Roll out command. The map, the 3D wilds and 3D
+   * towns all run this same method (key H, the toolbar button, the caravan
+   * card button), so the answer never depends on where the hero stands.
+   * `message` is the short toast line.
+   */
+  toggleCaravanHalt(): { ok: boolean; halted: boolean; message: string } {
+    const halted = this.caravan.halted;
+    if (!canEditRoute(this.caravan)) {
+      return { ok: false, halted, message: 'The leader decides when to stop.' };
+    }
+    if (!hasRoute(this.caravan)) {
+      return {
+        ok: false,
+        halted,
+        message: 'No route yet. Click a town, site, or land to set one.',
+      };
+    }
+    this.setCaravanHalted(!halted);
+    return {
+      ok: true,
+      halted: !halted,
+      message: halted ? 'Rolling out.' : 'Halted. Press H to roll out.',
+    };
   }
 
   /** Snap the hero back onto the caravan and ride along. */
@@ -695,7 +719,6 @@ export class WorldState {
     return {
       day: Math.floor((this.clockHours + 1e-9) / 24),
       speedAt: (x: number, y: number) => this.caravanSpeedAt(x, y),
-      settlementAt: (x: number, y: number) => this.caravanPlaceAt(x, y),
     };
   }
 

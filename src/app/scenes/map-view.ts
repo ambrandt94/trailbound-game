@@ -19,6 +19,7 @@ import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
 import { dayLightAt } from '../../core/sim/time';
 import { hasRoute, splitRoute } from '../../core/sim/caravan';
+import { leaderToggleHalt } from '../leader-halt';
 import { travelHudFor, travelHudKey } from '../travel-hud';
 import { MAP_ZOOM_CAP, TILE } from '../../core/world/models';
 import type { MapCaravanDraw } from '../../render/map/map-renderer';
@@ -42,7 +43,7 @@ import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
 
 const MAP_CONTROLS =
-  'WASD walk · Shift sprint · wheel or +/- zoom · drag to pan · click a town, site, or land to route · Shift+click adds a stop · Enter walks this ground in 3D';
+  'WASD walk · Shift sprint · H halt / roll out · wheel or +/- zoom · drag to pan · click a town, site, or land to route · Shift+click adds a stop · Enter walks this ground in 3D';
 
 export class MapView implements Scene {
   readonly id = 'map';
@@ -141,9 +142,10 @@ export class MapView implements Scene {
     ) {
       this.zoom(1 / 1.12);
     }
+    // H is the leader's Halt / Roll out, the same key as in 3D. The map does not use H otherwise.
+    if (this.host.keyboard.consumePress('KeyH')) leaderToggleHalt(this.host);
     for (const event of world.takeCaravanEvents()) {
-      if (event.type === 'stopped') this.host.toast(`The caravan halts at ${event.name}.`);
-      else this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
+      this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
     }
     this.entryCooldown = stepEntryCooldown(this.entryCooldown, dt);
     this.camera.update(dt, world.hero.x, world.hero.y);
@@ -286,17 +288,6 @@ export class MapView implements Scene {
 
   clearRoute(): void {
     if (!this.host.world.clearCaravanRoute()) this.host.toast('The leader sets the route.');
-  }
-
-  toggleHalt(): void {
-    const world = this.host.world;
-    if (!hasRoute(world.caravan)) return;
-    const halted = !world.caravan.halted;
-    if (!world.setCaravanHalted(halted)) {
-      this.host.toast('The leader decides when to stop.');
-      return;
-    }
-    this.host.toast(halted ? 'The caravan halts.' : 'The caravan rolls on.');
   }
 
   rejoinCaravan(): void {

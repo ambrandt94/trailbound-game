@@ -51,7 +51,7 @@ import { WorldState } from '../../src/core/state/world-state';
 import { metersToNormalized } from '../../src/core/world/terrain';
 import { Biome, DEFAULT_WORLD_SETTINGS, type WorldData } from '../../src/core/world/models';
 
-const even: CaravanStepEnv = { day: 0, speedAt: () => 1, settlementAt: () => null };
+const even: CaravanStepEnv = { day: 0, speedAt: () => 1 };
 
 function straight(units: number, from = { x: 0, y: 0 }) {
   const tiles = units * CARAVAN_TILES_PER_UNIT;
@@ -59,7 +59,6 @@ function straight(units: number, from = { x: 0, y: 0 }) {
     createCaravan(from.x, from.y),
     [from, { x: from.x + tiles, y: from.y }],
     [{ x: from.x + tiles, y: from.y, name: 'Far', placeId: null }],
-    null,
   );
 }
 

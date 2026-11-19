@@ -79,7 +79,6 @@ test('show route fits the whole route and stays a zoomed-out camera scale', () =
       { x: 900, y: 500 },
     ],
     [{ x: 900, y: 500, name: 'Far', placeId: null }],
-    null,
   );
   const frame = routeFrame(caravan, 16, 1440, 900);
   expect(frame).not.toBeNull();

@@ -94,6 +94,7 @@ import { TransitionScene } from './scenes/transition';
 import { DIVE_BARE_MAGNIFY, DIVE_MAP_MAGNIFY, DIVE_MAX_MAGNIFY, DiveScene } from './scenes/dive';
 import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
 import { ConvoyDriver } from './convoy-driver';
+import { leaderToggleHalt } from './leader-halt';
 import { resolveAreaAt } from '../core/area/area-window';
 import type { AreaEntry } from '../render/area/area-from-export';
 import { codeForTouchAction } from './touch-wire';
@@ -746,7 +747,7 @@ export class Game implements GameHost {
         this.mapScene?.clearRoute();
       },
       toggleHalt: () => {
-        this.mapScene?.toggleHalt();
+        leaderToggleHalt(this);
       },
       rejoinCaravan: () => {
         this.mapScene?.rejoinCaravan();

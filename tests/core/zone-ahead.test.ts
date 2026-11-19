@@ -33,7 +33,7 @@ function plains(seed: number, size = 200): WorldData {
 
 /** A route from `a` to `b`, with the caravan `along` tiles down it. */
 function routed(a: { x: number; y: number }, b: { x: number; y: number }, along: number) {
-  const c = setRoute(createCaravan(a.x, a.y), [a, b], [{ ...b, name: 'Far', placeId: null }], null);
+  const c = setRoute(createCaravan(a.x, a.y), [a, b], [{ ...b, name: 'Far', placeId: null }]);
   const len = Math.hypot(b.x - a.x, b.y - a.y);
   const t = along / len;
   return { ...c, along, x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t } as CaravanState;
@@ -152,7 +152,7 @@ test('the ahead point is about a zone-width down the road, clamped to its end', 
   expect(convoyAheadPoint(route, 50, 100, SPAN, { x: 10, y: 0 })?.x).toBeCloseTo(50 + SPAN, 9);
 });
 
-test('a rolling route leans the handoff; halted, arrived or no route stays centred', () => {
+test('a route leans the handoff, rolling or halted (the leader will roll out); arrived or no route stays centred', () => {
   const world = new WorldState();
   world.data = plains(4411);
   world.seed = 4411;
@@ -180,9 +180,9 @@ test('a rolling route leans the handoff; halted, arrived or no route stays centr
   const w2 = tileToLocal(cc.frame, world.caravan.x, world.caravan.y);
   expect((w2.x - cc.bounds.minX) / (cc.bounds.maxX - cc.bounds.minX)).toBeCloseTo(0.5, 1);
 
-  // Halted at camp: no lean.
+  // Halted: the leader will roll out, so it still leans.
   world.caravan = { ...world.caravan, halted: true };
-  expect(world.convoyAhead()).toBeNull();
+  expect(world.convoyAhead()?.x).toBeCloseTo(70 + SPAN, 6);
   // Arrived: nothing ahead.
   world.caravan = { ...world.caravan, halted: false, along: world.caravan.length };
   expect(world.convoyAhead()).toBeNull();
