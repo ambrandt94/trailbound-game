@@ -9,7 +9,7 @@ Placeholder pixel art for the 100-TU serpentine day-cycle HUD. Everything is dra
 3. If the size or anchor changed, edit that slot in `manifest.json` (`w`, `h` are one frame; `anchor` is the pixel inside one frame that sits on the bead or point it marks).
 4. Run `npm run dev` and look. `npm test` checks every file exists and matches the manifest size.
 
-**Art template.** To restyle everything in one go, use the sheet in `template/`: edit `template/hud-day-cycle-template-512.png`, then run `node tools/hud-day-cycle-slice.mjs <edited.png>` to write the PNGs back here. See `template/README.md`.
+**Art template.** To restyle everything in one go, use the sheet in `template/` (it has a reference sample of the assembled HUD on top and one spaced cell per font glyph): edit `template/hud-day-cycle-template-512.png`, then run `node tools/hud-day-cycle-slice.mjs <edited.png>` to write the PNGs back here. See `template/README.md`.
 
 Do not rerun `tools/hud-day-cycle-sprites.mjs` after swapping: it redraws the placeholders over your PNGs. It never overwrites `manifest.json` unless you pass `--manifest`.
 

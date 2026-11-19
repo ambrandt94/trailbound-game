@@ -4,6 +4,11 @@
  * with generous gutters, plus a guide with outlines and names, a native-size
  * (1x) sheet, and `layout.json` (cell rectangles in both coordinate systems).
  *
+ * The top of every sheet carries a reference-only sample of the assembled HUD,
+ * drawn by the game's own renderer (see `hud-day-cycle-preview.mjs`). The
+ * slicer ignores it. Every pixel-font glyph has its own cell, with a fixed
+ * gap between glyphs, so the font is easy to edit.
+ *
  *   node tools/hud-day-cycle-template.mjs [--out <dir>]
  *
  * Reads `manifest.json` and the PNGs in `public/assets/ui/hud-day-cycle/`, so
@@ -13,17 +18,20 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { renderPreview } from './hud-day-cycle-preview.mjs';
 import { createImage, decodePng, encodePng } from './ui-png.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const ART_DIR = join(root, 'public', 'assets', 'ui', 'hud-day-cycle');
 export const TEMPLATE_DIR = join(ART_DIR, 'template');
 export const SHEET = 512;
-const MIN_GUTTER_PX = 16;
+const MIN_GUTTER_PX = 8;
 const LABEL_SCALE = 1;
 
-/** Rows of this many glyphs for the font sheet, so it fits at a big scale. */
-const FONT_ROW_GLYPHS = 14;
+/** Transparent native pixels between neighbouring font cells (cells sit on a pitch of cellW + this). */
+export const FONT_GAP = 4;
+/** Scales tried, biggest first. 512 / 4 is a whole 128 grid; 5 would leave a 2 px sliver. */
+const SCALES = [5, 4, 3, 2];
 
 /** @param {ReturnType<typeof createImage>} img @param {number} x @param {number} y @param {number} w @param {number} h */
 function crop(img, x, y, w, h) {
@@ -53,22 +61,16 @@ export function planCells(manifest, art) {
       });
     });
   }
+  // One cell per glyph, as wide as the glyph's advance in the game (`:` `.` are 1 px). A space is blank: no cell.
   const font = manifest.font;
   const fontImg = art.get(font.file);
-  const count = font.glyphs.length;
-  for (let start = 0, row = 1; start < count; start += FONT_ROW_GLYPHS, row++) {
-    const n = Math.min(FONT_ROW_GLYPHS, count - start);
-    cells.push({
-      slot: 'pixel_font',
-      state: `row${row}`,
-      w: n * font.cellW,
-      h: font.cellH,
-      img: crop(fontImg, start * font.cellW, 0, n * font.cellW, font.cellH),
-      label: `PIXEL-FONT ROW ${row}`,
-      part: { glyphStart: start, glyphCount: n },
-    });
-  }
-  return cells;
+  const glyphs = [];
+  [...font.glyphs].forEach((ch, index) => {
+    if (ch === ' ') return;
+    const w = Math.min(font.widths[ch] ?? font.cellW, font.cellW);
+    glyphs.push({ ch, index, w, img: crop(fontImg, index * font.cellW, 0, w, font.cellH) });
+  });
+  return { cells, glyphs };
 }
 
 function labelWidthPx(label, font) {
@@ -77,20 +79,46 @@ function labelWidthPx(label, font) {
   return w - font.spacing * LABEL_SCALE;
 }
 
-/** Shelf-pack footprints (cell plus its label) at a given scale. Returns null if it does not fit. */
-export function pack(cells, scale, font) {
+/**
+ * Pack the preview band (top), then every cell with its label, shelf by shelf.
+ * Font glyphs are grouped into rows of `perRow` cells on a fixed pitch; a row
+ * is one footprint. Returns null if it does not fit on the sheet at `scale`.
+ */
+export function pack(plan, scale, font, previewImg) {
+  const { cells, glyphs } = plan;
   const native = Math.floor(SHEET / scale);
-  const gutter = Math.max(3, Math.ceil(MIN_GUTTER_PX / scale));
+  const gutter = Math.max(2, Math.ceil(MIN_GUTTER_PX / scale));
   const labelRows = Math.ceil((5 * LABEL_SCALE + 3) / scale);
+  if (previewImg.w > native) return null;
+  const pitch = font.cellW + FONT_GAP;
+  const perRowMax = Math.max(1, Math.floor((native - 2 * gutter + FONT_GAP) / pitch));
+  const rowCount = Math.ceil(glyphs.length / perRowMax);
+  const perRow = Math.ceil(glyphs.length / rowCount);
+  /** @type {Array<any>} */
   const items = cells.map((cell) => ({
     cell,
     fw: Math.max(cell.w, Math.ceil(labelWidthPx(cell.label, font) / scale)),
     fh: cell.h + labelRows,
   }));
+  for (let start = 0; start < glyphs.length; start += perRow) {
+    const row = glyphs.slice(start, start + perRow);
+    items.push({
+      fontRow: row,
+      fw: row.length * pitch - FONT_GAP,
+      fh: font.cellH + labelRows,
+    });
+  }
   items.sort((a, b) => b.fh - a.fh || b.fw - a.fw);
+  const preview = {
+    x: Math.floor((native - previewImg.w) / 2),
+    y: 1,
+    w: previewImg.w,
+    h: previewImg.h,
+    labelRows,
+  };
   const maxX = native - gutter;
   let x = gutter;
-  let y = gutter;
+  let y = preview.y + preview.h + labelRows + gutter;
   let rowH = 0;
   for (const item of items) {
     if (item.fw > maxX - gutter) return null;
@@ -105,17 +133,7 @@ export function pack(cells, scale, font) {
     rowH = Math.max(rowH, item.fh);
   }
   if (y + rowH > native - gutter) return null;
-  return { items, native, gutter };
-}
-
-/** Largest whole-number scale that fits, and the packed cells at that scale. */
-export function planLayout(manifest, art) {
-  const cells = planCells(manifest, art);
-  for (let scale = 12; scale >= 2; scale--) {
-    const packed = pack(cells, scale, manifest.font);
-    if (packed) return { scale, ...packed };
-  }
-  throw new Error('the HUD cells do not fit on a 512 sheet at 2x');
+  return { items, native, gutter, preview, pitch };
 }
 
 function stamp(sheet, img, ox, oy, scale) {
@@ -160,7 +178,7 @@ function drawText(img, font, fontImg, text, x, y, color) {
   }
 }
 
-export function buildTemplate(artDir = ART_DIR) {
+export async function buildTemplate(artDir = ART_DIR) {
   const manifest = JSON.parse(readFileSync(join(artDir, 'manifest.json'), 'utf8'));
   /** @type {Map<string, any>} */
   const art = new Map();
@@ -168,7 +186,24 @@ export function buildTemplate(artDir = ART_DIR) {
     art.set(def.file, decodePng(readFileSync(join(artDir, def.file))));
   art.set(manifest.font.file, decodePng(readFileSync(join(artDir, manifest.font.file))));
 
-  const { scale, items, native, gutter } = planLayout(manifest, art);
+  const plan = planCells(manifest, art);
+  const font = manifest.font;
+  // The sample is cropped as wide as the sheet allows at each scale, so try the scales biggest first.
+  let sample = null;
+  let previewImg = null;
+  let chosen = null;
+  for (const scale of SCALES) {
+    sample = await renderPreview(artDir, undefined, Math.floor(SHEET / scale));
+    previewImg = sample.image;
+    const packed = pack(plan, scale, font, previewImg);
+    if (packed) {
+      chosen = { scale, ...packed };
+      break;
+    }
+  }
+  if (!chosen || !sample || !previewImg)
+    throw new Error('the HUD cells and preview do not fit on a 512 sheet at 2x');
+  const { scale, items, native, gutter, preview, pitch } = chosen;
   const sheet = createImage(SHEET, SHEET);
   const flat = createImage(native, native);
   const guide = createImage(SHEET, SHEET);
@@ -178,31 +213,48 @@ export function buildTemplate(artDir = ART_DIR) {
     guide.data[i + 2] = 60;
     guide.data[i + 3] = 255;
   }
-  const fontImg = art.get(manifest.font.file);
+  const fontImg = art.get(font.file);
+
+  // Reference-only sample, in all three images.
+  stamp(sheet, previewImg, preview.x * scale, preview.y * scale, scale);
+  stamp(guide, previewImg, preview.x * scale, preview.y * scale, scale);
+  stamp(flat, previewImg, preview.x, preview.y, 1);
 
   const slotCells = new Map();
-  const fontRows = [];
+  const fontCells = [];
   for (const item of items) {
-    const { cell } = item;
-    const ox = item.x * scale;
-    const oy = item.y * scale;
-    stamp(sheet, cell.img, ox, oy, scale);
-    stamp(guide, cell.img, ox, oy, scale);
-    stamp(flat, cell.img, item.x, item.y, 1);
-    const rect512 = { x: ox, y: oy, w: cell.w * scale, h: cell.h * scale };
-    const rect1x = { x: item.x, y: item.y, w: cell.w, h: cell.h };
-    if (cell.part) fontRows.push({ state: cell.state, ...cell.part, rect: rect512, rect1x });
-    else {
+    const place = (img, w, h, dx = 0) => {
+      const ox = (item.x + dx) * scale;
+      const oy = item.y * scale;
+      stamp(sheet, img, ox, oy, scale);
+      stamp(guide, img, ox, oy, scale);
+      stamp(flat, img, item.x + dx, item.y, 1);
+      return {
+        rect: { x: ox, y: oy, w: w * scale, h: h * scale },
+        rect1x: { x: item.x + dx, y: item.y, w, h },
+      };
+    };
+    if (item.fontRow) {
+      item.fontRow.forEach((g, i) => {
+        const rects = place(g.img, g.w, font.cellH, i * pitch);
+        fontCells.push({ glyph: g.ch, index: g.index, ...rects });
+      });
+    } else {
+      const { cell } = item;
+      const rects = place(cell.img, cell.w, cell.h);
       if (!slotCells.has(cell.slot)) slotCells.set(cell.slot, []);
-      slotCells.get(cell.slot).push({ state: cell.state, rect: rect512, rect1x });
+      slotCells.get(cell.slot).push({ state: cell.state, ...rects });
     }
   }
+
   // Guide: cell outlines, 9-slice lines, anchors, names.
   const line = [255, 80, 200, 255];
   const sliceColor = [80, 230, 255, 255];
   const anchorColor = [255, 230, 60, 255];
   const white = [245, 245, 250, 255];
+  const previewColor = [255, 160, 40, 255];
   for (const item of items) {
+    if (item.fontRow) continue;
     const { cell } = item;
     const ox = item.x * scale;
     const oy = item.y * scale;
@@ -227,18 +279,41 @@ export function buildTemplate(artDir = ART_DIR) {
         guide.px(ax, ay + d, anchorColor);
       }
     }
-    drawText(guide, manifest.font, fontImg, cell.label, ox, oy + cell.h * scale + 3, white);
+    drawText(guide, font, fontImg, cell.label, ox, oy + cell.h * scale + 3, white);
   }
-
-  // Guide only: the font rows are solid strips, so mark each glyph cell and name it above the row.
-  const tick = [255, 80, 200, 255];
-  for (const row of fontRows) {
-    for (let g = 0; g < row.glyphCount; g++) {
-      const gx = row.rect.x + g * manifest.font.cellW * scale;
-      for (let y = 1; y <= 3; y++) guide.px(gx, row.rect.y - y, tick);
-      const ch = manifest.font.glyphs[row.glyphStart + g] ?? ' ';
-      drawText(guide, manifest.font, fontImg, ch, gx + 2, row.rect.y - 8, [190, 200, 220, 255]);
+  // Font: every glyph cell outlined, its character under it.
+  for (const g of fontCells) {
+    const { x, y, w, h } = g.rect;
+    rect(guide, x - 1, y - 1, w + 2, h + 2, line);
+    drawText(guide, font, fontImg, g.glyph, x, y + h + 3, [190, 200, 220, 255]);
+  }
+  // Preview: dashed orange frame and a banner, so it is not mistaken for a cell.
+  {
+    const px = preview.x * scale;
+    const py = preview.y * scale;
+    const pw = preview.w * scale;
+    const ph = preview.h * scale;
+    for (let i = -2; i < pw + 2; i++) {
+      if (i % 8 < 5) {
+        guide.px(px + i, py - 2, previewColor);
+        guide.px(px + i, py + ph + 1, previewColor);
+      }
     }
+    for (let i = -2; i < ph + 2; i++) {
+      if (i % 8 < 5) {
+        guide.px(px - 2, py + i, previewColor);
+        guide.px(px + pw + 1, py + i, previewColor);
+      }
+    }
+    drawText(
+      guide,
+      font,
+      fontImg,
+      'PREVIEW ONLY - THE HUD PUT TOGETHER, NOT SLICED',
+      px,
+      py + ph + 6,
+      previewColor,
+    );
   }
 
   const slots = Object.entries(manifest.sprites).map(([id, def]) => ({
@@ -252,28 +327,45 @@ export function buildTemplate(artDir = ART_DIR) {
     // Frames go back into the PNG in state order, whatever order the packer placed them in.
     cells: def.states.map((state) => slotCells.get(id).find((c) => c.state === state)),
   }));
+  fontCells.sort((a, b) => a.index - b.index);
   const layout = {
-    version: 1,
-    note: 'Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`.',
+    version: 2,
+    note: 'Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`. `preview` is reference only and is never sliced.',
     scale,
     sheet: { w: SHEET, h: SHEET },
     native: { w: native, h: native },
     gutter,
+    preview: {
+      note: 'The right-hand end of the HUD as the game draws it (84 TU left), at the sheet scale. Reference only: the slicer ignores it.',
+      tuRemaining: sample.tuRemaining,
+      sourceCrop: sample.crop,
+      rect: {
+        x: preview.x * scale,
+        y: preview.y * scale,
+        w: preview.w * scale,
+        h: preview.h * scale,
+      },
+      rect1x: { x: preview.x, y: preview.y, w: preview.w, h: preview.h },
+    },
     slots,
     font: {
       id: 'pixel_font',
-      file: manifest.font.file,
-      cellW: manifest.font.cellW,
-      cellH: manifest.font.cellH,
-      glyphs: manifest.font.glyphs,
-      rows: fontRows,
+      file: font.file,
+      cellW: font.cellW,
+      cellH: font.cellH,
+      glyphs: font.glyphs,
+      widths: font.widths,
+      pitch,
+      gap: FONT_GAP,
+      note: 'One cell per glyph, as wide as the glyph advances in the game (`:` and `.` are 1 px). Space has no cell: it is blank. Cells sit on a fixed pitch (`cellW + gap`) with `gap` transparent native pixels between neighbours.',
+      cells: fontCells,
     },
   };
   return { layout, sheet, flat, guide };
 }
 
-export function writeTemplate(outDir = TEMPLATE_DIR, artDir = ART_DIR) {
-  const { layout, sheet, flat, guide } = buildTemplate(artDir);
+export async function writeTemplate(outDir = TEMPLATE_DIR, artDir = ART_DIR) {
+  const { layout, sheet, flat, guide } = await buildTemplate(artDir);
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, 'hud-day-cycle-template-512.png'), encodePng(sheet));
   writeFileSync(join(outDir, 'hud-day-cycle-template-guide.png'), encodePng(guide));
@@ -286,7 +378,7 @@ const invoked = process.argv[1] && import.meta.url === pathToFileURL(process.arg
 if (invoked) {
   const at = process.argv.indexOf('--out');
   const out = at > 0 ? resolve(process.argv[at + 1] ?? '') : TEMPLATE_DIR;
-  const layout = writeTemplate(out);
+  const layout = await writeTemplate(out);
   console.log(
     `template at ${layout.scale}x (${layout.native.w}x${layout.native.h} native) written to ${out}`,
   );
