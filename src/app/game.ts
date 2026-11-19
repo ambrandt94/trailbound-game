@@ -6,6 +6,7 @@ import {
   createWorld,
   type AreaExit,
   type AreaHandoff,
+  type ConvoyCut,
   type WorldState,
 } from '../core/state/world-state';
 import { DEFAULT_WORLD_SEED } from '../core/world/index';
@@ -341,7 +342,11 @@ export class Game implements GameHost {
   private bakeHere(): AreaHandoff | null {
     const world = this.world;
     if (!world.heroAboard) return world.buildHandoffHere();
-    const convoy = hasRoute(world.caravan) ? world.buildConvoyHandoff() : null;
+    // Zoomed in on a rolling wagon, the zone leans down the road: the wagon sits near the
+    // edge it came from and most of the zone lies ahead. Halted or no route: centred.
+    const convoy = hasRoute(world.caravan)
+      ? world.buildConvoyHandoff(world.caravan.x, world.caravan.y, true, world.convoyAhead())
+      : null;
     return convoy ?? world.buildHandoffHere(world.caravan.x, world.caravan.y);
   }
 
@@ -349,8 +354,8 @@ export class Game implements GameHost {
    * Cut the next convoy window now, without making it the current place, so
    * the swap later only has to open it. Null with no window ahead.
    */
-  prepareConvoyRecut(centre: { x: number; y: number }): AreaHandoff | null {
-    const handoff = this.world.buildConvoyHandoff(centre.x, centre.y, false);
+  prepareConvoyRecut(centre: ConvoyCut): AreaHandoff | null {
+    const handoff = this.world.buildConvoyHandoff(centre.x, centre.y, false, centre.ahead ?? null);
     return handoff?.convoy ? handoff : null;
   }
 
@@ -360,7 +365,7 @@ export class Game implements GameHost {
    * The caller swaps the result in behind a held still of the old frame.
    */
   async recutConvoy(
-    source: { x: number; y: number } | AreaHandoff,
+    source: ConvoyCut | AreaHandoff,
     entry: (pos: ConvoyDriver) => AreaEntry,
   ): Promise<{ renderer: AreaRenderer; driver: ConvoyDriver; handoff: AreaHandoff } | null> {
     const handoff = 'areaExport' in source ? source : this.prepareConvoyRecut(source);

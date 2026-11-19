@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import { GROUND, decodeB64U8 } from '../../src/core/area/build-area';
-import { cutConvoyWindow, resolveConvoyArea } from '../../src/core/area/area-window';
+import {
+  AREA_WINDOW_TILES,
+  cutConvoyWindow,
+  resolveConvoyArea,
+} from '../../src/core/area/area-window';
 import {
   CARAVAN_TILES_PER_UNIT,
   advanceCaravan,
@@ -219,14 +223,14 @@ test('a re-cut is due near the playable edge', () => {
 test('convoy windows centre on the wagon, not the snapped grid', () => {
   const world = plains(5);
   const a = cutConvoyWindow(world, 20.3, 20.6);
-  expect(a.x0).toBe(14);
-  expect(a.y0).toBe(15);
-  expect(a.x1 - a.x0).toBe(12);
-  expect(a.id).toBe('convoy-14-15');
+  expect(a.x0).toBe(8);
+  expect(a.y0).toBe(9);
+  expect(a.x1 - a.x0).toBe(AREA_WINDOW_TILES);
+  expect(a.id).toBe('convoy-8-9');
   const edge = cutConvoyWindow(world, 1, 47);
   expect(edge.x0).toBe(0);
   expect(edge.y1).toBe(48);
-  expect(resolveConvoyArea(world, 20.3, 20.6)?.cacheKey).toBe('convoy:14:15');
+  expect(resolveConvoyArea(world, 20.3, 20.6)?.cacheKey).toBe('convoy:8:9');
   const wet = plains(5);
   for (let i = 0; i < wet.biomes.length; i++) {
     wet.biomes[i] = Biome.Water;
@@ -249,7 +253,7 @@ test('a convoy handoff paints the route as a dirt track with the wagon inside', 
   const wagon = tileToLocal(frame, 20, 20.5);
   expect(wagon.x).toBeGreaterThan(bounds.minX + 30);
   expect(wagon.x).toBeLessThan(bounds.maxX - 30);
-  expect(bounds.maxX - bounds.minX).toBeCloseTo(96, 6);
+  expect(bounds.maxX - bounds.minX).toBeCloseTo(AREA_WINDOW_TILES * 8, 6);
   const grid = handoff.areaExport.grid;
   const ground = decodeB64U8(handoff.areaExport.layers.ground.data);
   const cell = (x: number, z: number) =>

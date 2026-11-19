@@ -4,7 +4,7 @@ import { hasRoute } from '../../core/sim/caravan';
 import { CONVOY_STREAM_RECUT, zoneHopCentre } from '../../core/sim/convoy';
 import { areaHoursPerRealSec } from '../../core/sim/time';
 import { areaClockHours } from '../../core/sim/map-pace';
-import type { AreaHandoff } from '../../core/state/world-state';
+import type { AreaHandoff, ConvoyCut } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
 import { clearAreaLeaveOverlay } from '../../render/area/leave-overlay';
 import { AreaRenderer, type ConvoyStatus } from '../../render/area/area-renderer';
@@ -50,7 +50,7 @@ export class AreaView implements Scene {
   private preparedRoute: readonly number[] | null = null;
   /** The hero walked off the edge after the wagon rolled on: cut the zone beyond, here. */
   private hop: {
-    centre: { x: number; y: number };
+    centre: ConvoyCut;
     hero: { x: number; y: number; yaw: number };
   } | null = null;
 
@@ -58,9 +58,9 @@ export class AreaView implements Scene {
 
   constructor(
     private readonly host: GameHost & {
-      prepareConvoyRecut?: (centre: { x: number; y: number }) => AreaHandoff | null;
+      prepareConvoyRecut?: (centre: ConvoyCut) => AreaHandoff | null;
       recutConvoy?: (
-        source: { x: number; y: number } | AreaHandoff,
+        source: ConvoyCut | AreaHandoff,
         entry: (driver: ConvoyDriver) => AreaEntry,
       ) => Promise<{ renderer: AreaRenderer; driver: ConvoyDriver; handoff: AreaHandoff } | null>;
     },
@@ -204,8 +204,14 @@ export class AreaView implements Scene {
       return false;
     }
     const hero = driver.toMap(status.x, status.z, status.yaw);
+    // The new zone leans down the road from where the hero walked out: they land near its
+    // trailing edge with the road ahead, and a wagon not too far on is inside it too. With
+    // no road ahead (halted, arrived) it stays centred toward the wagon as before.
+    const ahead = world.convoyAhead(hero);
     this.hop = {
-      centre: zoneHopCentre(hero, { x: world.caravan.x, y: world.caravan.y }),
+      centre: ahead
+        ? { x: hero.x, y: hero.y, ahead }
+        : zoneHopCentre(hero, { x: world.caravan.x, y: world.caravan.y }),
       hero,
     };
     this.recut = { phase: 'snap' };
