@@ -563,7 +563,14 @@ function WagonMenu() {
 
 function isTyping(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
+  if (target.isContentEditable || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+    return true;
+  }
+  // A focused checkbox, slider, or colour well is not typing; the HUD keys still work.
+  if (target instanceof HTMLInputElement) {
+    return !['checkbox', 'radio', 'range', 'color', 'button'].includes(target.type);
+  }
+  return false;
 }
 
 /**
