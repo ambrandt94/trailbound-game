@@ -23,8 +23,19 @@ import {
   type WorldData,
 } from '../world/models';
 
-/** Playable side length in world tiles. 12 × 8 m = 96 m, plus the export's border ring. */
-export const AREA_WINDOW_TILES = 12;
+/**
+ * Playable side length in world tiles. 24 × 8 m = 192 m, plus the export's
+ * border ring. (It was 12 tiles, 96 m: a wagon at 5 m/s crossed that in under
+ * 20 s. At 192 m, with the wagon cut in near its trailing edge, it has about
+ * 150 m, 30 s, of road ahead.)
+ */
+export const AREA_WINDOW_TILES = 24;
+/**
+ * Where the wagon sits along the window's heading axis when the window is cut
+ * toward its direction of travel: this far in from the edge it came from, as a
+ * fraction of the window. 0.5 is centred.
+ */
+export const CONVOY_TRAIL_FRAC = 0.22;
 /**
  * Metres below sea. Shallower water on the beach lip can clamp onto land.
  * Deeper than this, entry is refused.
@@ -103,16 +114,66 @@ export function cutAreaWindow(world: WorldData, x: number, y: number): AreaWindo
 }
 
 /**
- * A window centred on a point rather than snapped to the grid. The 3D convoy
- * cuts these around the rolling wagon, so the route runs through the middle.
- * Same size, biome pick, and seed mix as `cutAreaWindow`.
+ * Where, along each axis, `anchor` should sit inside the window, as a fraction
+ * from the low edge (0 = west / north edge, 1 = east / south edge).
+ *
+ * With no `ahead` point (no route, halted, or the point is on top of the
+ * anchor) both are 0.5: centred. Otherwise the direction anchor → ahead is
+ * scaled so its larger component is 1, and the anchor sits `CONVOY_TRAIL_FRAC`
+ * in from the trailing edge on that axis (east-bound: x = 0.22, y = 0.5;
+ * north-bound: y = 0.78; a diagonal trails in the corner it came from).
  */
-export function cutConvoyWindow(world: WorldData, x: number, y: number): AreaWindow {
+export function convoyAnchorFractions(
+  anchor: Vec2,
+  ahead: Vec2 | null | undefined,
+  trailFrac = CONVOY_TRAIL_FRAC,
+): { fx: number; fy: number } {
+  if (!ahead) return { fx: 0.5, fy: 0.5 };
+  const dx = ahead.x - anchor.x;
+  const dy = ahead.y - anchor.y;
+  const big = Math.max(Math.abs(dx), Math.abs(dy));
+  if (!(big > 1e-6) || !Number.isFinite(big)) return { fx: 0.5, fy: 0.5 };
+  const lean = 0.5 - trailFrac;
+  return { fx: 0.5 - (dx / big) * lean, fy: 0.5 - (dy / big) * lean };
+}
+
+/**
+ * Origin tile of a `span`-tile window that holds `anchor` at the biased spot of
+ * `convoyAnchorFractions`, clamped to the world. (A window the clamp pushes
+ * back keeps the anchor in it, just nearer the edge than asked.)
+ */
+export function convoyWindowOrigin(
+  anchor: Vec2,
+  ahead: Vec2 | null | undefined,
+  span: number,
+  worldWidth: number,
+  worldHeight: number,
+): { x0: number; y0: number } {
+  const { fx, fy } = convoyAnchorFractions(anchor, ahead);
+  const x0 = Math.round(anchor.x - span * fx);
+  const y0 = Math.round(anchor.y - span * fy);
+  return {
+    x0: Math.min(worldWidth - span, Math.max(0, x0)),
+    y0: Math.min(worldHeight - span, Math.max(0, y0)),
+  };
+}
+
+/**
+ * A window placed around a point rather than snapped to the grid. The 3D
+ * convoy cuts these around the rolling wagon. Centred on the point by default;
+ * with an `ahead` point on the route (about a zone-width down the road) the
+ * window is pushed that way, so the wagon sits near the edge it came from and
+ * most of the zone lies ahead of it. Same size, biome pick, and seed mix as
+ * `cutAreaWindow`.
+ */
+export function cutConvoyWindow(
+  world: WorldData,
+  x: number,
+  y: number,
+  ahead?: Vec2 | null,
+): AreaWindow {
   const span = Math.max(1, Math.min(AREA_WINDOW_TILES, world.width, world.height));
-  let x0 = Math.round(x - span / 2);
-  let y0 = Math.round(y - span / 2);
-  x0 = Math.min(world.width - span, Math.max(0, x0));
-  y0 = Math.min(world.height - span, Math.max(0, y0));
+  const { x0, y0 } = convoyWindowOrigin({ x, y }, ahead, span, world.width, world.height);
   const x1 = x0 + span;
   const y1 = y0 + span;
   const tiles: Vec2[] = [];
@@ -132,10 +193,15 @@ export function cutConvoyWindow(world: WorldData, x: number, y: number): AreaWin
 }
 
 /** Convoy area around a point. Null on deep water or inside a settlement. */
-export function resolveConvoyArea(world: WorldData, x: number, y: number): ResolvedArea | null {
+export function resolveConvoyArea(
+  world: WorldData,
+  x: number,
+  y: number,
+  ahead?: Vec2 | null,
+): ResolvedArea | null {
   if (settlementNodeAt(world, x, y)) return null;
   if (!landStand(world, x, y)) return null;
-  const window = cutConvoyWindow(world, x, y);
+  const window = cutConvoyWindow(world, x, y, ahead);
   return {
     node: nodeFromWindow(window),
     cacheKey: `convoy:${window.x0}:${window.y0}`,

@@ -1,5 +1,5 @@
 import { buildAreaExport, type AreaExport } from '../area/build-area';
-import { resolveAreaAt, resolveConvoyArea } from '../area/area-window';
+import { AREA_WINDOW_TILES, resolveAreaAt, resolveConvoyArea } from '../area/area-window';
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import type { CfPin, PackedWorld, PlayerSave, PartySave } from '../save/types';
@@ -37,7 +37,7 @@ import {
   type CaravanTarget,
 } from '../sim/caravan';
 import { planRoute } from '../world/route-plan';
-import { tileToLocal, type AreaFrame, type ConvoyBounds } from '../sim/convoy';
+import { convoyAheadPoint, tileToLocal, type AreaFrame, type ConvoyBounds } from '../sim/convoy';
 import { exploredTileKeys, tileExplored } from '../sim/fog';
 import { defaultPlayerState } from '../sim/player';
 import { Rng } from '../world/noise';
@@ -119,6 +119,13 @@ export interface ConvoyHandoff {
   bounds: ConvoyBounds;
   /** The place the window stands for. `adoptConvoyHandoff` makes it the current one. */
   town: { id: string; name: string; x: number; y: number };
+}
+
+/** A spot to cut a convoy window around, and the road point it should lean toward (fine tiles). */
+export interface ConvoyCut {
+  x: number;
+  y: number;
+  ahead?: { x: number; y: number } | null;
 }
 
 export type WorldEvent =
@@ -303,14 +310,32 @@ export class WorldState {
   }
 
   /**
-   * Convoy window centred on a point (the caravan, or a spot ahead of it on
-   * the route), with the route painted through it as a track. Not cached:
-   * the window moves with the wagons. Null in a settlement or on water.
+   * The road about a zone-width ahead of `from` (the caravan by default): the
+   * point a zone cut should lean toward. Null with no route, halted, arrived,
+   * or when the road ends right here. Fine tiles.
    */
-  buildConvoyHandoff(x = this.caravan.x, y = this.caravan.y, adopt = true): AreaHandoff | null {
+  convoyAhead(from?: { x: number; y: number }): { x: number; y: number } | null {
+    const c = this.caravan;
+    if (!isRolling(c)) return null;
+    return convoyAheadPoint(c.route, c.along, c.length, AREA_WINDOW_TILES, from);
+  }
+
+  /**
+   * Convoy window around a point (the caravan, or a spot ahead of it on the
+   * route), with the route painted through it as a track. Not cached:
+   * the window moves with the wagons. Null in a settlement or on water.
+   * Pass `ahead` (see `convoyAhead`) to lean the window down the road so the
+   * point sits near the edge it came from; without it the window is centred.
+   */
+  buildConvoyHandoff(
+    x = this.caravan.x,
+    y = this.caravan.y,
+    adopt = true,
+    ahead: { x: number; y: number } | null = null,
+  ): AreaHandoff | null {
     const world = this.data;
     if (!world || !hasRoute(this.caravan)) return null;
-    const resolved = resolveConvoyArea(world, x, y);
+    const resolved = resolveConvoyArea(world, x, y, ahead);
     if (!resolved) return null;
     const node = resolved.node;
     const town = { id: node.id, name: node.name, x: node.cx, y: node.cy };

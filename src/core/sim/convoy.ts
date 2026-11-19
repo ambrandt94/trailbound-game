@@ -18,7 +18,7 @@
 import { METERS_PER_WORLD_TILE, ZONE_SCALE } from '../world/models';
 import { AREA_TIME_SCALE, HOURS_PER_TU } from './time';
 import { GAME_HOURS_PER_REAL_SECOND } from './clock';
-import { CARAVAN_METERS_PER_UNIT, CARAVAN_UNITS_PER_TU } from './caravan';
+import { CARAVAN_METERS_PER_UNIT, CARAVAN_UNITS_PER_TU, pointAlong } from './caravan';
 
 /** Wagon pace in 3D, metres per real second at speedMod 1. Clock-true is 5.9. */
 export const CONVOY_MPS = 5;
@@ -394,4 +394,30 @@ export function zoneHopCentre(
   if (!(gap > 1e-9)) return { x: exit.x, y: exit.y };
   const shift = Math.min(metresToTiles(CONVOY_HOP_SHIFT_M), gap / 2);
   return { x: exit.x + (dx / gap) * shift, y: exit.y + (dy / gap) * shift };
+}
+
+/** Chords shorter than this (metres) are not a direction: the road ends here. */
+export const CONVOY_AHEAD_MIN_M = 8;
+
+/**
+ * The route point about one zone-width down the road from `along`
+ * (fine tiles, clamped to the route's end), or null when it is too close to
+ * `from` to give a direction. A direction taken to a point that far ahead
+ * follows where the road is going rather than the wagon's instantaneous yaw, so
+ * a bend does not flip the cut. `from` is the wagon, or the point the hero
+ * walked out at.
+ */
+export function convoyAheadPoint(
+  route: readonly number[],
+  along: number,
+  length: number,
+  aheadTiles: number,
+  from?: { x: number; y: number },
+): { x: number; y: number } | null {
+  if (route.length < 4 || !(length > 0) || !(aheadTiles > 0)) return null;
+  const start = from ?? pointAlong(route, along);
+  const at = pointAlong(route, Math.min(length, Math.max(0, along) + aheadTiles));
+  const gap = Math.hypot(at.x - start.x, at.y - start.y);
+  if (!(gap > metresToTiles(CONVOY_AHEAD_MIN_M))) return null;
+  return { x: at.x, y: at.y };
 }
