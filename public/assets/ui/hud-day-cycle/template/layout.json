@@ -1,0 +1,714 @@
+{
+  "version": 1,
+  "note": "Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`.",
+  "scale": 5,
+  "sheet": {
+    "w": 512,
+    "h": 512
+  },
+  "native": {
+    "w": 102,
+    "h": 102
+  },
+  "gutter": 4,
+  "slots": [
+    {
+      "id": "node_socket_empty",
+      "file": "node_socket_empty.png",
+      "w": 5,
+      "h": 5,
+      "anchor": [
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 20,
+            "y": 445,
+            "w": 25,
+            "h": 25
+          },
+          "rect1x": {
+            "x": 4,
+            "y": 89,
+            "w": 5,
+            "h": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "node_gem_lit",
+      "file": "node_gem_lit.png",
+      "w": 5,
+      "h": 5,
+      "anchor": [
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 110,
+            "y": 445,
+            "w": 25,
+            "h": 25
+          },
+          "rect1x": {
+            "x": 22,
+            "y": 89,
+            "w": 5,
+            "h": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "node_leading_pulse",
+      "file": "node_leading_pulse.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "f0",
+        "f1",
+        "f2"
+      ],
+      "cells": [
+        {
+          "state": "f0",
+          "rect": {
+            "x": 350,
+            "y": 190,
+            "w": 35,
+            "h": 35
+          },
+          "rect1x": {
+            "x": 70,
+            "y": 38,
+            "w": 7,
+            "h": 7
+          }
+        },
+        {
+          "state": "f1",
+          "rect": {
+            "x": 20,
+            "y": 265,
+            "w": 35,
+            "h": 35
+          },
+          "rect1x": {
+            "x": 4,
+            "y": 53,
+            "w": 7,
+            "h": 7
+          }
+        },
+        {
+          "state": "f2",
+          "rect": {
+            "x": 125,
+            "y": 265,
+            "w": 35,
+            "h": 35
+          },
+          "rect1x": {
+            "x": 25,
+            "y": 53,
+            "w": 7,
+            "h": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "spine_link",
+      "file": "spine_link.png",
+      "w": 5,
+      "h": 5,
+      "anchor": [
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 180,
+            "y": 445,
+            "w": 25,
+            "h": 25
+          },
+          "rect1x": {
+            "x": 36,
+            "y": 89,
+            "w": 5,
+            "h": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "fog_shroud",
+      "file": "fog_shroud.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 230,
+            "y": 265,
+            "w": 35,
+            "h": 35
+          },
+          "rect1x": {
+            "x": 46,
+            "y": 53,
+            "w": 7,
+            "h": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "anchor_left_moon",
+      "file": "anchor_left_moon.png",
+      "w": 13,
+      "h": 13,
+      "anchor": [
+        6,
+        6
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 110,
+            "y": 20,
+            "w": 65,
+            "h": 65
+          },
+          "rect1x": {
+            "x": 22,
+            "y": 4,
+            "w": 13,
+            "h": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "anchor_right_dawn",
+      "file": "anchor_right_dawn.png",
+      "w": 13,
+      "h": 13,
+      "anchor": [
+        6,
+        6
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 20,
+            "y": 20,
+            "w": 65,
+            "h": 65
+          },
+          "rect1x": {
+            "x": 4,
+            "y": 4,
+            "w": 13,
+            "h": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "medallion_sunset",
+      "file": "medallion_sunset.png",
+      "w": 11,
+      "h": 11,
+      "anchor": [
+        5,
+        5
+      ],
+      "states": [
+        "lit",
+        "drained"
+      ],
+      "cells": [
+        {
+          "state": "lit",
+          "rect": {
+            "x": 310,
+            "y": 20,
+            "w": 55,
+            "h": 55
+          },
+          "rect1x": {
+            "x": 62,
+            "y": 4,
+            "w": 11,
+            "h": 11
+          }
+        },
+        {
+          "state": "drained",
+          "rect": {
+            "x": 195,
+            "y": 20,
+            "w": 55,
+            "h": 55
+          },
+          "rect1x": {
+            "x": 39,
+            "y": 4,
+            "w": 11,
+            "h": 11
+          }
+        }
+      ]
+    },
+    {
+      "id": "medallion_sunrise",
+      "file": "medallion_sunrise.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "states": [
+        "lit",
+        "drained"
+      ],
+      "cells": [
+        {
+          "state": "lit",
+          "rect": {
+            "x": 140,
+            "y": 115,
+            "w": 45,
+            "h": 45
+          },
+          "rect1x": {
+            "x": 28,
+            "y": 23,
+            "w": 9,
+            "h": 9
+          }
+        },
+        {
+          "state": "drained",
+          "rect": {
+            "x": 20,
+            "y": 115,
+            "w": 45,
+            "h": 45
+          },
+          "rect1x": {
+            "x": 4,
+            "y": 23,
+            "w": 9,
+            "h": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "sub_node",
+      "file": "sub_node.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "states": [
+        "lit",
+        "drained"
+      ],
+      "cells": [
+        {
+          "state": "lit",
+          "rect": {
+            "x": 20,
+            "y": 190,
+            "w": 45,
+            "h": 45
+          },
+          "rect1x": {
+            "x": 4,
+            "y": 38,
+            "w": 9,
+            "h": 9
+          }
+        },
+        {
+          "state": "drained",
+          "rect": {
+            "x": 335,
+            "y": 115,
+            "w": 45,
+            "h": 45
+          },
+          "rect1x": {
+            "x": 67,
+            "y": 23,
+            "w": 9,
+            "h": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "sky_sun",
+      "file": "sky_sun.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 290,
+            "y": 265,
+            "w": 35,
+            "h": 35
+          },
+          "rect1x": {
+            "x": 58,
+            "y": 53,
+            "w": 7,
+            "h": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "sky_moon",
+      "file": "sky_moon.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 345,
+            "y": 265,
+            "w": 35,
+            "h": 35
+          },
+          "rect1x": {
+            "x": 69,
+            "y": 53,
+            "w": 7,
+            "h": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "sky_frame",
+      "file": "sky_frame.png",
+      "w": 8,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "slice": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 290,
+            "y": 190,
+            "w": 40,
+            "h": 40
+          },
+          "rect1x": {
+            "x": 58,
+            "y": 38,
+            "w": 8,
+            "h": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "terrain_mask",
+      "file": "terrain_mask.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 90,
+            "y": 190,
+            "w": 180,
+            "h": 40
+          },
+          "rect1x": {
+            "x": 18,
+            "y": 38,
+            "w": 36,
+            "h": 8
+          }
+        }
+      ]
+    },
+    {
+      "id": "cursor_pill_day",
+      "file": "cursor_pill_day.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "slice": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 420,
+            "y": 115,
+            "w": 45,
+            "h": 45
+          },
+          "rect1x": {
+            "x": 84,
+            "y": 23,
+            "w": 9,
+            "h": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "cursor_pill_night",
+      "file": "cursor_pill_night.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "slice": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 245,
+            "y": 115,
+            "w": 45,
+            "h": 45
+          },
+          "rect1x": {
+            "x": 49,
+            "y": 23,
+            "w": 9,
+            "h": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "cursor_stem_day",
+      "file": "cursor_stem_day.png",
+      "w": 1,
+      "h": 6,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 20,
+            "y": 330,
+            "w": 5,
+            "h": 30
+          },
+          "rect1x": {
+            "x": 4,
+            "y": 66,
+            "w": 1,
+            "h": 6
+          }
+        }
+      ]
+    },
+    {
+      "id": "cursor_stem_night",
+      "file": "cursor_stem_night.png",
+      "w": 1,
+      "h": 6,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "cells": [
+        {
+          "state": "default",
+          "rect": {
+            "x": 400,
+            "y": 265,
+            "w": 5,
+            "h": 30
+          },
+          "rect1x": {
+            "x": 80,
+            "y": 53,
+            "w": 1,
+            "h": 6
+          }
+        }
+      ]
+    }
+  ],
+  "font": {
+    "id": "pixel_font",
+    "file": "pixel_font.png",
+    "cellW": 3,
+    "cellH": 5,
+    "glyphs": "0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ-./ ",
+    "rows": [
+      {
+        "state": "row1",
+        "glyphStart": 0,
+        "glyphCount": 14,
+        "rect": {
+          "x": 100,
+          "y": 330,
+          "w": 210,
+          "h": 25
+        },
+        "rect1x": {
+          "x": 20,
+          "y": 66,
+          "w": 42,
+          "h": 5
+        }
+      },
+      {
+        "state": "row2",
+        "glyphStart": 14,
+        "glyphCount": 14,
+        "rect": {
+          "x": 20,
+          "y": 390,
+          "w": 210,
+          "h": 25
+        },
+        "rect1x": {
+          "x": 4,
+          "y": 78,
+          "w": 42,
+          "h": 5
+        }
+      },
+      {
+        "state": "row3",
+        "glyphStart": 28,
+        "glyphCount": 13,
+        "rect": {
+          "x": 250,
+          "y": 390,
+          "w": 195,
+          "h": 25
+        },
+        "rect1x": {
+          "x": 50,
+          "y": 78,
+          "w": 39,
+          "h": 5
+        }
+      }
+    ]
+  }
+}
