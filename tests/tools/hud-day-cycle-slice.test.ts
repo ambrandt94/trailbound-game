@@ -6,6 +6,8 @@ import { describe, expect, test } from 'vitest';
 // @ts-expect-error untyped mjs module.
 import { sliceSheet } from '../../tools/hud-day-cycle-slice.mjs';
 // @ts-expect-error untyped mjs module.
+import { buildTemplate } from '../../tools/hud-day-cycle-template.mjs';
+// @ts-expect-error untyped mjs module.
 import { createImage, decodePng, encodePng } from '../../tools/ui-png.mjs';
 
 interface Img {
@@ -17,14 +19,29 @@ interface Img {
 }
 interface Cell {
   rect: { x: number; y: number; w: number; h: number };
+  rect1x: { x: number; y: number; w: number; h: number };
+}
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 interface Layout {
   scale: number;
   sheet: { w: number; h: number };
   native: { w: number; h: number };
   gutter: number;
+  preview: { rect: Rect; rect1x: Rect };
   slots: Array<{ id: string; file: string; cells: Cell[] }>;
-  font: { rows: Cell[] };
+  font: {
+    glyphs: string;
+    cellW: number;
+    pitch: number;
+    gap: number;
+    widths: Record<string, number>;
+    cells: Array<{ glyph: string; index: number; rect: Rect; rect1x: Rect }>;
+  };
 }
 
 const art = join(process.cwd(), 'public', 'assets', 'ui', 'hud-day-cycle');
@@ -89,8 +106,12 @@ describe('hud day-cycle template round trip', () => {
   });
 
   test('cells stay on the sheet, on the pixel grid, and keep a gutter apart', () => {
-    const rects = [...layout.slots.flatMap((s) => s.cells), ...layout.font.rows].map((c) => c.rect);
-    expect(rects.length).toBeGreaterThan(20);
+    const rects = [
+      ...layout.slots.flatMap((s) => s.cells),
+      ...layout.font.cells,
+      { rect: layout.preview.rect },
+    ].map((c) => c.rect);
+    expect(rects.length).toBeGreaterThan(60);
     for (const r of rects) {
       expect(r.x % layout.scale).toBe(0);
       expect(r.y % layout.scale).toBe(0);
@@ -111,6 +132,106 @@ describe('hud day-cycle template round trip', () => {
       }
     }
   });
+});
+
+describe('hud day-cycle template v2: spaced font, sample band, 512 sheet', () => {
+  const alpha = (img: Img, x: number, y: number): number => img.get(x, y)[3] ?? 0;
+  const font = layout.font;
+
+  test('the sheet is 512x512 and the guide and 1x sheet match the layout', () => {
+    expect(layout.sheet).toEqual({ w: 512, h: 512 });
+    expect(read('template/hud-day-cycle-template-guide.png').w).toBe(512);
+    expect(read('template/hud-day-cycle-template-guide.png').h).toBe(512);
+    expect(sheet1x.w).toBe(Math.floor(512 / layout.scale));
+    expect(sheet1x.h).toBe(Math.floor(512 / layout.scale));
+  });
+
+  test('every glyph but the blank space has its own cell, as wide as the game advances it', () => {
+    const wanted = [...font.glyphs].filter((ch) => ch !== ' ');
+    expect(font.cells.map((c) => c.glyph)).toEqual(wanted);
+    for (const c of font.cells) {
+      expect(c.rect1x.w).toBe(Math.min(font.widths[c.glyph] ?? font.cellW, font.cellW));
+      expect(c.rect.w).toBe(c.rect1x.w * layout.scale);
+    }
+  });
+
+  test('font cells sit on one pitch with clear pixels between neighbours', () => {
+    expect(font.gap).toBeGreaterThanOrEqual(1);
+    expect(font.pitch).toBe(font.cellW + font.gap);
+    const rows = new Map<number, typeof font.cells>();
+    for (const c of font.cells) rows.set(c.rect1x.y, [...(rows.get(c.rect1x.y) ?? []), c]);
+    expect(rows.size).toBeGreaterThanOrEqual(1);
+    for (const row of rows.values()) {
+      row.sort((a, b) => a.rect1x.x - b.rect1x.x);
+      const x0 = row[0]?.rect1x.x ?? 0;
+      row.forEach((c, i) => expect(c.rect1x.x).toBe(x0 + i * font.pitch));
+      for (const [a, b] of row.slice(0, -1).map((c, i) => [c, row[i + 1]] as const)) {
+        if (!b) continue;
+        // Every native pixel column strictly between two cells is fully clear, on both sheets.
+        for (let x = a.rect1x.x + a.rect1x.w; x < b.rect1x.x; x++) {
+          for (let y = a.rect1x.y; y < a.rect1x.y + a.rect1x.h; y++) {
+            expect(alpha(sheet1x, x, y)).toBe(0);
+            expect(alpha(sheet512, x * layout.scale + 1, y * layout.scale + 1)).toBe(0);
+          }
+        }
+      }
+    }
+  });
+
+  test('the sample band is on both sheets, is drawn, and the slicer ignores it', () => {
+    const { rect, rect1x } = layout.preview;
+    let drawn = 0;
+    for (let y = rect1x.y; y < rect1x.y + rect1x.h; y++)
+      for (let x = rect1x.x; x < rect1x.x + rect1x.w; x++) if (alpha(sheet1x, x, y) > 0) drawn++;
+    expect(drawn).toBeGreaterThan(rect1x.w * 8);
+    // Paint over the whole band (and the area around it) on a copy: the result must not change.
+    const scribbled = createImage(512, 512) as Img;
+    for (let y = 0; y < 512; y++)
+      for (let x = 0; x < 512; x++) scribbled.px(x, y, sheet512.get(x, y));
+    for (let y = rect.y; y < rect.y + rect.h + 3; y++)
+      for (let x = rect.x; x < rect.x + rect.w; x++)
+        scribbled.px(x, y, [(x * 7) & 255, (y * 13) & 255, 99, 255]);
+    expectSame(sliceSheet(scribbled, layout));
+  });
+
+  test('gutters between cells can hold anything without changing the result', () => {
+    const cells = [
+      ...layout.slots.flatMap((s) => s.cells),
+      ...layout.font.cells,
+      { rect: layout.preview.rect },
+    ];
+    const inCell = (x: number, y: number): boolean =>
+      cells.some(({ rect: r }) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h);
+    const scribbled = createImage(512, 512) as Img;
+    for (let y = 0; y < 512; y++)
+      for (let x = 0; x < 512; x++)
+        scribbled.px(x, y, inCell(x, y) ? sheet512.get(x, y) : [250, 20, 120, 255]);
+    expectSame(sliceSheet(scribbled, layout));
+  });
+
+  test('the 512 sheet is a pure nearest-neighbour upscale of the 1x sheet', () => {
+    const s = layout.scale;
+    const edge = layout.native.w * s;
+    for (let y = 0; y < 512; y++) {
+      for (let x = 0; x < 512; x++) {
+        const want =
+          x < edge && y < edge ? sheet1x.get(Math.floor(x / s), Math.floor(y / s)) : [0, 0, 0, 0];
+        const got = sheet512.get(x, y);
+        // Straight alpha: only compare colour where something is drawn.
+        if (want[3] === 0) expect(got[3], `${x},${y}`).toBe(0);
+        else expect(got, `${x},${y}`).toEqual(want);
+      }
+    }
+  });
+
+  test('the committed template is what the tool builds from the art in the game now', async () => {
+    const built = await buildTemplate();
+    expect(JSON.parse(JSON.stringify(built.layout))).toEqual(layout);
+    expect(Buffer.from(built.sheet.data).equals(Buffer.from(sheet512.data))).toBe(true);
+    expect(Buffer.from(built.flat.data).equals(Buffer.from(sheet1x.data))).toBe(true);
+    const guide = read('template/hud-day-cycle-template-guide.png');
+    expect(Buffer.from(built.guide.data).equals(Buffer.from(guide.data))).toBe(true);
+  }, 60_000);
 });
 
 describe('png decoding for edited sheets', () => {

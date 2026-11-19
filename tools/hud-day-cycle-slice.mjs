@@ -11,6 +11,12 @@
  * mostly clear become transparent, and alpha below --alpha-min counts as
  * clear). Frames of one slot are put back side by side, so the written files
  * match `manifest.json`. Default output is `public/assets/ui/hud-day-cycle/`.
+ *
+ * Only the cells listed in `layout.json` are read. The sample band at the top of
+ * the sheet (`layout.preview`) and the space between cells are ignored, so
+ * nothing drawn there reaches the game. The pixel font is rebuilt in the game's
+ * own layout (one `cellW` slot per glyph, glyphs side by side, narrow glyphs
+ * padded with clear pixels) from the spaced-out glyph cells.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -94,11 +100,22 @@ export function sliceSheet(sheet, layout, { alphaMin = DEFAULT_ALPHA_MIN } = {})
   }
   const font = layout.font;
   const fontImage = createImage(font.glyphs.length * font.cellW, font.cellH);
-  for (const row of font.rows) {
-    const part = cutCell(sheet, row.rect, k, scale, alphaMin, native);
-    for (let y = 0; y < part.h; y++) {
-      for (let x = 0; x < part.w; x++)
-        fontImage.px(row.glyphStart * font.cellW + x, y, part.get(x, y));
+  // Version 2 layouts have one cell per glyph; version 1 had strips of glyphs side by side.
+  if (font.cells) {
+    for (const cell of font.cells) {
+      const part = cutCell(sheet, cell.rect, k, scale, alphaMin, native);
+      for (let y = 0; y < part.h; y++) {
+        for (let x = 0; x < part.w; x++)
+          fontImage.px(cell.index * font.cellW + x, y, part.get(x, y));
+      }
+    }
+  } else {
+    for (const row of font.rows) {
+      const part = cutCell(sheet, row.rect, k, scale, alphaMin, native);
+      for (let y = 0; y < part.h; y++) {
+        for (let x = 0; x < part.w; x++)
+          fontImage.px(row.glyphStart * font.cellW + x, y, part.get(x, y));
+      }
     }
   }
   out.push({ file: font.file, image: fontImage });
