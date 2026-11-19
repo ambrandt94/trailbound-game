@@ -7,3 +7,5 @@ Cross-platform Node scripts. No bash.
 - `sync-character-bundle.mjs` — copy a Character Forge dist into `public/vendor/character-forge/<version>/` and write `current.json`. `npm run sync:cf -- <CF_DIST>`.
 - `capture-creator.mjs` — Playwright shots of the character creator. Not part of `check`. Run it against a dev server: `node tools/capture-creator.mjs`.
 - `ui-sheet.mjs` / `ui-import.mjs` — paint-over UI template. See `assets-src/ui-template/README.md`. `npm run ui:import` slices the sheet into `src/ui/theme`. `npm run ui:sheet` redraws the starter sheet and wipes paint.
+- `music-sync.mjs` — copy a Trailbound music bundle (from the Asset Matrix) into `public/assets/audio/music/` and write `manifest.json`. `node tools/music-sync.mjs <BUNDLE_DIR>`. See that folder's README.
+- `capture-music.mjs` — headless walk through the soundtrack contexts, logging the selected track and crossfade gains. Not part of `check` (it needs a browser).

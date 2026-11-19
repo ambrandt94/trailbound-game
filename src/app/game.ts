@@ -95,6 +95,8 @@ import { DIVE_BARE_MAGNIFY, DIVE_MAP_MAGNIFY, DIVE_MAX_MAGNIFY, DiveScene } from
 import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
 import { ConvoyDriver } from './convoy-driver';
 import { leaderToggleHalt } from './leader-halt';
+import { buildMusicContext } from './music-context';
+import { MusicConductor } from './music-conductor';
 import { resolveAreaAt } from '../core/area/area-window';
 import type { AreaEntry } from '../render/area/area-from-export';
 import { codeForTouchAction } from './touch-wire';
@@ -142,6 +144,7 @@ export class Game implements GameHost {
   private noticeTimer = 0;
   private avatarRestore: (() => void) | null = null;
   private instanceRig: SimAvatar['rig'] | null = null;
+  private readonly musicConductor: MusicConductor;
 
   constructor(options: GameOptions) {
     this.options = options;
@@ -168,6 +171,21 @@ export class Game implements GameHost {
     registerWagonMinigames();
     registerDemoMinigames();
     minigameCatalog.value = listMinigames().map((game) => ({ id: game.id, name: game.name }));
+    this.musicConductor = new MusicConductor(
+      {
+        context: () =>
+          buildMusicContext({
+            mode: this.mode,
+            view: this.view,
+            world: this.world,
+            minigameOpen: this.minigames.isOpen(),
+          }),
+        indoors: () => this.view === 'area' && (this.areaScene?.indoors() ?? false),
+        volume: () => (settings.value.music / 100) * (settings.value.master / 100),
+      },
+      options.baseUrl ?? './',
+    );
+    Object.assign(globalThis, { __tbMusic: this.musicConductor.debug() });
     this.bindUi();
     this.setMode('boot');
     this.setFade(0);
@@ -194,6 +212,7 @@ export class Game implements GameHost {
 
   async start(): Promise<void> {
     void this.mapRenderer.load(this.options.baseUrl ?? './');
+    void this.musicConductor.load();
     void this.mapRenderer.setSkin(settings.value.mapSkin, null);
     this.keyboard.attach(window);
     this.detachTouch = attachTouchControls(this.options.root, {
@@ -961,6 +980,7 @@ export class Game implements GameHost {
     if (this.mapScene) this.mapScene.render(alpha);
     if (this.view === 'area') this.areaScene?.render(alpha);
     if (top && top !== this.mapScene && top !== this.areaScene) top.render(alpha);
+    this.musicConductor.tick();
     this.publish();
   }
 

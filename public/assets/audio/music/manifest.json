@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "source": "Trailbound Asset Matrix music dataset",
+  "bundleGeneratedAt": "2026-11-17T03:19:24.444Z",
+  "vocabulary": [
+    "title",
+    "map",
+    "travel-day",
+    "travel-night",
+    "camp",
+    "town",
+    "forest",
+    "desert",
+    "beach",
+    "grove",
+    "minigame"
+  ],
+  "tracks": [
+    {
+      "id": "calm-bright-forest-loop",
+      "name": "calm-bright-forest-loop",
+      "file": "calm-bright-forest-loop.ogg",
+      "loop": true,
+      "context": [
+        "forest",
+        "travel-day"
+      ],
+      "intensity": 0.2,
+      "durationSec": 78.5,
+      "kind": "ambient"
+    },
+    {
+      "id": "calm-camp",
+      "name": "calm-camp",
+      "file": "calm-camp.ogg",
+      "loop": true,
+      "context": [
+        "camp"
+      ],
+      "intensity": 0.28,
+      "durationSec": 224,
+      "kind": "ambient"
+    },
+    {
+      "id": "calm-town",
+      "name": "calm-town",
+      "file": "calm-town.ogg",
+      "loop": true,
+      "context": [
+        "town"
+      ],
+      "intensity": 0.24,
+      "durationSec": 52.3,
+      "kind": "ambient"
+    },
+    {
+      "id": "campfire-by-the-old-trail",
+      "name": "Campfire By The Old Trail",
+      "file": "campfire-by-the-old-trail.ogg",
+      "loop": true,
+      "context": [
+        "camp"
+      ],
+      "intensity": 0.3,
+      "durationSec": 242.8,
+      "kind": "ambient",
+      "mood": "Warm · reflective",
+      "notes": "Sourced from the Trailbound Music Drive folder as a player test asset."
+    },
+    {
+      "id": "caravan-over-dunes",
+      "name": "Caravan Over Dunes",
+      "file": "caravan-over-dunes.ogg",
+      "loop": true,
+      "context": [
+        "desert",
+        "travel-day",
+        "map"
+      ],
+      "intensity": 0.58,
+      "durationSec": 342.6,
+      "kind": "ambient"
+    },
+    {
+      "id": "forest-road-caravan",
+      "name": "forest-road-caravan",
+      "file": "forest-road-caravan.ogg",
+      "loop": true,
+      "context": [
+        "forest",
+        "travel-day",
+        "map"
+      ],
+      "intensity": 0.6,
+      "durationSec": 187.8,
+      "kind": "ambient"
+    },
+    {
+      "id": "holy-grove-loop",
+      "name": "holy-grove-loop",
+      "file": "holy-grove-loop.ogg",
+      "loop": true,
+      "context": [
+        "grove"
+      ],
+      "intensity": 0.22,
+      "durationSec": 120,
+      "kind": "ambient"
+    },
+    {
+      "id": "lively-camp-loop",
+      "name": "lively-camp-loop",
+      "file": "lively-camp-loop.ogg",
+      "loop": true,
+      "context": [
+        "camp",
+        "town"
+      ],
+      "intensity": 0.55,
+      "durationSec": 81.2,
+      "kind": "ambient"
+    },
+    {
+      "id": "menu-theme",
+      "name": "Menu Theme",
+      "file": "menu-theme.ogg",
+      "loop": true,
+      "context": [
+        "title"
+      ],
+      "intensity": 0.4,
+      "durationSec": 122.4,
+      "kind": "theme",
+      "mood": "Inviting · trailbound",
+      "notes": "Sourced from the Trailbound Music Drive folder as a player test asset."
+    },
+    {
+      "id": "on-the-road-beach-loop",
+      "name": "on-the-road-beach-loop",
+      "file": "on-the-road-beach-loop.ogg",
+      "loop": true,
+      "context": [
+        "beach",
+        "travel-day"
+      ],
+      "intensity": 0.4,
+      "durationSec": 73.8,
+      "kind": "ambient"
+    },
+    {
+      "id": "on-the-road-happy-loop",
+      "name": "on-the-road-happy-loop",
+      "file": "on-the-road-happy-loop.ogg",
+      "loop": true,
+      "context": [
+        "travel-day",
+        "map"
+      ],
+      "intensity": 0.48,
+      "durationSec": 61.1,
+      "kind": "ambient"
+    },
+    {
+      "id": "on-the-road-night-loop",
+      "name": "on-the-road-night-loop",
+      "file": "on-the-road-night-loop.ogg",
+      "loop": true,
+      "context": [
+        "travel-night"
+      ],
+      "intensity": 0.42,
+      "durationSec": 93,
+      "kind": "ambient"
+    },
+    {
+      "id": "walk-with-purpose-loop",
+      "name": "walk-with-purpose-loop",
+      "file": "walk-with-purpose-loop.ogg",
+      "loop": true,
+      "context": [
+        "travel-day",
+        "map",
+        "minigame"
+      ],
+      "intensity": 0.65,
+      "durationSec": 59,
+      "kind": "ambient"
+    }
+  ]
+}
