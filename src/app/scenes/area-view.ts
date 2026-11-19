@@ -257,7 +257,8 @@ export class AreaView implements Scene {
 
   private publishTravel(): void {
     if (!this.driver) {
-      if (this.hudKey) travelHud.value = null;
+      // No convoy here (a town, say): the map's caravan panel must not linger over 3D.
+      if (travelHud.peek()) travelHud.value = null;
       this.hudKey = '';
       return;
     }

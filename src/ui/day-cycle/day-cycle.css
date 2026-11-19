@@ -1,0 +1,30 @@
+/* Serpentine day-cycle HUD. Layout of the top bar lives in pixel-skin.css. */
+#ui .dc-hud {
+  position: relative;
+  flex: 0 0 auto;
+  pointer-events: none;
+  user-select: none;
+}
+
+#ui .dc-canvas {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+}
+
+#ui .dc-paused {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: calc(2px * var(--tb-ui-scale, 1));
+  padding: calc(2px * var(--tb-ui-scale, 1)) calc(8px * var(--tb-ui-scale, 1));
+  border: calc(2px * var(--tb-ui-scale, 1)) solid #b58938;
+  background: #14111f;
+  color: #fef08a;
+  font-size: calc(16px * var(--tb-ui-scale, 1));
+  line-height: calc(16px * var(--tb-ui-scale, 1));
+  white-space: nowrap;
+  pointer-events: auto;
+}

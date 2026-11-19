@@ -97,12 +97,22 @@ export function encodePng(img) {
   return png;
 }
 
-/** @param {Buffer} png */
+/**
+ * Decode an 8-bit, non-interlaced PNG to RGBA. Gray, gray+alpha, RGB, indexed
+ * (with tRNS) and RGBA are accepted, so sheets saved by Aseprite or exported
+ * from an image model decode as they are.
+ * @param {Buffer} png
+ */
 export function decodePng(png) {
   if (!png.subarray(0, 8).equals(SIG)) throw new Error('not a png');
   let off = 8;
   let w = 0;
   let h = 0;
+  let colorType = 6;
+  /** @type {Buffer | null} */
+  let palette = null;
+  /** @type {Buffer | null} */
+  let trns = null;
   /** @type {Buffer[]} */
   const idat = [];
   while (off < png.length) {
@@ -112,43 +122,76 @@ export function decodePng(png) {
     if (type === 'IHDR') {
       w = data.readUInt32BE(0);
       h = data.readUInt32BE(4);
-      if (data[8] !== 8 || data[9] !== 6) throw new Error('png must be 8-bit rgba');
+      colorType = data[9];
+      if (data[8] !== 8) throw new Error('png must be 8 bits per channel');
+      if (![0, 2, 3, 4, 6].includes(colorType))
+        throw new Error(`unsupported png colour type ${colorType}`);
+      if (data[12] !== 0) throw new Error('interlaced pngs are not supported');
+    } else if (type === 'PLTE') {
+      palette = data;
+    } else if (type === 'tRNS') {
+      trns = data;
     } else if (type === 'IDAT') {
       idat.push(data);
     } else if (type === 'IEND') break;
     off += 12 + len;
   }
+  const bpp = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType] ?? 4;
   const raw = inflateSync(Buffer.concat(idat));
   const img = createImage(w, h);
   let p = 0;
   /** @type {Buffer | null} */
   let prev = null;
-  const stride = w * 4;
+  const stride = w * bpp;
   for (let y = 0; y < h; y++) {
     const filter = raw[p++];
     const row = Buffer.from(raw.subarray(p, p + stride));
     p += stride;
     if (filter === 1) {
-      for (let i = 4; i < row.length; i++) row[i] = (row[i] + row[i - 4]) & 255;
+      for (let i = bpp; i < row.length; i++) row[i] = (row[i] + row[i - bpp]) & 255;
     } else if (filter === 2 && prev) {
       for (let i = 0; i < row.length; i++) row[i] = (row[i] + prev[i]) & 255;
     } else if (filter === 3) {
       for (let i = 0; i < row.length; i++) {
-        const left = i >= 4 ? row[i - 4] : 0;
+        const left = i >= bpp ? row[i - bpp] : 0;
         const up = prev ? prev[i] : 0;
         row[i] = (row[i] + ((left + up) >> 1)) & 255;
       }
     } else if (filter === 4) {
       for (let i = 0; i < row.length; i++) {
-        const a = i >= 4 ? row[i - 4] : 0;
+        const a = i >= bpp ? row[i - bpp] : 0;
         const b = prev ? prev[i] : 0;
-        const c = prev && i >= 4 ? prev[i - 4] : 0;
+        const c = prev && i >= bpp ? prev[i - bpp] : 0;
         row[i] = (row[i] + paeth(a, b, c)) & 255;
       }
     } else if (filter !== 0) {
       throw new Error(`unsupported png filter ${filter}`);
     }
-    img.data.set(row, y * stride);
+    for (let x = 0; x < w; x++) {
+      const d = (y * w + x) * 4;
+      const s = x * bpp;
+      if (colorType === 6) {
+        img.data[d] = row[s];
+        img.data[d + 1] = row[s + 1];
+        img.data[d + 2] = row[s + 2];
+        img.data[d + 3] = row[s + 3];
+      } else if (colorType === 2) {
+        img.data[d] = row[s];
+        img.data[d + 1] = row[s + 1];
+        img.data[d + 2] = row[s + 2];
+        img.data[d + 3] = 255;
+      } else if (colorType === 0 || colorType === 4) {
+        img.data[d] = img.data[d + 1] = img.data[d + 2] = row[s];
+        img.data[d + 3] = colorType === 4 ? row[s + 1] : 255;
+      } else {
+        const idx = row[s];
+        if (!palette) throw new Error('indexed png has no palette');
+        img.data[d] = palette[idx * 3];
+        img.data[d + 1] = palette[idx * 3 + 1];
+        img.data[d + 2] = palette[idx * 3 + 2];
+        img.data[d + 3] = trns && idx < trns.length ? trns[idx] : 255;
+      }
+    }
     prev = row;
   }
   return img;

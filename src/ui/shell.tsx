@@ -1,13 +1,13 @@
 import { CreatorScreen } from './creator';
 import { skinText } from './glyphs';
 import { SettingsPanel } from './area-settings';
+import { DayCycleHud } from './day-cycle/hud';
 import {
   bootError,
   bootMessage,
   canContinue,
   canEnter,
   clockRate,
-  clockText,
   commands,
   generating,
   hint,
@@ -83,50 +83,59 @@ function TitleScreen() {
   );
 }
 
+/** The party readout without its leading "TU n": the day-cycle HUD owns the time. */
+function supplyLine(readout: string): string {
+  return readout.replace(/^TU \d+\s+/, '');
+}
+
 function Hud() {
   return (
     <div class="hud">
       <div class="night-veil" style={{ opacity: String(mapNight.value) }} />
       <div class="hud-bar">
         <div class="pill clock">
-          {skinText(clockText.value)}
+          {partyHud.value ? (
+            <span class="party">{skinText(supplyLine(partyHud.value))}</span>
+          ) : null}
           {clockRate.value ? (
             <span class="rate" title="Game clock. Walk stays 5 km/h.">
-              {skinText(clockRate.value)}
+              {skinText(`Clock ${clockRate.value}`)}
             </span>
           ) : null}
-          {partyHud.value ? <span class="party">{skinText(partyHud.value)}</span> : null}
         </div>
-        <div class="hud-actions">
-          <label class="pill skin">
-            <span>Map</span>
-            <select
-              aria-label="Map skin"
-              value={settings.value.mapSkin}
-              onChange={(event) => {
-                const target = event.currentTarget;
-                if (!(target instanceof HTMLSelectElement)) return;
-                commands.changeSettings({
-                  mapSkin: target.value === 'classic' ? 'classic' : 'trailbound48',
-                });
-              }}
-            >
-              <option value="classic">Pixel Kingdom</option>
-              <option value="trailbound48">Trailbound 48</option>
-            </select>
-          </label>
-          <button type="button" class="pill save" onClick={() => commands.save()}>
-            Save
-          </button>
-          <button type="button" class="pill look" onClick={() => commands.openSettings()}>
-            Settings
-          </button>
-          <button type="button" class="pill avatar" onClick={() => commands.editAvatar()}>
-            Avatar
-          </button>
+        <DayCycleHud />
+        <div class="hud-right">
+          <div class="hud-actions">
+            <label class="pill skin">
+              <span>Map</span>
+              <select
+                aria-label="Map skin"
+                value={settings.value.mapSkin}
+                onChange={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  commands.changeSettings({
+                    mapSkin: target.value === 'classic' ? 'classic' : 'trailbound48',
+                  });
+                }}
+              >
+                <option value="classic">Pixel Kingdom</option>
+                <option value="trailbound48">Trailbound 48</option>
+              </select>
+            </label>
+            <button type="button" class="pill save" onClick={() => commands.save()}>
+              Save
+            </button>
+            <button type="button" class="pill look" onClick={() => commands.openSettings()}>
+              Settings
+            </button>
+            <button type="button" class="pill avatar" onClick={() => commands.editAvatar()}>
+              Avatar
+            </button>
+          </div>
+          <TravelPanel />
         </div>
       </div>
-      <TravelPanel />
       <div class="hud-foot">
         {placeName.value ? (
           <section class="place">
@@ -169,17 +178,7 @@ function TravelPanel() {
       <p class="eyebrow">
         {skinText(`Caravan · ${roleLabel}`)} <span class="travel-status">{skinText(status)}</span>
       </p>
-      <p class="travel-line">
-        {skinText(`Day ${t.day} · TU ${Math.floor(t.tu)} · pace ×${t.speed.toFixed(2)}`)}
-        {t.clockPaused && !inArea ? (
-          <span
-            class="travel-paused"
-            title="The map clock only runs while you or the caravan travel"
-          >
-            {skinText('Paused, not moving')}
-          </span>
-        ) : null}
-      </p>
+      <p class="travel-line">{skinText(`Pace ×${t.speed.toFixed(2)}`)}</p>
       <div class="travel-goal" title="Distance today against the day goal">
         <span>{skinText(`Today ${Math.floor(t.todayUnits)} / ${t.goalUnits}`)}</span>
         <div class="travel-bar">

@@ -1,0 +1,281 @@
+{
+  "version": 1,
+  "note": "Edit this file, or drop new PNGs over the placeholders. See README.md.",
+  "sprites": {
+    "node_socket_empty": {
+      "file": "node_socket_empty.png",
+      "w": 5,
+      "h": 5,
+      "anchor": [
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Recessed bezel under every bead. Shows once a TU has drained."
+    },
+    "node_gem_lit": {
+      "file": "node_gem_lit.png",
+      "w": 5,
+      "h": 5,
+      "anchor": [
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "note": "Lit bead. Gray pixels take the phase colour, pure white is the specular pixel. Drawn over the socket."
+    },
+    "node_leading_pulse": {
+      "file": "node_leading_pulse.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "f0",
+        "f1",
+        "f2"
+      ],
+      "fps": 7,
+      "note": "Highlight ring drawn over the active bead. Frames loop."
+    },
+    "spine_link": {
+      "file": "spine_link.png",
+      "w": 5,
+      "h": 5,
+      "anchor": [
+        2,
+        2
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Brass chain link, stamped 5 times between beads."
+    },
+    "fog_shroud": {
+      "file": "fog_shroud.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Wispy mist over a bead when pre-dawn fog is on. Translucent."
+    },
+    "anchor_left_moon": {
+      "file": "anchor_left_moon.png",
+      "w": 13,
+      "h": 13,
+      "anchor": [
+        6,
+        6
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Left end-cap: 0 TU, the wrap back to 05:00."
+    },
+    "anchor_right_dawn": {
+      "file": "anchor_right_dawn.png",
+      "w": 13,
+      "h": 13,
+      "anchor": [
+        6,
+        6
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Right end-cap: 100 TU, the 05:00 start of the day."
+    },
+    "medallion_sunset": {
+      "file": "medallion_sunset.png",
+      "w": 11,
+      "h": 11,
+      "anchor": [
+        5,
+        5
+      ],
+      "states": [
+        "lit",
+        "drained"
+      ],
+      "note": "Sits on the sunset bead."
+    },
+    "medallion_sunrise": {
+      "file": "medallion_sunrise.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "states": [
+        "lit",
+        "drained"
+      ],
+      "note": "Sits on the sunrise bead."
+    },
+    "sub_node": {
+      "file": "sub_node.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "states": [
+        "lit",
+        "drained"
+      ],
+      "tint": true,
+      "note": "Solar noon and midnight beads. The lit well is gray and takes the phase colour."
+    },
+    "sky_sun": {
+      "file": "sky_sun.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Glides across the sky strip while it is day."
+    },
+    "sky_moon": {
+      "file": "sky_moon.png",
+      "w": 7,
+      "h": 7,
+      "anchor": [
+        3,
+        3
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Glides across the sky strip at night. A lunar phase sheet can replace it later."
+    },
+    "sky_frame": {
+      "file": "sky_frame.png",
+      "w": 8,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "slice": [
+        2,
+        2,
+        2,
+        2
+      ],
+      "note": "9-slice border around the sky strip. Centre is transparent."
+    },
+    "terrain_mask": {
+      "file": "terrain_mask.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "note": "Tileable hills silhouette along the bottom of the sky. Gray, tinted by the ground colour of the hour."
+    },
+    "cursor_pill_day": {
+      "file": "cursor_pill_day.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "states": [
+        "default"
+      ],
+      "slice": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "note": "Tooltip box by day, 9-slice. Text sits inside."
+    },
+    "cursor_pill_night": {
+      "file": "cursor_pill_night.png",
+      "w": 9,
+      "h": 9,
+      "anchor": [
+        4,
+        4
+      ],
+      "states": [
+        "default"
+      ],
+      "slice": [
+        3,
+        3,
+        3,
+        3
+      ],
+      "note": "Tooltip box by night (violet), 9-slice."
+    },
+    "cursor_stem_day": {
+      "file": "cursor_stem_day.png",
+      "w": 1,
+      "h": 6,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "1 px stem from the pill down to the active bead. Stretched vertically."
+    },
+    "cursor_stem_night": {
+      "file": "cursor_stem_night.png",
+      "w": 1,
+      "h": 6,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "note": "Night stem (violet)."
+    }
+  },
+  "font": {
+    "file": "pixel_font.png",
+    "cellW": 3,
+    "cellH": 5,
+    "spacing": 1,
+    "glyphs": "0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ-./ ",
+    "widths": {
+      ":": 1,
+      ".": 1,
+      " ": 2
+    },
+    "note": "White glyphs on transparent, tinted at draw time. Cells are cellW wide in glyph order; widths overrides a glyph advance."
+  }
+}

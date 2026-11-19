@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals';
 import type { WagonActionId, WagonRow } from '../core/sim/party';
+import { DEFAULT_SEASON, type SeasonId, type SeasonPreset } from '../core/sim/day-cycle';
 import { DEFAULT_SETTINGS, type GameSettings } from '../core/state/settings';
 
 export type UiScreen = 'boot' | 'title' | 'play' | 'creator';
@@ -11,6 +12,21 @@ export const canContinue = signal(false);
 export const settingsOpen = signal(false);
 export const settings = signal<GameSettings>({ ...DEFAULT_SETTINGS });
 export const clockText = signal('Day 1  08:00');
+/** What the serpentine day-cycle HUD draws. Null until the game has a clock. */
+export interface DayCycleView {
+  /** Continuous TU left in the day, `(0, 100]`. */
+  tuRemaining: number;
+  day: number;
+  /** Which view is up. The paused tag only belongs on the map. */
+  view: 'map' | 'area';
+}
+export const dayCycle = signal<DayCycleView | null>(null);
+export interface DayCycleOptions {
+  season: SeasonId | SeasonPreset;
+  /** Beads at the left end under pre-dawn fog. 0 is off. */
+  fogUnits: number;
+}
+export const dayCycleOptions = signal<DayCycleOptions>({ season: DEFAULT_SEASON, fogUnits: 0 });
 /** Empty at the full map clock. A short multiplier while zoom has slowed time. */
 export const clockRate = signal('');
 /** Party supplies and the TU of the shared clock. */

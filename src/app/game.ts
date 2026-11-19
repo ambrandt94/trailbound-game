@@ -30,6 +30,7 @@ import {
   registerWagonMinigames,
 } from '../minigames';
 import type { SimAvatar } from '../minigames/helpers/runtime';
+import { tuRemainingAt } from '../core/sim/day-cycle';
 import { dayLightAt, tuOfDay } from '../core/sim/time';
 import { Keyboard, type AreaActionSnapshot } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
@@ -50,6 +51,7 @@ import {
   canContinue,
   clockRate,
   clockText,
+  dayCycle,
   generating,
   hint,
   nearTown,
@@ -972,6 +974,22 @@ export class Game implements GameHost {
     root.dataset.place = this.world.town.name;
     root.dataset.chunks = String(this.world.chunks.size);
     if (clockText.value !== text) clockText.value = text;
+    this.publishDayCycle();
+  }
+
+  /**
+   * Feeds the day-cycle HUD from the game clock, read only. Rounded up to
+   * 0.1 TU so the signal moves a few times a second, not every frame, and
+   * the lit-bead count (`ceil`) never changes by rounding.
+   */
+  private publishDayCycle(): void {
+    const tuRemaining = Math.ceil(tuRemainingAt(this.world.clockHours) * 10 - 1e-6) / 10;
+    const day = Math.floor(this.world.clockHours / 24) + 1;
+    const now = dayCycle.peek();
+    const view = this.view;
+    if (!now || now.tuRemaining !== tuRemaining || now.day !== day || now.view !== view) {
+      dayCycle.value = { tuRemaining, day, view };
+    }
   }
 
   private readonly onFrame = (): void => {
