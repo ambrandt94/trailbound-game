@@ -1,4 +1,3 @@
-import { music } from '../../audio/music';
 import { GAME_HOURS_PER_REAL_SECOND } from '../../core/sim/clock';
 import { hasRoute } from '../../core/sim/caravan';
 import { CONVOY_STREAM_RECUT, zoneHopCentre } from '../../core/sim/convoy';
@@ -8,7 +7,7 @@ import type { AreaHandoff, ConvoyCut } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
 import { clearAreaLeaveOverlay } from '../../render/area/leave-overlay';
 import { AreaRenderer, type ConvoyStatus } from '../../render/area/area-renderer';
-import { hint, prompt, settings, settingsOpen, travelHud } from '../../ui/state';
+import { hint, prompt, settingsOpen, travelHud } from '../../ui/state';
 import { areaEscapeAction } from '../area-escape';
 import {
   controllerExitToMap,
@@ -97,6 +96,11 @@ export class AreaView implements Scene {
     if (this.driver) this.renderer?.convoyCommand(command);
   }
 
+  /** The hero is inside a building: the music is muffled. */
+  indoors(): boolean {
+    return this.renderer?.indoors() ?? false;
+  }
+
   cameraDistance(): number | null {
     return this.renderer?.cameraDistance() ?? null;
   }
@@ -114,7 +118,6 @@ export class AreaView implements Scene {
     if (ctx?.areaExport && this.renderer) {
       await this.renderer.start(ctx.areaExport, ctx.entry);
     }
-    music.start();
   }
 
   update(dt: number): void {
@@ -163,9 +166,6 @@ export class AreaView implements Scene {
     // Copy the still now, in the same task as the draw, while the buffer is readable.
     const swap = this.recut?.phase === 'snap';
     if (swap) this.host.holdFrame();
-    const mix = settings.value;
-    music.setVolume((mix.music / 100) * (mix.master / 100));
-    music.setMuffle(this.renderer.indoors() ? 1 : 0);
     if (games.isOpen()) {
       prompt.value = games.hint();
     } else {
