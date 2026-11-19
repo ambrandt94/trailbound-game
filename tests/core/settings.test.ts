@@ -19,3 +19,23 @@ test('volumes clamp and mute stays a boolean', () => {
   expect(next.muteVoices).toBe(true);
   expect(normalizeSettings({ voices: 'loud' }).voices).toBe(40);
 });
+
+test('HUD panels start closed and junk falls back to closed', () => {
+  expect(DEFAULT_SETTINGS.hud).toEqual({ caravan: false, help: false, daySmall: false });
+  expect(normalizeSettings({}).hud).toEqual({ caravan: false, help: false, daySmall: false });
+  expect(normalizeSettings({ hud: { caravan: true } }).hud).toEqual({
+    caravan: true,
+    help: false,
+    daySmall: false,
+  });
+  expect(normalizeSettings({ hud: { caravan: 'yes', help: 1 } }).hud).toEqual({
+    caravan: false,
+    help: false,
+    daySmall: false,
+  });
+  expect(normalizeSettings({ hud: 'open' }).hud).toEqual({
+    caravan: false,
+    help: false,
+    daySmall: false,
+  });
+});

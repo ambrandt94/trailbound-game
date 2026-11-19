@@ -6,6 +6,7 @@ import { Shell } from '../ui/shell';
 import { commands, settings } from '../ui/state';
 import '../ui/styles.css';
 import '../ui/theme/pixel-skin.css';
+import '../ui/hud.css';
 import { systemClock } from './fixed-step';
 import { Game } from './game';
 

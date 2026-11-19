@@ -250,15 +250,7 @@ function hudObstacles(canvas: HTMLCanvasElement): TagBox[] {
   const scaleY = canvas.height / canvasRect.height;
   const view = canvas.ownerDocument.defaultView;
   const boxes: TagBox[] = [];
-  const selectors = [
-    '#ui .hud-bar',
-    '#ui .place',
-    '#ui .hint',
-    '#ui .flash',
-    '#ui .notice',
-    '#ui .wagon-menu',
-    '#mg .mg-frame',
-  ];
+  const selectors = ['#ui .hud-box', '#ui .dc-hud', '#ui .settings-card', '#mg .mg-frame'];
   for (const selector of selectors) {
     for (const node of canvas.ownerDocument.querySelectorAll(selector)) {
       if (!(node instanceof HTMLElement) || !view) continue;
@@ -414,9 +406,10 @@ function drawTagLabel(
   const dpr = Math.max(0.5, Math.hypot(tr.a, tr.b) / Math.max(0.001, scale));
   const screenPx = opts?.screenPx ?? NAMETAG_BASE_PX * (kind === 'speech' ? 3 : 2);
   const uiScale = readUiScale();
-  // Place names stay on the 32px Softball Gold grid. Speech can be a larger multiple.
+  // Place names sit on the 16px Softball Gold design grid so the map stays readable under them.
+  // Speech can be a larger multiple.
   const cssPx =
-    kind === 'name' ? 32 * uiScale : Math.max(16, Math.round((screenPx * uiScale) / 16) * 16);
+    kind === 'name' ? 16 * uiScale : Math.max(16, Math.round((screenPx * uiScale) / 16) * 16);
   const fontPx = cssPx * dpr;
   ensureSoftball();
   const origin = applyPoint(tr, x, y);
@@ -427,14 +420,14 @@ function drawTagLabel(
   ctx.font = `${fontPx}px ${PIXEL_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const maxW = (kind === 'speech' ? 18 : 14) * cssPx * dpr;
+  const maxW = (kind === 'speech' ? 18 : 22) * cssPx * dpr;
   let label = raw;
   while (ctx.measureText(label).width > maxW && label.length > 5) label = label.slice(0, -1);
   if (label !== raw) label = `${label.slice(0, -1)}...`;
   const tw = ctx.measureText(label).width;
-  const border = 6 * dpr * uiScale;
-  const padX = (kind === 'name' ? 10 : 12) * dpr * uiScale;
-  const padY = (kind === 'name' ? 4 : 8) * dpr * uiScale;
+  const border = (kind === 'name' ? 4 : 6) * dpr * uiScale;
+  const padX = (kind === 'name' ? 5 : 12) * dpr * uiScale;
+  const padY = (kind === 'name' ? 1 : 8) * dpr * uiScale;
   const tail = kind === 'speech' ? 5.5 * dpr : 0;
   const boxW = tw + (kind === 'name' ? border * 2 : 0) + padX * 2;
   const boxH = fontPx + (kind === 'name' ? border * 2 : 0) + padY * 2;

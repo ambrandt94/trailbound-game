@@ -221,34 +221,6 @@ input:focus-visible {
   mask: radial-gradient(circle, transparent 58%, #000 60%);
 }
 
-.pill {
-  position: absolute;
-  z-index: 1;
-  top: 1rem;
-  padding: 0.45rem 0.9rem;
-  border: 1px solid #e4d8c4;
-  background: rgba(246, 241, 230, 0.94);
-  color: #2c261f;
-}
-
-.clock {
-  left: 1rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.clock .rate {
-  margin-left: 0.45rem;
-  color: #6d6458;
-  font-size: 0.85em;
-}
-
-.clock .party {
-  display: block;
-  margin-top: 0.15rem;
-  color: #3d4338;
-  font-size: 0.82rem;
-}
-
 .night-veil {
   position: absolute;
   inset: 0;
@@ -256,22 +228,6 @@ input:focus-visible {
   background: #1a2744;
   mix-blend-mode: multiply;
   opacity: 0;
-}
-
-.save {
-  right: 1rem;
-  pointer-events: auto;
-}
-
-.avatar {
-  right: 6.4rem;
-  pointer-events: auto;
-}
-
-.look {
-  top: 4.2rem;
-  left: 1rem;
-  pointer-events: auto;
 }
 
 .settings-dock {
@@ -563,87 +519,6 @@ input:focus-visible {
   gap: 0.45rem;
   transform: translateX(-50%);
   pointer-events: auto;
-}
-
-.skin select {
-  font: inherit;
-  border: 0;
-  background: transparent;
-  color: inherit;
-}
-
-.hint,
-.flash {
-  position: absolute;
-  left: 0;
-  right: 0;
-  margin: 0;
-  text-align: center;
-}
-
-.hint {
-  bottom: 1.3rem;
-  color: #241e18;
-  text-shadow: 0 1px 0 rgba(246, 241, 230, 0.8);
-}
-
-.flash {
-  top: 3.6rem;
-  color: #1f6a56;
-}
-
-.place {
-  position: absolute;
-  z-index: 1;
-  left: 1rem;
-  bottom: 1rem;
-  width: min(18rem, calc(100% - 2rem));
-  padding: 0.85rem 1rem 1rem;
-  background: rgba(246, 241, 230, 0.94);
-  border: 1px solid #e4d8c4;
-  border-radius: 1rem;
-  pointer-events: auto;
-}
-
-.place h2 {
-  margin-bottom: 0.35rem;
-}
-
-.place .stand,
-.place .nearest {
-  margin: 0 0 0.45rem;
-  color: #3d4338;
-}
-
-.enter-place {
-  display: block;
-  width: 100%;
-  min-height: 3.1rem;
-  margin-top: 0.35rem;
-  font-size: 1.15rem;
-  letter-spacing: 0.04em;
-  background: #c65a24;
-  border-color: #8a3412;
-}
-
-.enter-place:disabled {
-  background: #8d8478;
-  border-color: #6d6458;
-}
-
-.notice {
-  position: absolute;
-  left: 50%;
-  top: 5.4rem;
-  z-index: 3;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 0.55rem 0.9rem;
-  background: rgba(246, 241, 230, 0.96);
-  border: 2px solid #1f6a56;
-  border-radius: 0.8rem;
-  color: #1f3d32;
-  pointer-events: none;
 }
 
 .wagon-menu {
@@ -991,104 +866,4 @@ input:focus-visible {
   border: 1px solid #e4d8c4;
   border-radius: 0.5rem;
   background: #fffaf2;
-}
-
-/* Caravan travel panel on the map. */
-.travel-panel {
-  position: absolute;
-  z-index: 1;
-  right: 1rem;
-  top: 4.4rem;
-  width: min(23rem, calc(100% - 2rem));
-  padding: 0.75rem 0.95rem 0.85rem;
-  background: rgba(246, 241, 230, 0.94);
-  border: 1px solid #e4d8c4;
-  border-radius: 1rem;
-  pointer-events: auto;
-  color: #2c261f;
-}
-
-.travel-panel .eyebrow {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
-  margin: 0 0 0.35rem;
-  white-space: nowrap;
-}
-
-.travel-status {
-  color: #c65a24;
-}
-
-.travel-line {
-  margin: 0 0 0.35rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.travel-help,
-.travel-scout {
-  color: #6d6458;
-}
-
-.travel-goal {
-  margin: 0 0 0.4rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.travel-bar {
-  height: 0.55rem;
-  margin-top: 0.2rem;
-  background: #2e1510;
-  border-radius: 999px;
-  overflow: hidden;
-}
-
-.travel-fill {
-  height: 100%;
-  background: #ffb030;
-}
-
-.travel-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-top: 0.5rem;
-}
-
-.travel-panel .action {
-  min-width: 0;
-  padding: 0.35rem 0.75rem;
-}
-
-.travel-paused {
-  display: inline-block;
-  margin-left: 0.45rem;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  background: #2e1510;
-  color: #ffd27a;
-  font-size: 0.85em;
-}
-
-.travel-mode {
-  color: #3f5a2a;
-}
-
-.travel-leash {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin: 0.2rem 0 0.35rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 0.6rem;
-  background: #2e1510;
-  color: #ffd27a;
-}
-
-.travel-panel .action.rejoin-wagon,
-.travel-panel .action.rejoin {
-  background: #c65a24;
-  border-color: #8a3412;
-  color: #f6f1e6;
 }

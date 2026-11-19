@@ -42,7 +42,16 @@ export const dayCycleOptions = signal<DayCycleOptions>({
 export const clockRate = signal('');
 /** Party supplies and the TU of the shared clock. */
 export const partyHud = signal('');
+/** Controls cheat-sheet text for the current view. Shown in the help panel, not always on. */
 export const hint = signal('');
+/** What is under the hero right now ("Wagon · Wildflower meadow"). One short always-on line in 3D. */
+export const prompt = signal('');
+/** Session-only: every HUD element hidden (U). The settings store keeps the panel prefs. */
+export const hudHidden = signal(false);
+/** The "more" popover under the toolbar. */
+export const hudMenuOpen = signal(false);
+/** Bumped to flash the controls panel for a few seconds, e.g. on entering 3D. */
+export const hintPulse = signal(0);
 export const nearTown = signal(false);
 export const savedFlash = signal('');
 export const notice = signal('');

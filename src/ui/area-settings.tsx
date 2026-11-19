@@ -189,6 +189,20 @@ export function SettingsPanel(props: { dock?: boolean }) {
         <label class="check">
           <input
             type="checkbox"
+            aria-label="Small day strip"
+            checked={current.hud.daySmall}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) {
+                change({ hud: { ...current.hud, daySmall: target.checked } });
+              }
+            }}
+          />
+          Small day strip
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
             checked={current.muteVoices}
             onChange={(event) => {
               const target = event.currentTarget;
