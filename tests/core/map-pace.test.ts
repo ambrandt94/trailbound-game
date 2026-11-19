@@ -174,7 +174,7 @@ test('speed scales a walk: the same frames at 8x charge 8x the clock without cli
 });
 
 test('the sim budget grows with the speed step so a fast frame is not cut short', () => {
-  const metres = 200 * METERS_PER_WORLD_TILE;
+  const metres = 1000 * METERS_PER_WORLD_TILE;
   const slow = new WorldState();
   slow.data = plains();
   const clipped = slow.advanceTravel(metres, paceMps(false), 1);
