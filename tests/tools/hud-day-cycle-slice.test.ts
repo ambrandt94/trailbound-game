@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 // Plain JS art tools, checked by this test rather than by tsc.
 // @ts-expect-error untyped mjs module.
-import { sliceSheet } from '../../tools/hud-day-cycle-slice.mjs';
+import { sheetLayout, sliceSheet } from '../../tools/hud-day-cycle-slice.mjs';
 // @ts-expect-error untyped mjs module.
 import { buildTemplate } from '../../tools/hud-day-cycle-template.mjs';
 // @ts-expect-error untyped mjs module.
@@ -17,24 +17,31 @@ interface Img {
   px(x: number, y: number, c: number[]): void;
   get(x: number, y: number): number[];
 }
-interface Cell {
-  rect: { x: number; y: number; w: number; h: number };
-  rect1x: { x: number; y: number; w: number; h: number };
-}
 interface Rect {
   x: number;
   y: number;
   w: number;
   h: number;
 }
-interface Layout {
+interface Cell {
+  rect: Rect;
+  rect1x: Rect;
+}
+interface Preview {
+  label: string;
+  biome?: string;
+  rect: Rect;
+  rect1x: Rect;
+}
+interface SheetLayout {
+  files: { sheet: string; guide: string; flat: string };
   scale: number;
   sheet: { w: number; h: number };
   native: { w: number; h: number };
   gutter: number;
-  preview: { rect: Rect; rect1x: Rect };
+  previews: Preview[];
   slots: Array<{ id: string; file: string; cells: Cell[] }>;
-  font: {
+  font?: {
     glyphs: string;
     cellW: number;
     pitch: number;
@@ -43,39 +50,58 @@ interface Layout {
     cells: Array<{ glyph: string; index: number; rect: Rect; rect1x: Rect }>;
   };
 }
+interface Layout extends SheetLayout {
+  version: number;
+  preview: { rect: Rect; rect1x: Rect };
+  sheets: { biomes: SheetLayout };
+}
 
 const art = join(process.cwd(), 'public', 'assets', 'ui', 'hud-day-cycle');
 const read = (file: string): Img => decodePng(readFileSync(join(art, file)));
 const layout = JSON.parse(readFileSync(join(art, 'template', 'layout.json'), 'utf8')) as Layout;
-const sheet512 = read('template/hud-day-cycle-template-512.png');
-const sheet1x = read('template/hud-day-cycle-template-1x.png');
 
-function expectSame(files: Array<{ file: string; image: Img }>): void {
-  expect(files.length).toBe(layout.slots.length + 1);
-  for (const { file, image } of files) {
-    const want = read(file);
-    expect({ file, w: image.w, h: image.h }).toEqual({ file, w: want.w, h: want.h });
-    expect(Buffer.from(image.data).equals(Buffer.from(want.data)), file).toBe(true);
+/** Both template sheets: the main one (HUD sprites, font) and the biome terrain one. */
+const sheets = (['main', 'biomes'] as const).map((id) => {
+  const lay = sheetLayout(layout, id) as SheetLayout;
+  return {
+    id,
+    lay,
+    sheet512: read(`template/${lay.files.sheet}`),
+    sheet1x: read(`template/${lay.files.flat}`),
+    guide: read(`template/${lay.files.guide}`),
+    /** Slots on this sheet, plus the font on the main one. */
+    fileCount: lay.slots.length + (lay.font ? 1 : 0),
+  };
+});
+
+describe.each(sheets)('hud day-cycle template round trip: $id sheet', (sh) => {
+  const { lay, sheet512, sheet1x } = sh;
+
+  function expectSame(files: Array<{ file: string; image: Img }>): void {
+    expect(files.length).toBe(sh.fileCount);
+    for (const { file, image } of files) {
+      const want = read(file);
+      expect({ file, w: image.w, h: image.h }).toEqual({ file, w: want.w, h: want.h });
+      expect(Buffer.from(image.data).equals(Buffer.from(want.data)), file).toBe(true);
+    }
   }
-}
 
-describe('hud day-cycle template round trip', () => {
   test('slicing the unedited 512 sheet gives back the placeholders, pixel for pixel', () => {
     expect(sheet512.w).toBe(512);
     expect(sheet512.h).toBe(512);
-    expectSame(sliceSheet(sheet512, layout));
+    expectSame(sliceSheet(sheet512, lay));
   });
 
   test('slicing the native 1x sheet does too', () => {
-    expect(sheet1x.w).toBe(layout.native.w);
-    expectSame(sliceSheet(sheet1x, layout));
+    expect(sheet1x.w).toBe(lay.native.w);
+    expectSame(sliceSheet(sheet1x, lay));
   });
 
   test('a 1024 export of the sheet (2x the pixels) slices the same', () => {
     const big = createImage(1024, 1024) as Img;
     for (let y = 0; y < 1024; y++)
       for (let x = 0; x < 1024; x++) big.px(x, y, sheet512.get(x >> 1, y >> 1));
-    expectSame(sliceSheet(big, layout));
+    expectSame(sliceSheet(big, lay));
   });
 
   test('off-grid noise inside each block does not change the result', () => {
@@ -83,7 +109,7 @@ describe('hud day-cycle template round trip', () => {
     let seed = 7;
     const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
     for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) noisy.px(x, y, sheet512.get(x, y));
-    const s = layout.scale;
+    const s = lay.scale;
     for (let by = 0; by + s <= 512; by += s) {
       for (let bx = 0; bx + s <= 512; bx += s) {
         // Two stray pixels per block, a colour of their own, well under half the block.
@@ -97,30 +123,30 @@ describe('hud day-cycle template round trip', () => {
         }
       }
     }
-    expectSame(sliceSheet(noisy, layout));
+    expectSame(sliceSheet(noisy, lay));
   });
 
   test('a sheet of the wrong size is refused with the sizes that work', () => {
     const odd = createImage(300, 300);
-    expect(() => sliceSheet(odd, layout)).toThrow(/expected/);
+    expect(() => sliceSheet(odd, lay)).toThrow(/expected/);
   });
 
   test('cells stay on the sheet, on the pixel grid, and keep a gutter apart', () => {
     const rects = [
-      ...layout.slots.flatMap((s) => s.cells),
-      ...layout.font.cells,
-      { rect: layout.preview.rect },
+      ...lay.slots.flatMap((s) => s.cells),
+      ...(lay.font?.cells ?? []),
+      ...lay.previews,
     ].map((c) => c.rect);
-    expect(rects.length).toBeGreaterThan(60);
+    expect(rects.length).toBeGreaterThan(lay.font ? 60 : 20);
     for (const r of rects) {
-      expect(r.x % layout.scale).toBe(0);
-      expect(r.y % layout.scale).toBe(0);
+      expect(r.x % lay.scale).toBe(0);
+      expect(r.y % lay.scale).toBe(0);
       expect(r.x).toBeGreaterThanOrEqual(0);
       expect(r.y).toBeGreaterThanOrEqual(0);
       expect(r.x + r.w).toBeLessThanOrEqual(512);
       expect(r.y + r.h).toBeLessThanOrEqual(512);
     }
-    const gap = layout.gutter * layout.scale;
+    const gap = lay.gutter * lay.scale;
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
         const a = rects[i];
@@ -128,77 +154,46 @@ describe('hud day-cycle template round trip', () => {
         if (!a || !b) continue;
         const apartX = a.x + a.w + gap <= b.x || b.x + b.w + gap <= a.x;
         const apartY = a.y + a.h + gap <= b.y || b.y + b.h + gap <= a.y;
-        expect(apartX || apartY, `${i} vs ${j}`).toBe(true);
+        const ok = apartX || apartY;
+        expect(ok, `${i} vs ${j}`).toBe(true);
       }
     }
   });
-});
-
-describe('hud day-cycle template v2: spaced font, sample band, 512 sheet', () => {
-  const alpha = (img: Img, x: number, y: number): number => img.get(x, y)[3] ?? 0;
-  const font = layout.font;
 
   test('the sheet is 512x512 and the guide and 1x sheet match the layout', () => {
-    expect(layout.sheet).toEqual({ w: 512, h: 512 });
-    expect(read('template/hud-day-cycle-template-guide.png').w).toBe(512);
-    expect(read('template/hud-day-cycle-template-guide.png').h).toBe(512);
-    expect(sheet1x.w).toBe(Math.floor(512 / layout.scale));
-    expect(sheet1x.h).toBe(Math.floor(512 / layout.scale));
+    expect(lay.sheet).toEqual({ w: 512, h: 512 });
+    expect(sh.guide.w).toBe(512);
+    expect(sh.guide.h).toBe(512);
+    expect(sheet1x.w).toBe(Math.floor(512 / lay.scale));
+    expect(sheet1x.h).toBe(Math.floor(512 / lay.scale));
   });
 
-  test('every glyph but the blank space has its own cell, as wide as the game advances it', () => {
-    const wanted = [...font.glyphs].filter((ch) => ch !== ' ');
-    expect(font.cells.map((c) => c.glyph)).toEqual(wanted);
-    for (const c of font.cells) {
-      expect(c.rect1x.w).toBe(Math.min(font.widths[c.glyph] ?? font.cellW, font.cellW));
-      expect(c.rect.w).toBe(c.rect1x.w * layout.scale);
+  test('the previews are on both sheets, drawn, and the slicer ignores them', () => {
+    expect(lay.previews.length).toBeGreaterThanOrEqual(1);
+    for (const p of lay.previews) {
+      const { rect1x } = p;
+      let drawn = 0;
+      for (let y = rect1x.y; y < rect1x.y + rect1x.h; y++)
+        for (let x = rect1x.x; x < rect1x.x + rect1x.w; x++)
+          if ((sheet1x.get(x, y)[3] ?? 0) > 0) drawn++;
+      expect(drawn, p.label).toBeGreaterThan(rect1x.w * 8);
     }
-  });
-
-  test('font cells sit on one pitch with clear pixels between neighbours', () => {
-    expect(font.gap).toBeGreaterThanOrEqual(1);
-    expect(font.pitch).toBe(font.cellW + font.gap);
-    const rows = new Map<number, typeof font.cells>();
-    for (const c of font.cells) rows.set(c.rect1x.y, [...(rows.get(c.rect1x.y) ?? []), c]);
-    expect(rows.size).toBeGreaterThanOrEqual(1);
-    for (const row of rows.values()) {
-      row.sort((a, b) => a.rect1x.x - b.rect1x.x);
-      const x0 = row[0]?.rect1x.x ?? 0;
-      row.forEach((c, i) => expect(c.rect1x.x).toBe(x0 + i * font.pitch));
-      for (const [a, b] of row.slice(0, -1).map((c, i) => [c, row[i + 1]] as const)) {
-        if (!b) continue;
-        // Every native pixel column strictly between two cells is fully clear, on both sheets.
-        for (let x = a.rect1x.x + a.rect1x.w; x < b.rect1x.x; x++) {
-          for (let y = a.rect1x.y; y < a.rect1x.y + a.rect1x.h; y++) {
-            expect(alpha(sheet1x, x, y)).toBe(0);
-            expect(alpha(sheet512, x * layout.scale + 1, y * layout.scale + 1)).toBe(0);
-          }
-        }
-      }
-    }
-  });
-
-  test('the sample band is on both sheets, is drawn, and the slicer ignores it', () => {
-    const { rect, rect1x } = layout.preview;
-    let drawn = 0;
-    for (let y = rect1x.y; y < rect1x.y + rect1x.h; y++)
-      for (let x = rect1x.x; x < rect1x.x + rect1x.w; x++) if (alpha(sheet1x, x, y) > 0) drawn++;
-    expect(drawn).toBeGreaterThan(rect1x.w * 8);
-    // Paint over the whole band (and the area around it) on a copy: the result must not change.
+    // Paint over every preview (and a strip under it) on a copy: the result must not change.
     const scribbled = createImage(512, 512) as Img;
     for (let y = 0; y < 512; y++)
       for (let x = 0; x < 512; x++) scribbled.px(x, y, sheet512.get(x, y));
-    for (let y = rect.y; y < rect.y + rect.h + 3; y++)
-      for (let x = rect.x; x < rect.x + rect.w; x++)
-        scribbled.px(x, y, [(x * 7) & 255, (y * 13) & 255, 99, 255]);
-    expectSame(sliceSheet(scribbled, layout));
+    for (const { rect } of lay.previews)
+      for (let y = rect.y; y < rect.y + rect.h + 3; y++)
+        for (let x = rect.x; x < rect.x + rect.w; x++)
+          scribbled.px(x, y, [(x * 7) & 255, (y * 13) & 255, 99, 255]);
+    expectSame(sliceSheet(scribbled, lay));
   });
 
   test('gutters between cells can hold anything without changing the result', () => {
     const cells = [
-      ...layout.slots.flatMap((s) => s.cells),
-      ...layout.font.cells,
-      { rect: layout.preview.rect },
+      ...lay.slots.flatMap((s) => s.cells),
+      ...(lay.font?.cells ?? []),
+      ...lay.previews,
     ];
     const inCell = (x: number, y: number): boolean =>
       cells.some(({ rect: r }) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h);
@@ -206,12 +201,12 @@ describe('hud day-cycle template v2: spaced font, sample band, 512 sheet', () =>
     for (let y = 0; y < 512; y++)
       for (let x = 0; x < 512; x++)
         scribbled.px(x, y, inCell(x, y) ? sheet512.get(x, y) : [250, 20, 120, 255]);
-    expectSame(sliceSheet(scribbled, layout));
+    expectSame(sliceSheet(scribbled, lay));
   });
 
   test('the 512 sheet is a pure nearest-neighbour upscale of the 1x sheet', () => {
-    const s = layout.scale;
-    const edge = layout.native.w * s;
+    const s = lay.scale;
+    const edge = lay.native.w * s;
     for (let y = 0; y < 512; y++) {
       for (let x = 0; x < 512; x++) {
         const want =
@@ -223,15 +218,118 @@ describe('hud day-cycle template v2: spaced font, sample band, 512 sheet', () =>
       }
     }
   });
+});
 
+describe('hud day-cycle template: pixel font cells (main sheet)', () => {
+  const main = sheets[0];
+  const lay = main?.lay;
+  const font = lay?.font;
+  const sheet1x = main?.sheet1x;
+  const alpha = (img: Img, x: number, y: number): number => img.get(x, y)[3] ?? 0;
+
+  test('every glyph but the blank space has its own cell, as wide as the game advances it', () => {
+    if (!font || !lay) throw new Error('main sheet has no font');
+    const wanted = [...font.glyphs].filter((ch) => ch !== ' ');
+    expect(font.cells.map((c) => c.glyph)).toEqual(wanted);
+    for (const c of font.cells) {
+      expect(c.rect1x.w).toBe(Math.min(font.widths[c.glyph] ?? font.cellW, font.cellW));
+      expect(c.rect.w).toBe(c.rect1x.w * lay.scale);
+    }
+  });
+
+  test('font cells sit on one pitch with clear pixels between neighbours', () => {
+    if (!font || !lay || !sheet1x || !main) throw new Error('main sheet has no font');
+    expect(font.gap).toBeGreaterThanOrEqual(1);
+    expect(font.pitch).toBe(font.cellW + font.gap);
+    const rows = new Map<number, typeof font.cells>();
+    for (const c of font.cells) rows.set(c.rect1x.y, [...(rows.get(c.rect1x.y) ?? []), c]);
+    for (const row of rows.values()) {
+      row.sort((a, b) => a.rect1x.x - b.rect1x.x);
+      const x0 = row[0]?.rect1x.x ?? 0;
+      row.forEach((c, i) => expect(c.rect1x.x).toBe(x0 + i * font.pitch));
+      for (const [a, b] of row.slice(0, -1).map((c, i) => [c, row[i + 1]] as const)) {
+        if (!b) continue;
+        // Every native pixel column strictly between two cells is fully clear, on both sheets.
+        for (let x = a.rect1x.x + a.rect1x.w; x < b.rect1x.x; x++) {
+          for (let y = a.rect1x.y; y < a.rect1x.y + a.rect1x.h; y++) {
+            expect(alpha(sheet1x, x, y)).toBe(0);
+            expect(alpha(main.sheet512, x * lay.scale + 1, y * lay.scale + 1)).toBe(0);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe('hud day-cycle template: biomes sheet', () => {
+  const biomes = sheets[1];
+
+  test('layout.json lists both sheets, and the biomes sheet has the terrain strips and 6+ previews', () => {
+    expect(layout.version).toBe(3);
+    expect(layout.files.sheet).toBe('hud-day-cycle-template-512.png');
+    expect(biomes?.lay.files.sheet).toBe('hud-day-cycle-template-biomes-512.png');
+    expect(biomes?.lay.font).toBeUndefined();
+    const ids = new Set(biomes?.lay.slots.map((s) => s.id));
+    for (const id of [
+      'ground_flat',
+      'ground_grass',
+      'ground_mountains',
+      'ground_coast',
+      'ground_dunes',
+    ])
+      expect(ids.has(id), id).toBe(true);
+    for (const id of [
+      'pine',
+      'broadleaf',
+      'scrub',
+      'rocks',
+      'snowcaps',
+      'cactus',
+      'reeds',
+      'water',
+      'waves',
+    ])
+      expect(ids.has(`detail_${id}`), id).toBe(true);
+    expect(biomes?.lay.previews.length).toBeGreaterThanOrEqual(6);
+  });
+
+  test('the main sheet does not carry the biome strips, so each sheet slices only its own files', () => {
+    const main = sheets[0];
+    const mainFiles = new Set(
+      sliceSheet(main?.sheet512, main?.lay).map((f: { file: string }) => f.file),
+    );
+    for (const s of biomes?.lay.slots ?? []) expect(mainFiles.has(s.file), s.file).toBe(false);
+    expect(mainFiles.has('terrain_mask.png')).toBe(true);
+  });
+
+  test('an unknown sheet name is refused', () => {
+    expect(() => sheetLayout(layout, 'nope')).toThrow(/no sheet/);
+  });
+});
+
+describe('hud day-cycle template: freshness', () => {
   test('the committed template is what the tool builds from the art in the game now', async () => {
     const built = await buildTemplate();
     expect(JSON.parse(JSON.stringify(built.layout))).toEqual(layout);
-    expect(Buffer.from(built.sheet.data).equals(Buffer.from(sheet512.data))).toBe(true);
-    expect(Buffer.from(built.flat.data).equals(Buffer.from(sheet1x.data))).toBe(true);
-    const guide = read('template/hud-day-cycle-template-guide.png');
-    expect(Buffer.from(built.guide.data).equals(Buffer.from(guide.data))).toBe(true);
-  }, 60_000);
+    const both = [
+      ['main', built.main],
+      ['biomes', built.biomes],
+    ] as const;
+    for (const [id, b] of both) {
+      const sh = sheets.find((s) => s.id === id);
+      expect(
+        Buffer.from(b.sheet.data).equals(Buffer.from(sh?.sheet512.data ?? [])),
+        `${id} 512`,
+      ).toBe(true);
+      expect(Buffer.from(b.flat.data).equals(Buffer.from(sh?.sheet1x.data ?? [])), `${id} 1x`).toBe(
+        true,
+      );
+      expect(
+        Buffer.from(b.guide.data).equals(Buffer.from(sh?.guide.data ?? [])),
+        `${id} guide`,
+      ).toBe(true);
+    }
+  }, 120_000);
 });
 
 describe('png decoding for edited sheets', () => {

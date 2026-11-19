@@ -1,6 +1,11 @@
 {
-  "version": 2,
-  "note": "Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`. `preview` is reference only and is never sliced.",
+  "version": 3,
+  "note": "Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`. The top-level fields describe the main sheet; `sheets.biomes` the biome terrain sheet. `preview`/`previews` are reference only and are never sliced.",
+  "files": {
+    "sheet": "hud-day-cycle-template-512.png",
+    "guide": "hud-day-cycle-template-guide.png",
+    "flat": "hud-day-cycle-template-1x.png"
+  },
   "scale": 3,
   "sheet": {
     "w": 512,
@@ -11,28 +16,23 @@
     "h": 170
   },
   "gutter": 3,
-  "preview": {
-    "note": "The right-hand end of the HUD as the game draws it (84 TU left), at the sheet scale. Reference only: the slicer ignores it.",
-    "tuRemaining": 84,
-    "sourceCrop": {
-      "left": 180,
-      "top": 2,
-      "right": 350,
-      "bottom": 64
-    },
-    "rect": {
-      "x": 0,
-      "y": 3,
-      "w": 510,
-      "h": 186
-    },
-    "rect1x": {
-      "x": 0,
-      "y": 1,
-      "w": 170,
-      "h": 62
+  "previews": [
+    {
+      "label": "PREVIEW ONLY - THE HUD PUT TOGETHER, NOT SLICED",
+      "rect": {
+        "x": 0,
+        "y": 3,
+        "w": 510,
+        "h": 186
+      },
+      "rect1x": {
+        "x": 0,
+        "y": 1,
+        "w": 170,
+        "h": 62
+      }
     }
-  },
+  ],
   "slots": [
     {
       "id": "node_socket_empty",
@@ -1329,5 +1329,607 @@
         }
       }
     ]
+  },
+  "preview": {
+    "note": "The right-hand end of the HUD as the game draws it (84 TU left), at the sheet scale. Reference only: the slicer ignores it.",
+    "tuRemaining": 84,
+    "sourceCrop": {
+      "left": 180,
+      "top": 2,
+      "right": 350,
+      "bottom": 64
+    },
+    "rect": {
+      "x": 0,
+      "y": 3,
+      "w": 510,
+      "h": 186
+    },
+    "rect1x": {
+      "x": 0,
+      "y": 1,
+      "w": 170,
+      "h": 62
+    }
+  },
+  "sheets": {
+    "biomes": {
+      "files": {
+        "sheet": "hud-day-cycle-template-biomes-512.png",
+        "guide": "hud-day-cycle-template-biomes-guide.png",
+        "flat": "hud-day-cycle-template-biomes-1x.png"
+      },
+      "scale": 3,
+      "sheet": {
+        "w": 512,
+        "h": 512
+      },
+      "native": {
+        "w": 170,
+        "h": 170
+      },
+      "gutter": 3,
+      "previews": [
+        {
+          "label": "FOREST - SUNRISE",
+          "biome": "Forest",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 6,
+            "y": 3,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 2,
+            "y": 1,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "MOUNTAINS - SUNRISE",
+          "biome": "Mountain",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 258,
+            "y": 3,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 86,
+            "y": 1,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "SNOWY MOUNTAINS - SUNRISE",
+          "biome": "Snow",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 6,
+            "y": 87,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 2,
+            "y": 29,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "COAST - SUNRISE",
+          "biome": "Sand",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 258,
+            "y": 87,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 86,
+            "y": 29,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "DESERT - SUNRISE",
+          "biome": "Desert",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 6,
+            "y": 171,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 2,
+            "y": 57,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "PLAINS - SUNRISE",
+          "biome": "Plains",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 258,
+            "y": 171,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 86,
+            "y": 57,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "TAIGA - SUNRISE",
+          "biome": "Taiga",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 6,
+            "y": 255,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 2,
+            "y": 85,
+            "w": 81,
+            "h": 22
+          }
+        },
+        {
+          "label": "MARSH - SUNRISE",
+          "biome": "Marsh",
+          "tuRemaining": 95,
+          "rect": {
+            "x": 258,
+            "y": 255,
+            "w": 243,
+            "h": 66
+          },
+          "rect1x": {
+            "x": 86,
+            "y": 85,
+            "w": 81,
+            "h": 22
+          }
+        }
+      ],
+      "previewNote": "The sky strip at sunrise (95 TU left in summer) for each biome, drawn by the game from the recipes in src/ui/day-cycle/biome-recipes.ts and the strips on this sheet. Reference only: the slicer ignores them.",
+      "slots": [
+        {
+          "id": "ground_flat",
+          "file": "ground_flat.png",
+          "w": 36,
+          "h": 8,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 9,
+                "y": 393,
+                "w": 108,
+                "h": 24
+              },
+              "rect1x": {
+                "x": 3,
+                "y": 131,
+                "w": 36,
+                "h": 8
+              }
+            }
+          ]
+        },
+        {
+          "id": "ground_grass",
+          "file": "ground_grass.png",
+          "w": 36,
+          "h": 8,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 126,
+                "y": 393,
+                "w": 108,
+                "h": 24
+              },
+              "rect1x": {
+                "x": 42,
+                "y": 131,
+                "w": 36,
+                "h": 8
+              }
+            }
+          ]
+        },
+        {
+          "id": "ground_mountains",
+          "file": "ground_mountains.png",
+          "w": 36,
+          "h": 11,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 126,
+                "y": 339,
+                "w": 108,
+                "h": 33
+              },
+              "rect1x": {
+                "x": 42,
+                "y": 113,
+                "w": 36,
+                "h": 11
+              }
+            }
+          ]
+        },
+        {
+          "id": "ground_coast",
+          "file": "ground_coast.png",
+          "w": 36,
+          "h": 8,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 243,
+                "y": 393,
+                "w": 108,
+                "h": 24
+              },
+              "rect1x": {
+                "x": 81,
+                "y": 131,
+                "w": 36,
+                "h": 8
+              }
+            }
+          ]
+        },
+        {
+          "id": "ground_dunes",
+          "file": "ground_dunes.png",
+          "w": 36,
+          "h": 8,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 360,
+                "y": 393,
+                "w": 108,
+                "h": 24
+              },
+              "rect1x": {
+                "x": 120,
+                "y": 131,
+                "w": 36,
+                "h": 8
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_pine",
+          "file": "detail_pine.png",
+          "w": 36,
+          "h": 12,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 9,
+                "y": 339,
+                "w": 108,
+                "h": 36
+              },
+              "rect1x": {
+                "x": 3,
+                "y": 113,
+                "w": 36,
+                "h": 12
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_broadleaf",
+          "file": "detail_broadleaf.png",
+          "w": 36,
+          "h": 11,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 243,
+                "y": 339,
+                "w": 108,
+                "h": 33
+              },
+              "rect1x": {
+                "x": 81,
+                "y": 113,
+                "w": 36,
+                "h": 11
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_scrub",
+          "file": "detail_scrub.png",
+          "w": 36,
+          "h": 5,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 243,
+                "y": 435,
+                "w": 108,
+                "h": 15
+              },
+              "rect1x": {
+                "x": 81,
+                "y": 145,
+                "w": 36,
+                "h": 5
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_rocks",
+          "file": "detail_rocks.png",
+          "w": 36,
+          "h": 5,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 360,
+                "y": 435,
+                "w": 108,
+                "h": 15
+              },
+              "rect1x": {
+                "x": 120,
+                "y": 145,
+                "w": 36,
+                "h": 5
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_snowcaps",
+          "file": "detail_snowcaps.png",
+          "w": 36,
+          "h": 11,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 360,
+                "y": 339,
+                "w": 108,
+                "h": 33
+              },
+              "rect1x": {
+                "x": 120,
+                "y": 113,
+                "w": 36,
+                "h": 11
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_cactus",
+          "file": "detail_cactus.png",
+          "w": 36,
+          "h": 8,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 9,
+                "y": 435,
+                "w": 108,
+                "h": 24
+              },
+              "rect1x": {
+                "x": 3,
+                "y": 145,
+                "w": 36,
+                "h": 8
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_reeds",
+          "file": "detail_reeds.png",
+          "w": 36,
+          "h": 7,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 126,
+                "y": 435,
+                "w": 108,
+                "h": 21
+              },
+              "rect1x": {
+                "x": 42,
+                "y": 145,
+                "w": 36,
+                "h": 7
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_water",
+          "file": "detail_water.png",
+          "w": 36,
+          "h": 5,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 9,
+                "y": 477,
+                "w": 108,
+                "h": 15
+              },
+              "rect1x": {
+                "x": 3,
+                "y": 159,
+                "w": 36,
+                "h": 5
+              }
+            }
+          ]
+        },
+        {
+          "id": "detail_waves",
+          "file": "detail_waves.png",
+          "w": 36,
+          "h": 5,
+          "anchor": [
+            0,
+            0
+          ],
+          "states": [
+            "default"
+          ],
+          "cells": [
+            {
+              "state": "default",
+              "rect": {
+                "x": 126,
+                "y": 477,
+                "w": 108,
+                "h": 15
+              },
+              "rect1x": {
+                "x": 42,
+                "y": 159,
+                "w": 36,
+                "h": 5
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 }

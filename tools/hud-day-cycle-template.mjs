@@ -9,6 +9,11 @@
  * slicer ignores it. Every pixel-font glyph has its own cell, with a fixed
  * gap between glyphs, so the font is easy to edit.
  *
+ * The biome terrain masks (bases, details) go on a second sheet, `biomes`, with
+ * its own previews: the sky strip at sunrise for several biomes, rendered by the
+ * game's renderer. Same scale as the main sheet, same rules, also sliced by
+ * `hud-day-cycle-slice.mjs`.
+ *
  *   node tools/hud-day-cycle-template.mjs [--out <dir>]
  *
  * Reads `manifest.json` and the PNGs in `public/assets/ui/hud-day-cycle/`, so
@@ -18,7 +23,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { renderPreview } from './hud-day-cycle-preview.mjs';
+import { renderBiomePreview, renderPreview } from './hud-day-cycle-preview.mjs';
 import { createImage, decodePng, encodePng } from './ui-png.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,6 +38,32 @@ export const FONT_GAP = 4;
 /** Scales tried, biggest first. 512 / 4 is a whole 128 grid; 5 would leave a 2 px sliver. */
 const SCALES = [5, 4, 3, 2];
 
+/** Files of each sheet, in the template folder. */
+export const SHEET_FILES = {
+  main: {
+    sheet: 'hud-day-cycle-template-512.png',
+    guide: 'hud-day-cycle-template-guide.png',
+    flat: 'hud-day-cycle-template-1x.png',
+  },
+  biomes: {
+    sheet: 'hud-day-cycle-template-biomes-512.png',
+    guide: 'hud-day-cycle-template-biomes-guide.png',
+    flat: 'hud-day-cycle-template-biomes-1x.png',
+  },
+};
+
+/** The biome previews on the biomes sheet: a biome name or recipe id, and its label. */
+export const BIOME_PREVIEWS = [
+  ['Forest', 'FOREST'],
+  ['Mountain', 'MOUNTAINS'],
+  ['Snow', 'SNOWY MOUNTAINS'],
+  ['Sand', 'COAST'],
+  ['Desert', 'DESERT'],
+  ['Plains', 'PLAINS'],
+  ['Taiga', 'TAIGA'],
+  ['Marsh', 'MARSH'],
+];
+
 /** @param {ReturnType<typeof createImage>} img @param {number} x @param {number} y @param {number} w @param {number} h */
 function crop(img, x, y, w, h) {
   const out = createImage(w, h);
@@ -41,11 +72,15 @@ function crop(img, x, y, w, h) {
   return out;
 }
 
-/** Plan every cell, native size and label, before any position is known. */
-export function planCells(manifest, art) {
-  /** @type {Array<{slot: string, state: string, w: number, h: number, img: any, label: string, part?: any}>} */
+/** Transparent native pixels between cells at a scale. */
+export const gutterFor = (scale) => Math.max(2, Math.ceil(MIN_GUTTER_PX / scale));
+
+/** Plan every cell, native size and label, before any position is known. Font glyphs belong to the main sheet. */
+export function planCells(manifest, art, sheetId = 'main') {
+  /** @type {Array<{slot: string, state: string, w: number, h: number, img: any, label: string}>} */
   const cells = [];
   for (const [id, def] of Object.entries(manifest.sprites)) {
+    if ((def.sheet ?? 'main') !== sheetId) continue;
     const sheet = art.get(def.file);
     def.states.forEach((state, i) => {
       const label = (def.states.length > 1 ? `${id} ${state}` : id)
@@ -65,11 +100,13 @@ export function planCells(manifest, art) {
   const font = manifest.font;
   const fontImg = art.get(font.file);
   const glyphs = [];
-  [...font.glyphs].forEach((ch, index) => {
-    if (ch === ' ') return;
-    const w = Math.min(font.widths[ch] ?? font.cellW, font.cellW);
-    glyphs.push({ ch, index, w, img: crop(fontImg, index * font.cellW, 0, w, font.cellH) });
-  });
+  if (sheetId === 'main') {
+    [...font.glyphs].forEach((ch, index) => {
+      if (ch === ' ') return;
+      const w = Math.min(font.widths[ch] ?? font.cellW, font.cellW);
+      glyphs.push({ ch, index, w, img: crop(fontImg, index * font.cellW, 0, w, font.cellH) });
+    });
+  }
   return { cells, glyphs };
 }
 
@@ -81,44 +118,57 @@ function labelWidthPx(label, font) {
 
 /**
  * Pack the preview band (top), then every cell with its label, shelf by shelf.
- * Font glyphs are grouped into rows of `perRow` cells on a fixed pitch; a row
- * is one footprint. Returns null if it does not fit on the sheet at `scale`.
+ * `previews` are `{img, label}`: one is centred, several go in a grid, each
+ * with a label row. Font glyphs are grouped into rows of `perRow` cells on a
+ * fixed pitch; a row is one footprint. Returns null if it does not fit on the
+ * sheet at `scale`.
  */
-export function pack(plan, scale, font, previewImg) {
+export function pack(plan, scale, font, previews) {
   const { cells, glyphs } = plan;
   const native = Math.floor(SHEET / scale);
-  const gutter = Math.max(2, Math.ceil(MIN_GUTTER_PX / scale));
+  const gutter = gutterFor(scale);
   const labelRows = Math.ceil((5 * LABEL_SCALE + 3) / scale);
-  if (previewImg.w > native) return null;
+  const pw = Math.max(...previews.map((p) => p.img.w));
+  if (pw > native) return null;
   const pitch = font.cellW + FONT_GAP;
-  const perRowMax = Math.max(1, Math.floor((native - 2 * gutter + FONT_GAP) / pitch));
-  const rowCount = Math.ceil(glyphs.length / perRowMax);
-  const perRow = Math.ceil(glyphs.length / rowCount);
   /** @type {Array<any>} */
   const items = cells.map((cell) => ({
     cell,
     fw: Math.max(cell.w, Math.ceil(labelWidthPx(cell.label, font) / scale)),
     fh: cell.h + labelRows,
   }));
-  for (let start = 0; start < glyphs.length; start += perRow) {
-    const row = glyphs.slice(start, start + perRow);
-    items.push({
-      fontRow: row,
-      fw: row.length * pitch - FONT_GAP,
-      fh: font.cellH + labelRows,
-    });
+  if (glyphs.length) {
+    const perRowMax = Math.max(1, Math.floor((native - 2 * gutter + FONT_GAP) / pitch));
+    const rowCount = Math.ceil(glyphs.length / perRowMax);
+    const perRow = Math.ceil(glyphs.length / rowCount);
+    for (let start = 0; start < glyphs.length; start += perRow) {
+      const row = glyphs.slice(start, start + perRow);
+      items.push({ fontRow: row, fw: row.length * pitch - FONT_GAP, fh: font.cellH + labelRows });
+    }
   }
   items.sort((a, b) => b.fh - a.fh || b.fw - a.fw);
-  const preview = {
-    x: Math.floor((native - previewImg.w) / 2),
-    y: 1,
-    w: previewImg.w,
-    h: previewImg.h,
-    labelRows,
-  };
+
+  // Preview band: a grid of equal columns, centred as a block.
+  const columns = Math.max(1, Math.floor((native + gutter) / (pw + gutter)));
+  const used = Math.min(columns, previews.length);
+  const bandX = Math.floor((native - (used * pw + (used - 1) * gutter)) / 2);
+  let by = 1;
+  let rowTop = by;
+  let rowMaxH = 0;
+  const placed = previews.map((p, i) => {
+    const col = i % columns;
+    if (i > 0 && col === 0) {
+      rowTop += rowMaxH + labelRows + gutter;
+      rowMaxH = 0;
+    }
+    rowMaxH = Math.max(rowMaxH, p.img.h);
+    return { ...p, x: bandX + col * (pw + gutter), y: rowTop, w: p.img.w, h: p.img.h };
+  });
+  const bandBottom = rowTop + rowMaxH + labelRows;
+
   const maxX = native - gutter;
   let x = gutter;
-  let y = preview.y + preview.h + labelRows + gutter;
+  let y = bandBottom + gutter;
   let rowH = 0;
   for (const item of items) {
     if (item.fw > maxX - gutter) return null;
@@ -132,8 +182,8 @@ export function pack(plan, scale, font, previewImg) {
     x += item.fw + gutter;
     rowH = Math.max(rowH, item.fh);
   }
-  if (y + rowH > native - gutter) return null;
-  return { items, native, gutter, preview, pitch };
+  if (items.length && y + rowH > native - gutter) return null;
+  return { items, native, gutter, previews: placed, labelRows, pitch };
 }
 
 function stamp(sheet, img, ox, oy, scale) {
@@ -178,32 +228,25 @@ function drawText(img, font, fontImg, text, x, y, color) {
   }
 }
 
-export async function buildTemplate(artDir = ART_DIR) {
-  const manifest = JSON.parse(readFileSync(join(artDir, 'manifest.json'), 'utf8'));
-  /** @type {Map<string, any>} */
-  const art = new Map();
-  for (const def of Object.values(manifest.sprites))
-    art.set(def.file, decodePng(readFileSync(join(artDir, def.file))));
-  art.set(manifest.font.file, decodePng(readFileSync(join(artDir, manifest.font.file))));
-
-  const plan = planCells(manifest, art);
+/**
+ * Build one sheet (512, 1x, guide) and its layout. `getPreviews(maxW)` makes the
+ * preview images for a given maximum width; scales are tried from `maxScale` down.
+ */
+async function buildSheet({ id, manifest, art, getPreviews, maxScale, previewNote }) {
   const font = manifest.font;
-  // The sample is cropped as wide as the sheet allows at each scale, so try the scales biggest first.
-  let sample = null;
-  let previewImg = null;
+  const plan = planCells(manifest, art, id);
+  let previews = null;
   let chosen = null;
-  for (const scale of SCALES) {
-    sample = await renderPreview(artDir, undefined, Math.floor(SHEET / scale));
-    previewImg = sample.image;
-    const packed = pack(plan, scale, font, previewImg);
+  for (const scale of SCALES.filter((s) => s <= maxScale)) {
+    previews = await getPreviews(Math.floor(SHEET / scale), scale);
+    const packed = pack(plan, scale, font, previews);
     if (packed) {
       chosen = { scale, ...packed };
       break;
     }
   }
-  if (!chosen || !sample || !previewImg)
-    throw new Error('the HUD cells and preview do not fit on a 512 sheet at 2x');
-  const { scale, items, native, gutter, preview, pitch } = chosen;
+  if (!chosen || !previews) throw new Error(`the ${id} sheet does not fit on a 512 sheet at 2x`);
+  const { scale, items, native, gutter, pitch, previews: placed } = chosen;
   const sheet = createImage(SHEET, SHEET);
   const flat = createImage(native, native);
   const guide = createImage(SHEET, SHEET);
@@ -215,10 +258,12 @@ export async function buildTemplate(artDir = ART_DIR) {
   }
   const fontImg = art.get(font.file);
 
-  // Reference-only sample, in all three images.
-  stamp(sheet, previewImg, preview.x * scale, preview.y * scale, scale);
-  stamp(guide, previewImg, preview.x * scale, preview.y * scale, scale);
-  stamp(flat, previewImg, preview.x, preview.y, 1);
+  // Reference-only previews, in all three images.
+  for (const p of placed) {
+    stamp(sheet, p.img, p.x * scale, p.y * scale, scale);
+    stamp(guide, p.img, p.x * scale, p.y * scale, scale);
+    stamp(flat, p.img, p.x, p.y, 1);
+  }
 
   const slotCells = new Map();
   const fontCells = [];
@@ -287,12 +332,12 @@ export async function buildTemplate(artDir = ART_DIR) {
     rect(guide, x - 1, y - 1, w + 2, h + 2, line);
     drawText(guide, font, fontImg, g.glyph, x, y + h + 3, [190, 200, 220, 255]);
   }
-  // Preview: dashed orange frame and a banner, so it is not mistaken for a cell.
-  {
-    const px = preview.x * scale;
-    const py = preview.y * scale;
-    const pw = preview.w * scale;
-    const ph = preview.h * scale;
+  // Previews: dashed orange frame and a label, so they are not mistaken for cells.
+  for (const p of placed) {
+    const px = p.x * scale;
+    const py = p.y * scale;
+    const pw = p.w * scale;
+    const ph = p.h * scale;
     for (let i = -2; i < pw + 2; i++) {
       if (i % 8 < 5) {
         guide.px(px + i, py - 2, previewColor);
@@ -305,71 +350,142 @@ export async function buildTemplate(artDir = ART_DIR) {
         guide.px(px + pw + 1, py + i, previewColor);
       }
     }
-    drawText(
-      guide,
-      font,
-      fontImg,
-      'PREVIEW ONLY - THE HUD PUT TOGETHER, NOT SLICED',
-      px,
-      py + ph + 6,
-      previewColor,
-    );
+    drawText(guide, font, fontImg, p.label, px, py + ph + 6, previewColor);
   }
 
-  const slots = Object.entries(manifest.sprites).map(([id, def]) => ({
-    id,
-    file: def.file,
-    w: def.w,
-    h: def.h,
-    anchor: def.anchor,
-    ...(def.slice ? { slice: def.slice } : {}),
-    states: def.states,
-    // Frames go back into the PNG in state order, whatever order the packer placed them in.
-    cells: def.states.map((state) => slotCells.get(id).find((c) => c.state === state)),
-  }));
+  const slots = Object.entries(manifest.sprites)
+    .filter(([, def]) => (def.sheet ?? 'main') === id)
+    .map(([slotId, def]) => ({
+      id: slotId,
+      file: def.file,
+      w: def.w,
+      h: def.h,
+      anchor: def.anchor,
+      ...(def.slice ? { slice: def.slice } : {}),
+      states: def.states,
+      // Frames go back into the PNG in state order, whatever order the packer placed them in.
+      cells: def.states.map((state) => slotCells.get(slotId).find((c) => c.state === state)),
+    }));
   fontCells.sort((a, b) => a.index - b.index);
+  const files = SHEET_FILES[id];
+  const toRects = (p) => ({
+    label: p.label,
+    ...(p.biome ? { biome: p.biome, tuRemaining: p.tuRemaining } : {}),
+    rect: { x: p.x * scale, y: p.y * scale, w: p.w * scale, h: p.h * scale },
+    rect1x: { x: p.x, y: p.y, w: p.w, h: p.h },
+  });
   const layout = {
-    version: 2,
-    note: 'Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`. `preview` is reference only and is never sliced.',
+    files,
     scale,
     sheet: { w: SHEET, h: SHEET },
     native: { w: native, h: native },
     gutter,
-    preview: {
-      note: 'The right-hand end of the HUD as the game draws it (84 TU left), at the sheet scale. Reference only: the slicer ignores it.',
-      tuRemaining: sample.tuRemaining,
-      sourceCrop: sample.crop,
-      rect: {
-        x: preview.x * scale,
-        y: preview.y * scale,
-        w: preview.w * scale,
-        h: preview.h * scale,
-      },
-      rect1x: { x: preview.x, y: preview.y, w: preview.w, h: preview.h },
-    },
+    previews: placed.map(toRects),
+    previewNote,
     slots,
-    font: {
-      id: 'pixel_font',
-      file: font.file,
-      cellW: font.cellW,
-      cellH: font.cellH,
-      glyphs: font.glyphs,
-      widths: font.widths,
-      pitch,
-      gap: FONT_GAP,
-      note: 'One cell per glyph, as wide as the glyph advances in the game (`:` and `.` are 1 px). Space has no cell: it is blank. Cells sit on a fixed pitch (`cellW + gap`) with `gap` transparent native pixels between neighbours.',
-      cells: fontCells,
-    },
+    ...(fontCells.length
+      ? {
+          font: {
+            id: 'pixel_font',
+            file: font.file,
+            cellW: font.cellW,
+            cellH: font.cellH,
+            glyphs: font.glyphs,
+            widths: font.widths,
+            pitch,
+            gap: FONT_GAP,
+            note: 'One cell per glyph, as wide as the glyph advances in the game (`:` and `.` are 1 px). Space has no cell: it is blank. Cells sit on a fixed pitch (`cellW + gap`) with `gap` transparent native pixels between neighbours.',
+            cells: fontCells,
+          },
+        }
+      : {}),
   };
   return { layout, sheet, flat, guide };
 }
 
+export async function buildTemplate(artDir = ART_DIR) {
+  const manifest = JSON.parse(readFileSync(join(artDir, 'manifest.json'), 'utf8'));
+  /** @type {Map<string, any>} */
+  const art = new Map();
+  for (const def of Object.values(manifest.sprites))
+    art.set(def.file, decodePng(readFileSync(join(artDir, def.file))));
+  art.set(manifest.font.file, decodePng(readFileSync(join(artDir, manifest.font.file))));
+
+  // Main sheet: the HUD sample (the right-hand end of the HUD), as wide as the sheet allows.
+  let sample = null;
+  const main = await buildSheet({
+    id: 'main',
+    manifest,
+    art,
+    maxScale: Math.max(...SCALES),
+    previewNote:
+      'The right-hand end of the HUD as the game draws it (84 TU left), at the sheet scale. Reference only: the slicer ignores it.',
+    getPreviews: async (maxW) => {
+      sample = await renderPreview(artDir, undefined, maxW);
+      return [
+        {
+          img: sample.image,
+          label: 'PREVIEW ONLY - THE HUD PUT TOGETHER, NOT SLICED',
+          tuRemaining: sample.tuRemaining,
+        },
+      ];
+    },
+  });
+  // Biomes sheet: same scale as the main sheet; previews of the sky strip at sunrise.
+  const biomes = await buildSheet({
+    id: 'biomes',
+    manifest,
+    art,
+    maxScale: main.layout.scale,
+    previewNote:
+      'The sky strip at sunrise (95 TU left in summer) for each biome, drawn by the game from the recipes in src/ui/day-cycle/biome-recipes.ts and the strips on this sheet. Reference only: the slicer ignores them.',
+    getPreviews: async (maxW, scale) => {
+      const gutter = gutterFor(scale);
+      const pw = Math.floor((maxW - gutter) / 2) - 2;
+      const out = [];
+      for (const [biome, label] of BIOME_PREVIEWS) {
+        const p = await renderBiomePreview(artDir, biome, pw);
+        out.push({
+          img: p.image,
+          label: `${label} - SUNRISE`,
+          biome,
+          tuRemaining: p.tuRemaining,
+        });
+      }
+      return out;
+    },
+  });
+
+  const { previewNote, ...mainRest } = main.layout;
+  const { previews } = main.layout;
+  const layout = {
+    version: 3,
+    note: 'Cell rectangles: `rect` is in 512 sheet pixels, `rect1x` in native pixels. Each cell is `w x h` native pixels shown at `scale`. The top-level fields describe the main sheet; `sheets.biomes` the biome terrain sheet. `preview`/`previews` are reference only and are never sliced.',
+    ...mainRest,
+    preview: {
+      note: previewNote,
+      tuRemaining: sample?.tuRemaining,
+      sourceCrop: sample?.crop,
+      rect: previews[0].rect,
+      rect1x: previews[0].rect1x,
+    },
+    sheets: { biomes: biomes.layout },
+  };
+  return { layout, main, biomes };
+}
+
 export async function writeTemplate(outDir = TEMPLATE_DIR, artDir = ART_DIR) {
-  const { layout, sheet, flat, guide } = await buildTemplate(artDir);
+  const { layout, main, biomes } = await buildTemplate(artDir);
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(join(outDir, 'hud-day-cycle-template-512.png'), encodePng(sheet));
-  writeFileSync(join(outDir, 'hud-day-cycle-template-guide.png'), encodePng(guide));
-  writeFileSync(join(outDir, 'hud-day-cycle-template-1x.png'), encodePng(flat));
+  for (const [id, built] of [
+    ['main', main],
+    ['biomes', biomes],
+  ]) {
+    const files = SHEET_FILES[id];
+    writeFileSync(join(outDir, files.sheet), encodePng(built.sheet));
+    writeFileSync(join(outDir, files.guide), encodePng(built.guide));
+    writeFileSync(join(outDir, files.flat), encodePng(built.flat));
+  }
   writeFileSync(join(outDir, 'layout.json'), `${JSON.stringify(layout, null, 2)}\n`);
   return layout;
 }
@@ -379,7 +495,8 @@ if (invoked) {
   const at = process.argv.indexOf('--out');
   const out = at > 0 ? resolve(process.argv[at + 1] ?? '') : TEMPLATE_DIR;
   const layout = await writeTemplate(out);
+  const b = layout.sheets.biomes;
   console.log(
-    `template at ${layout.scale}x (${layout.native.w}x${layout.native.h} native) written to ${out}`,
+    `main sheet at ${layout.scale}x (${layout.native.w}x${layout.native.h} native), biomes sheet at ${b.scale}x (${b.native.w}x${b.native.h}) written to ${out}`,
   );
 }

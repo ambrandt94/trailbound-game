@@ -9,7 +9,7 @@ Placeholder pixel art for the 100-TU serpentine day-cycle HUD. Everything is dra
 3. If the size or anchor changed, edit that slot in `manifest.json` (`w`, `h` are one frame; `anchor` is the pixel inside one frame that sits on the bead or point it marks).
 4. Run `npm run dev` and look. `npm test` checks every file exists and matches the manifest size.
 
-**Art template.** To restyle everything in one go, use the sheet in `template/` (it has a reference sample of the assembled HUD on top and one spaced cell per font glyph): edit `template/hud-day-cycle-template-512.png`, then run `node tools/hud-day-cycle-slice.mjs <edited.png>` to write the PNGs back here. See `template/README.md`.
+**Art template.** To restyle everything in one go, use the sheet in `template/` (it has a reference sample of the assembled HUD on top and one spaced cell per font glyph; a second sheet, `template/hud-day-cycle-template-biomes-512.png`, holds the biome ground masks and detail overlays, with sunrise previews of eight biomes): edit `template/hud-day-cycle-template-512.png`, then run `node tools/hud-day-cycle-slice.mjs <edited.png>` to write the PNGs back here. See `template/README.md`.
 
 Do not rerun `tools/hud-day-cycle-sprites.mjs` after swapping: it redraws the placeholders over your PNGs. It never overwrites `manifest.json` unless you pass `--manifest`.
 
@@ -44,6 +44,39 @@ Slots marked **tint** are coloured by the renderer: neutral gray pixels (R = G =
 | `pixel_font.png`         | glyph cells 3x5  |        |              | Font sheet: white glyphs on transparent, tinted at draw time. Order is `font.glyphs` in the manifest; `font.widths` gives the advance of narrow glyphs (`:` `.` space). Digits, A to Z, `- . / :` and space. |
 
 The 100 beads sit on a wave of 2.5 cycles (11 px high), 3.2 px apart, so bead sprites overlap a little on purpose: they read as one chain. Keep bead sprites to 5x5.
+
+## Biome sky (layered ground)
+
+The sky strip changes with the biome under the caravan (map) or the area you stand in (3D). Terrain is drawn back to front:
+
+1. Sky gradient, stars, sun and moon (unchanged).
+2. One **base** ground mask: a tileable gray silhouette, tinted by the hour.
+3. Zero or more **detail** overlays (trees, rocks, snowcaps, cactus, reeds, waves), tinted per layer.
+
+Each biome is a recipe in `src/ui/day-cycle/biome-recipes.ts`: `{base, details[], tints}`. Every biome id the game has (and the reserved names) maps to a recipe, and masks are reused across recipes. An unknown biome, or no biome data, uses the original hills strip (`terrain_mask`, tinted with the sky ground colour, so it looks exactly as before). If an art file for a recipe is missing, the strip falls back to that default. When the biome changes, the strip crossfades for about 1 s (instant with reduced motion).
+
+Tint kinds: `ground`, `detail`, `water` (blue-green, flat) and `accent` (snow white). Tints are multiplied by the time-of-day light (`groundLight` in `src/core/sim/day-cycle.ts`), so a recipe reads at dawn, noon, dusk and night. The usual tint rule applies: gray is multiplied, pure white stays near white, any other colour is drawn as-is.
+
+| File                   | Size (per frame) | Anchor | What it is                                                                           |
+| ---------------------- | ---------------- | ------ | ------------------------------------------------------------------------------------ |
+| `ground_flat.png`      | 36x8, tiles      | 0,0    | **tint.** Base: flatlands, very low rolling edge.                                    |
+| `ground_grass.png`     | 36x8, tiles      | 0,0    | **tint.** Base: rolling grass mounds.                                                |
+| `ground_mountains.png` | 36x11, tiles     | 0,0    | **tint.** Base: jagged peaks. Taller than the sky strip, so peaks rise into the sky. |
+| `ground_coast.png`     | 36x8, tiles      | 0,0    | **tint.** Base: a land edge plus a water band.                                       |
+| `ground_dunes.png`     | 36x8, tiles      | 0,0    | **tint.** Base: smooth desert dunes.                                                 |
+| `detail_pine.png`      | 36x12, tiles     | 0,0    | **tint.** Detail: conifers. Pine, taiga, dark forest.                                |
+| `detail_broadleaf.png` | 36x11, tiles     | 0,0    | **tint.** Detail: round-crowned trees. Forest, jungle, dark forest.                  |
+| `detail_scrub.png`     | 36x5, tiles      | 0,0    | **tint.** Detail: bushes and tufts. Plains, meadow, hills.                           |
+| `detail_rocks.png`     | 36x5, tiles      | 0,0    | **tint.** Detail: boulders. Mountains, badlands, ashlands.                           |
+| `detail_snowcaps.png`  | 36x11, tiles     | 0,0    | **tint.** Detail: caps that line up with `ground_mountains`' peaks. White = snow.    |
+| `detail_cactus.png`    | 36x8, tiles      | 0,0    | **tint.** Detail: cacti. Desert.                                                     |
+| `detail_reeds.png`     | 36x7, tiles      | 0,0    | **tint.** Detail: reeds. Marsh, jungle.                                              |
+| `detail_water.png`     | 36x5, tiles      | 0,0    | **tint.** Detail drawn behind the base: a water band. Marsh.                         |
+| `detail_waves.png`     | 36x5, tiles      | 0,0    | **tint.** Detail: wave crests and foam (white = foam). Sea, coast.                   |
+
+These 14 strips are on the second template sheet (`template/hud-day-cycle-template-biomes-512.png`) and carry `"sheet": "biomes"` in `manifest.json`.
+
+Preview a biome in the running game: `__tbDayCycle.forceBiome('Forest')` in the console (`null` returns to the real one). Names are the ones in `BIOME_ID_NAMES` (Forest, Mountain, Snow, Sand, Desert, Plains, Taiga, Marsh, Jungle, ...).
 
 ## Colours
 

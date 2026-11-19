@@ -9,6 +9,7 @@ import {
   type WorldState,
 } from '../core/state/world-state';
 import { DEFAULT_WORLD_SEED } from '../core/world/index';
+import { biomeAtTile } from '../core/world/biome-at';
 import {
   Biome,
   WORLD_BASE,
@@ -1012,8 +1013,17 @@ export class Game implements GameHost {
     const day = Math.floor(this.world.clockHours / 24) + 1;
     const now = dayCycle.peek();
     const view = this.view;
-    if (!now || now.tuRemaining !== tuRemaining || now.day !== day || now.view !== view) {
-      dayCycle.value = { tuRemaining, day, view };
+    // The sky strip's ground follows the biome under the wagons, or under the hero when scouting on foot.
+    const party = this.world.heroAboard ? this.world.caravan : this.world.hero;
+    const biome = biomeAtTile(this.world.data, party.x, party.y);
+    if (
+      !now ||
+      now.tuRemaining !== tuRemaining ||
+      now.day !== day ||
+      now.view !== view ||
+      now.biome !== biome
+    ) {
+      dayCycle.value = { tuRemaining, day, view, biome };
     }
   }
 

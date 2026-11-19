@@ -14,6 +14,8 @@ export interface SpriteDef {
   /** Gray pixels take the phase colour. See the folder README. */
   tint?: boolean;
   tile?: boolean;
+  /** Which art template sheet the slot is drawn on: the main sheet (default) or `biomes`. */
+  sheet?: string;
   fps?: number;
   note?: string;
 }
@@ -99,6 +101,7 @@ export function parseManifest(raw: unknown): HudManifest {
     }
     if (entry.tint === true) def.tint = true;
     if (entry.tile === true) def.tile = true;
+    if (typeof entry.sheet === 'string' && entry.sheet) def.sheet = entry.sheet;
     if (typeof entry.fps === 'number' && entry.fps > 0) def.fps = entry.fps;
     if (typeof entry.note === 'string') def.note = entry.note;
     sprites[id] = def;
