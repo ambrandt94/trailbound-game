@@ -37,7 +37,14 @@ import {
   type CaravanTarget,
 } from '../sim/caravan';
 import { planRoute } from '../world/route-plan';
-import { convoyAheadPoint, tileToLocal, type AreaFrame, type ConvoyBounds } from '../sim/convoy';
+import {
+  convoyAheadPoint,
+  mapYawToArea,
+  tileToLocal,
+  type AreaFrame,
+  type ConvoyBounds,
+  type ConvoyMode,
+} from '../sim/convoy';
 import { exploredTileKeys, tileExplored } from '../sim/fog';
 import { defaultPlayerState } from '../sim/player';
 import { Rng } from '../world/noise';
@@ -119,6 +126,18 @@ export interface ConvoyHandoff {
   bounds: ConvoyBounds;
   /** The place the window stands for. `adoptConvoyHandoff` makes it the current one. */
   town: { id: string; name: string; x: number; y: number };
+}
+
+/**
+ * How the hero starts in the zone a zoom-in opens. A structural subset of the
+ * renderer's area entry: convoy mode and spot, or where the parked wagon stands.
+ */
+export interface ZoomEntry {
+  convoyMode?: ConvoyMode;
+  pos?: { x: number; z: number };
+  yaw?: number;
+  /** No convoy, on foot: park the wagon near here (area metres); null, the caravan is not here. */
+  wagon?: { x: number; z: number } | null;
 }
 
 /** A spot to cut a convoy window around, and the road point it should lean toward (fine tiles). */
@@ -356,6 +375,80 @@ export class WorldState {
     };
     if (adopt && handoff.convoy) this.adoptConvoyHandoff(handoff.convoy);
     return handoff;
+  }
+
+  /**
+   * A settlement baked whole, with the caravan's route driven through it: the
+   * same convoy frame and box as a wild window, so the one wagon rolls through
+   * town and out of it. Null off a settlement or with no route.
+   */
+  buildSettlementConvoyHandoff(x = this.caravan.x, y = this.caravan.y): AreaHandoff | null {
+    const world = this.data;
+    if (!world || !hasRoute(this.caravan)) return null;
+    const resolved = resolveAreaAt(world, x, y);
+    if (!resolved || !resolved.cacheKey.startsWith('settle:')) return null;
+    const handoff = this.bakeArea(world, resolved.node, resolved.cacheKey);
+    const areaExport = handoff.areaExport;
+    const frame: AreaFrame = {
+      innerOrigin: { ...areaExport.area.innerOrigin },
+      metersPerTile: areaExport.units.metersPerTile,
+    };
+    const min = tileToLocal(frame, resolved.minX, resolved.minY);
+    const max = tileToLocal(frame, resolved.maxX + 1, resolved.maxY + 1);
+    const node = resolved.node;
+    return {
+      ...handoff,
+      convoy: {
+        frame,
+        bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z },
+        town: { id: node.id, name: node.name, x: node.cx, y: node.cy },
+      },
+    };
+  }
+
+  /**
+   * The zone a zoom-in opens, and how the hero starts in it. There is one
+   * wagon, and it is the caravan: with a route it is driven along it (a
+   * convoy zone, in the wilds or through a town), wherever the zoom lands.
+   * Riding, the zone is cut at the wagon and leans down the road. On foot it
+   * is cut where the hero stands, and the wagon is in it only if the caravan
+   * is. With no route the wagons park; on foot, beside the caravan if it is
+   * in this area, else nowhere here.
+   */
+  zoomInPlan(): { handoff: AreaHandoff | null; entry: ZoomEntry } {
+    const aboard = this.heroAboard;
+    const at = aboard ? this.caravan : this.hero;
+    if (hasRoute(this.caravan)) {
+      const handoff =
+        this.buildConvoyHandoff(at.x, at.y, true, aboard ? this.convoyAhead() : null) ??
+        this.buildSettlementConvoyHandoff(at.x, at.y);
+      if (handoff?.convoy) {
+        if (aboard) return { handoff, entry: { convoyMode: 'walk' } };
+        const { frame, bounds } = handoff.convoy;
+        const pos = tileToLocal(frame, this.hero.x, this.hero.y);
+        const wild = this.settlementAt(at.x, at.y) === null;
+        const inside =
+          pos.x > bounds.minX + 2 &&
+          pos.x < bounds.maxX - 2 &&
+          pos.z > bounds.minZ + 2 &&
+          pos.z < bounds.maxZ - 2;
+        // In the wilds the hero lands where they stood; a town keeps its own spawn.
+        return {
+          handoff,
+          entry:
+            wild && inside
+              ? { convoyMode: 'free', pos, yaw: mapYawToArea(this.hero.yaw) }
+              : { convoyMode: 'free' },
+        };
+      }
+    }
+    const handoff = this.buildHandoffHere(at.x, at.y);
+    if (!handoff || aboard) return { handoff, entry: {} };
+    const frame: AreaFrame = {
+      innerOrigin: { ...handoff.areaExport.area.innerOrigin },
+      metersPerTile: handoff.areaExport.units.metersPerTile,
+    };
+    return { handoff, entry: { wagon: tileToLocal(frame, this.caravan.x, this.caravan.y) } };
   }
 
   /**

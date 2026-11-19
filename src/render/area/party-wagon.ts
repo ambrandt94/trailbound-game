@@ -44,6 +44,12 @@ export interface WagonMount {
   scene: { add(object: unknown): void };
   /** Convoy: stand here, on the route, instead of searching for a parking spot. */
   pose?: { x: number; z: number; yaw: number } | null;
+  /**
+   * Park near this spot (the caravan's place, area metres) instead of the
+   * hero's spawn. Null: the caravan is not in this area, so no wagon at all.
+   * Omitted: park beside the spawn, as when the hero rides with the wagons.
+   */
+  park?: { x: number; z: number } | null;
   blocks: WagonBlock[];
   things: Array<Record<string, unknown>>;
   spawn: { x: number; z: number; yaw?: number };
@@ -57,8 +63,16 @@ export interface WagonMount {
 export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate | null> {
   convoy = null;
   setPackOxPlaybackCap(0);
+  const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
+  posted.__tbWagon = undefined;
   const yaw = Number.isFinite(mount.spawn.yaw) ? (mount.spawn.yaw as number) : 0;
-  const spots = mount.pose ? [] : wagonCandidates(mount.spawn.x, mount.spawn.z, yaw);
+  let near: { x: number; z: number } = mount.spawn;
+  if (!mount.pose && mount.park !== undefined) {
+    // The hero came on foot: the one wagon stands where the caravan is, or nowhere here.
+    if (!mount.park || !parkInside(mount, mount.park)) return null;
+    near = mount.park;
+  }
+  const spots = mount.pose ? [] : wagonCandidates(near.x, near.z, yaw);
   const spot = mount.pose
     ? { x: mount.pose.x, z: mount.pose.z, yaw: mount.pose.yaw }
     : (chooseWagonSpot(spots, (candidate) => wagonSpotClear(clearance(mount, candidate))) ??
@@ -96,7 +110,6 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
   } catch (error) {
     console.warn('pack ox', error);
   }
-  const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
   posted.__tbWagon = { x: spot.x, z: spot.z, y };
   const thing: Record<string, unknown> = {
     k: 'fn',
@@ -170,6 +183,26 @@ export function hideConvoyWagon(): void {
   const posted = globalThis as { __tbWagon?: unknown };
   posted.__tbWagon = undefined;
 }
+
+/**
+ * The convoy wagon is back in this zone (or has just reached it): draw it
+ * again. The next `driveConvoyWagon` puts its boxes and F prompt back on it.
+ */
+export function showConvoyWagon(): void {
+  const rig = convoy;
+  if (!rig || rig.group.visible) return;
+  rig.group.visible = true;
+}
+
+/** A parking spot is in play when the area's walk clamp barely moves it. */
+function parkInside(mount: WagonMount, at: { x: number; z: number }): boolean {
+  if (!Number.isFinite(at.x) || !Number.isFinite(at.z)) return false;
+  const clamped = mount.clamp(at.x, at.z);
+  return Math.hypot(clamped.x - at.x, clamped.z - at.z) < PARK_INSIDE_M;
+}
+
+/** How far outside the walkable area a caravan may stand and still be parked in it, metres. */
+const PARK_INSIDE_M = 3;
 
 /** Smoothed wagon pose as drawn (yaw eases through route corners). */
 export function convoyWagonPose(): { x: number; z: number; yaw: number; y: number } | null {

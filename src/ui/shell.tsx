@@ -337,13 +337,15 @@ function CaravanCard() {
       {convoy ? (
         <p class="travel-line travel-mode">
           {skinText(
-            convoy.gone
-              ? 'The wagon rolled on · follow it or return to the map'
-              : convoy.mode === 'bench'
-                ? 'Riding the bench · B to step down'
-                : convoy.mode === 'walk'
-                  ? 'Walking beside the wagon · B to ride'
-                  : `On foot · ${Math.round(convoy.dist)} m from the wagon`,
+            convoy.away
+              ? 'The caravan is elsewhere on the road · return to the map to catch up'
+              : convoy.gone
+                ? 'The wagon rolled on · follow it or return to the map'
+                : convoy.mode === 'bench'
+                  ? 'Riding the bench · B to step down'
+                  : convoy.mode === 'walk'
+                    ? 'Walking beside the wagon · B to ride'
+                    : `On foot · ${Math.round(convoy.dist)} m from the wagon`,
           )}
         </p>
       ) : null}

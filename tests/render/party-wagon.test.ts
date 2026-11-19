@@ -161,3 +161,36 @@ test('the parked collision box is the body and the use prompt reaches the tongue
   expect(things[0]?.r).toBe(WAGON_USE_RADIUS_M);
   expect(things[0]?.label).toBe('F: Wagon');
 });
+
+test('on foot with no route the wagon parks by the caravan, or is not in the area at all', async () => {
+  const base = {
+    scene: { add() {} },
+    spawn: { x: 0, z: 0, yaw: 0 },
+    groundY: () => 0,
+    // A 100 m square area.
+    clamp: (x: number, z: number) => ({
+      x: Math.min(100, Math.max(0, x)),
+      z: Math.min(100, Math.max(0, z)),
+    }),
+    groundName: () => 'grass',
+    doors: [],
+    onOpen: () => {},
+  };
+  const things: Array<Record<string, unknown>> = [];
+  const near = await mountPartyWagon({ ...base, blocks: [], things, park: { x: 70, z: 60 } });
+  expect(near).not.toBeNull();
+  expect(Math.hypot(near!.x - 70, near!.z - 60)).toBeLessThan(12);
+  expect(things.filter((t) => t.label === 'F: Wagon')).toHaveLength(1);
+  // The caravan stands outside this area: no wagon, no prompt.
+  const awayThings: Array<Record<string, unknown>> = [];
+  const away = await mountPartyWagon({
+    ...base,
+    blocks: [],
+    things: awayThings,
+    park: { x: 400, z: 60 },
+  });
+  expect(away).toBeNull();
+  expect(awayThings).toHaveLength(0);
+  const none = await mountPartyWagon({ ...base, blocks: [], things: [], park: null });
+  expect(none).toBeNull();
+});
