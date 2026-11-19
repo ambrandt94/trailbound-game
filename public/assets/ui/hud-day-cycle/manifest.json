@@ -263,6 +263,230 @@
         "default"
       ],
       "note": "Night stem (violet)."
+    },
+    "ground_flat": {
+      "file": "ground_flat.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "BASE mask: flatland. Low, almost level ground, gray, tinted by the biome ground colour."
+    },
+    "ground_grass": {
+      "file": "ground_grass.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "BASE mask: grass. Gently rolling ground, 2 swells per tile."
+    },
+    "ground_mountains": {
+      "file": "ground_mountains.png",
+      "w": 36,
+      "h": 11,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "BASE mask: mountains. Four peaks, lit face left, shaded right. The snowcaps strip sits on the same summits."
+    },
+    "ground_coast": {
+      "file": "ground_coast.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "BASE mask: coastline. Low beach with a headland wrapping the tile edge. The sea band (detail_water) draws behind it."
+    },
+    "ground_dunes": {
+      "file": "ground_dunes.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "BASE mask: dunes. Two wind-shaped dunes, slow windward slope, steep lee."
+    },
+    "detail_pine": {
+      "file": "detail_pine.png",
+      "w": 36,
+      "h": 12,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: pine and fir. Tree line standing on the ground; trunks are dark gray at the bottom row."
+    },
+    "detail_broadleaf": {
+      "file": "detail_broadleaf.png",
+      "w": 36,
+      "h": 11,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: broadleaf trees. Round canopies on short trunks."
+    },
+    "detail_scrub": {
+      "file": "detail_scrub.png",
+      "w": 36,
+      "h": 5,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: scrub and bushes, low clumps."
+    },
+    "detail_rocks": {
+      "file": "detail_rocks.png",
+      "w": 36,
+      "h": 5,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: boulders, lit face left."
+    },
+    "detail_snowcaps": {
+      "file": "detail_snowcaps.png",
+      "w": 36,
+      "h": 11,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: snow on the ground_mountains summits. Pure white is snow in light, gray 228 is snow in shade. Tinted by the accent colour."
+    },
+    "detail_cactus": {
+      "file": "detail_cactus.png",
+      "w": 36,
+      "h": 8,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: saguaro cactus."
+    },
+    "detail_reeds": {
+      "file": "detail_reeds.png",
+      "w": 36,
+      "h": 7,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: reeds and cattails for marsh and fen."
+    },
+    "detail_water": {
+      "file": "detail_water.png",
+      "w": 36,
+      "h": 5,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: sea or marsh water band. Drawn BEHIND the base mask, tinted by the water colour."
+    },
+    "detail_waves": {
+      "file": "detail_waves.png",
+      "w": 36,
+      "h": 5,
+      "anchor": [
+        0,
+        0
+      ],
+      "states": [
+        "default"
+      ],
+      "tint": true,
+      "tile": true,
+      "sheet": "biomes",
+      "note": "DETAIL: foam crests over the water band. Pure white pixels take the water tint, gray is shade."
     }
   },
   "font": {

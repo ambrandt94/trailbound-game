@@ -6,8 +6,18 @@ import { HUD_NATIVE_H, HUD_NATIVE_W, chooseHudScale } from './layout';
 import { DayCycleRenderer } from './render';
 import { loadHudSprites } from './sprites';
 
-// Debug hook, like the other `__tb*` globals: `__tbDayCycle.options.value = { season: 'winter', fogUnits: 15 }`.
-Object.assign(globalThis, { __tbDayCycle: { options: dayCycleOptions, view: dayCycle } });
+// Debug hook, like the other `__tb*` globals:
+//   __tbDayCycle.options.value = { ...__tbDayCycle.options.value, season: 'winter', fogUnits: 15 }
+//   __tbDayCycle.forceBiome('Desert')  // a biome name or recipe id; forceBiome(null) follows the party again
+Object.assign(globalThis, {
+  __tbDayCycle: {
+    options: dayCycleOptions,
+    view: dayCycle,
+    forceBiome(biome: string | null): void {
+      dayCycleOptions.value = { ...dayCycleOptions.value, biome };
+    },
+  },
+});
 
 function viewScale(): number {
   return chooseHudScale(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
@@ -52,6 +62,7 @@ export function DayCycleHud() {
             day: now.day,
             season: dayCycleOptions.peek().season,
             fogUnits: dayCycleOptions.peek().fogUnits,
+            biome: dayCycleOptions.peek().biome ?? now.biome,
             timeMs: performance.now(),
             reducedMotion: reduced,
           });
@@ -75,9 +86,10 @@ export function DayCycleHud() {
   // Repaint straight away when the clock, season, or fog changes.
   const tu = view?.tuRemaining ?? 100;
   const day = view?.day ?? 1;
+  const biome = options.biome ?? view?.biome ?? null;
   useEffect(() => {
     redraw.current?.();
-  }, [tu, day, options.season, options.fogUnits]);
+  }, [tu, day, options.season, options.fogUnits, biome]);
 
   if (!view) return null;
   const dpr = window.devicePixelRatio || 1;
@@ -94,6 +106,7 @@ export function DayCycleHud() {
       data-clock={clockLabelFor(units).long}
       data-day={day}
       data-scale={scale}
+      data-biome={biome ?? ''}
       style={{ width: `${cssW}px`, height: `${cssH}px` }}
     >
       <canvas

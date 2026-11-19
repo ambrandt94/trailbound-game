@@ -216,7 +216,7 @@ async function bundleGameModules() {
         `export { DayCycleRenderer } from ${src('ui/day-cycle/render.ts')};`,
         `export { HUD_NATIVE_H, HUD_NATIVE_W, NODE_LAYOUT, SKY_RECT } from ${src('ui/day-cycle/layout.ts')};`,
         `export { parseManifest } from ${src('ui/day-cycle/manifest.ts')};`,
-        `export { bakeNodes } from ${src('core/sim/day-cycle.ts')};`,
+        `export { bakeNodes, thresholdsFor } from ${src('core/sim/day-cycle.ts')};`,
       ].join('\n'),
     );
     const bundle = await rolldown({ input: entry, logLevel: 'silent' });
@@ -229,65 +229,93 @@ async function bundleGameModules() {
   }
 }
 
-/**
- * Draw the HUD at native size with the game's renderer.
- * Returns `{ image, nodes, layout }`: a `ui-png` image (361 x 66 at the time of
- * writing) plus the bead positions the game computed.
- */
-export async function renderHud(artDir = ART_DIR, frame = SAMPLE_FRAME) {
-  const game = await loadGameModules();
-  globalThis.document = { createElement: () => new Surface(1, 1) };
-  // The renderer makes canvases as `canvas.width = ..; canvas.height = ..`, so size on assignment.
-  globalThis.document.createElement = () => {
-    const s = new Surface(0, 0);
-    let w = 0;
-    let h = 0;
-    const realloc = () => {
+/** `document.createElement('canvas')` for the renderer: sized by assigning width and height. */
+function createCanvasElement() {
+  const s = new Surface(0, 0);
+  let w = 0;
+  let h = 0;
+  Object.defineProperty(s, 'width', {
+    get: () => w,
+    set: (v) => {
+      w = v;
       s.data = new Uint8ClampedArray(w * h * 4);
-    };
-    Object.defineProperty(s, 'width', {
-      get: () => w,
-      set: (v) => {
-        w = v;
-        realloc();
-      },
-    });
-    Object.defineProperty(s, 'height', {
-      get: () => h,
-      set: (v) => {
-        h = v;
-        realloc();
-      },
-    });
-    return s;
+    },
+  });
+  Object.defineProperty(s, 'height', {
+    get: () => h,
+    set: (v) => {
+      h = v;
+      s.data = new Uint8ClampedArray(w * h * 4);
+    },
+  });
+  return s;
+}
+
+/**
+ * A game renderer you can draw several frames with (the biome crossfade needs one
+ * renderer over time). `skip(id)` leaves sprites out of the art, to test fallbacks.
+ * `draw(frame)` returns a `ui-png` image (361 x 66 at the time of writing).
+ */
+export async function createHudRenderer(artDir = ART_DIR, { skip } = {}) {
+  const game = await loadGameModules();
+  const manifest = game.parseManifest(
+    JSON.parse(readFileSync(join(artDir, 'manifest.json'), 'utf8')),
+  );
+  const sprites = {};
+  for (const [id, def] of Object.entries(manifest.sprites)) {
+    if (skip?.(id)) continue;
+    sprites[id] = { id, def, image: toSurface(decodePng(readFileSync(join(artDir, def.file)))) };
+  }
+  const art = {
+    manifest,
+    sprites,
+    font: {
+      def: manifest.font,
+      image: toSurface(decodePng(readFileSync(join(artDir, manifest.font.file)))),
+    },
   };
+  globalThis.document = { createElement: createCanvasElement };
+  let renderer;
   try {
-    const manifest = game.parseManifest(
-      JSON.parse(readFileSync(join(artDir, 'manifest.json'), 'utf8')),
-    );
-    const sprites = {};
-    for (const [id, def] of Object.entries(manifest.sprites))
-      sprites[id] = { id, def, image: toSurface(decodePng(readFileSync(join(artDir, def.file)))) };
-    const art = {
-      manifest,
-      sprites,
-      font: {
-        def: manifest.font,
-        image: toSurface(decodePng(readFileSync(join(artDir, manifest.font.file)))),
-      },
-    };
-    const canvas = new Surface(game.HUD_NATIVE_W, game.HUD_NATIVE_H);
-    new game.DayCycleRenderer(art).draw(canvas.getContext(), frame);
-    const image = createImage(canvas.width, canvas.height);
-    image.data.set(canvas.data);
-    return {
-      image,
-      nodes: game.bakeNodes(game.NODE_LAYOUT, 1),
-      layout: { w: game.HUD_NATIVE_W, h: game.HUD_NATIVE_H, sky: game.SKY_RECT },
-    };
+    renderer = new game.DayCycleRenderer(art);
   } finally {
     delete globalThis.document;
   }
+  return {
+    get recipeId() {
+      return renderer.recipeId;
+    },
+    nodes: game.bakeNodes(game.NODE_LAYOUT, 1),
+    layout: { w: game.HUD_NATIVE_W, h: game.HUD_NATIVE_H, sky: game.SKY_RECT },
+    thresholdsFor: game.thresholdsFor,
+    draw(frame) {
+      globalThis.document = { createElement: createCanvasElement };
+      try {
+        const canvas = new Surface(game.HUD_NATIVE_W, game.HUD_NATIVE_H);
+        renderer.draw(canvas.getContext(), frame);
+        const image = createImage(canvas.width, canvas.height);
+        image.data.set(canvas.data);
+        return image;
+      } finally {
+        delete globalThis.document;
+      }
+    },
+  };
+}
+
+/**
+ * Draw the HUD at native size with the game's renderer.
+ * Returns `{ image, nodes, layout, thresholds }`: the image plus the bead
+ * positions the game computed.
+ */
+export async function renderHud(artDir = ART_DIR, frame = SAMPLE_FRAME) {
+  const r = await createHudRenderer(artDir);
+  return {
+    image: r.draw(frame),
+    nodes: r.nodes,
+    layout: r.layout,
+    thresholds: r.thresholdsFor(frame.season),
+  };
 }
 
 /** The sample band: the right-hand end of the HUD, trimmed to what is drawn. */
@@ -309,6 +337,24 @@ export async function renderPreview(artDir = ART_DIR, frame = SAMPLE_FRAME, maxW
   for (let y = 0; y < out.h; y++)
     for (let x = 0; x < out.w; x++) out.px(x, y, image.get(left + x, top + y));
   return { image: out, tuRemaining: frame.tuRemaining, crop: { left, top, right, bottom } };
+}
+
+/**
+ * The sky strip at sunrise for one biome (a world biome name or recipe id), drawn
+ * by the game's renderer, cropped to its right-hand `width` pixels so the sun
+ * (which sits on the right at dawn) is in it. The frame is 2 TU past sunrise.
+ */
+export async function renderBiomePreview(artDir = ART_DIR, biome, width, offsetTU = 2) {
+  const probe = await renderHud(artDir, { ...SAMPLE_FRAME, biome });
+  const tuRemaining = probe.thresholds.sunriseTU - offsetTU;
+  const { image, layout } = await renderHud(artDir, { ...SAMPLE_FRAME, tuRemaining, biome });
+  const sky = layout.sky;
+  const right = sky.x + sky.w;
+  const left = Math.max(0, right - width);
+  const out = createImage(right - left, sky.h);
+  for (let y = 0; y < sky.h; y++)
+    for (let x = 0; x < out.w; x++) out.px(x, y, image.get(left + x, sky.y + y));
+  return { image: out, tuRemaining, biome };
 }
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;

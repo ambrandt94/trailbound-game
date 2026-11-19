@@ -1,8 +1,11 @@
 import {
   bakeNodes,
   clockLabelFor,
+  groundLight,
+  hexToRgb,
   isDaylight,
   lerpRgb,
+  litTint,
   litUnits,
   rgbToHex,
   skyAt,
@@ -12,7 +15,17 @@ import {
   type Rgb,
   type SeasonId,
   type SeasonPreset,
+  type SkyState,
 } from '../../core/sim/day-cycle';
+import {
+  BASE_SLOTS,
+  DEFAULT_RECIPE,
+  detailSlot,
+  layerTint,
+  recipeFor,
+  type BiomeRecipe,
+  type DetailLayer,
+} from './biome-recipes';
 import { HUD_NATIVE_H, HUD_NATIVE_W, NODE_LAYOUT, SKY_RECT } from './layout';
 import type { HudSprites, Sprite } from './sprites';
 
@@ -25,7 +38,15 @@ export interface HudFrame {
   fogUnits: number;
   timeMs: number;
   reducedMotion: boolean;
+  /**
+   * Biome under the party: a world biome id, a biome name or a recipe id.
+   * Missing or unknown draws the default hills strip. A change crossfades over `BIOME_FADE_MS`.
+   */
+  biome?: number | string | null;
 }
+
+/** How long the sky strip's terrain takes to crossfade when the biome changes. */
+export const BIOME_FADE_MS = 1000;
 
 type Canvas2D = CanvasRenderingContext2D;
 
@@ -61,6 +82,10 @@ export class DayCycleRenderer {
   private readonly fontCache = new Map<string, HTMLCanvasElement>();
   private staticLayer: HTMLCanvasElement | null = null;
   private staticKey = '';
+  private shown: BiomeRecipe | null = null;
+  private fadingFrom: BiomeRecipe | null = null;
+  private fadeStartMs = 0;
+  private scratch: HTMLCanvasElement | null = null;
 
   constructor(private readonly art: HudSprites) {}
 
@@ -209,15 +234,104 @@ export class DayCycleRenderer {
     const by = Math.round(iy + skyH - 2 - sky.bodyElev * (skyH - 6));
     this.drawSprite(ctx, sky.daylight ? 'sky_sun' : 'sky_moon', 0, bx, by);
 
-    if (terrain) {
-      const tinted = this.tinted(terrain, 0, sky.ground);
-      for (let x = 0; x < iw; x += terrain.def.w) {
-        ctx.drawImage(tinted, ix + x, iy + ih - terrain.def.h);
-      }
-    }
+    this.drawTerrain(ctx, frame, sky, ix, iy, iw, ih);
     ctx.restore();
 
     if (frameSprite) this.drawNine(ctx, frameSprite, 0, r.x, r.y, r.w, r.h);
+  }
+
+  // ------------------------------------------------------------- terrain
+
+  /** Id of the recipe on screen (or fading in). For tests and the debug hook. */
+  get recipeId(): string {
+    return this.shown?.id ?? DEFAULT_RECIPE.id;
+  }
+
+  /**
+   * The ground of the sky strip: the recipe of the biome, crossfaded from the
+   * old one when it changes. Draws into the sky's clip rectangle.
+   */
+  private drawTerrain(
+    ctx: Canvas2D,
+    frame: HudFrame,
+    sky: SkyState,
+    ix: number,
+    iy: number,
+    iw: number,
+    ih: number,
+  ): void {
+    const target = recipeFor(frame.biome ?? null);
+    if (!this.shown) {
+      this.shown = target;
+    } else if (target.id !== this.shown.id) {
+      this.fadingFrom = frame.reducedMotion ? null : this.shown;
+      this.shown = target;
+      this.fadeStartMs = frame.timeMs;
+    }
+    let t = 1;
+    if (this.fadingFrom) {
+      t = (frame.timeMs - this.fadeStartMs) / BIOME_FADE_MS;
+      if (!(t < 1)) {
+        this.fadingFrom = null;
+        t = 1;
+      }
+    }
+    if (!this.fadingFrom) {
+      this.drawRecipe(ctx, this.shown, sky, ix, iy, iw, ih);
+      return;
+    }
+    this.drawRecipe(ctx, this.fadingFrom, sky, ix, iy, iw, ih);
+    // The new ground goes to its own layer first, so its parts do not show through each other.
+    if (!this.scratch || this.scratch.width !== iw || this.scratch.height !== ih) {
+      this.scratch = makeCanvas(iw, ih);
+    }
+    const sc = this.scratch.getContext('2d');
+    if (!sc) return;
+    sc.imageSmoothingEnabled = false;
+    sc.clearRect(0, 0, iw, ih);
+    this.drawRecipe(sc, this.shown, sky, 0, 0, iw, ih);
+    ctx.globalAlpha = Math.max(0, Math.min(1, t));
+    ctx.drawImage(this.scratch, ix, iy);
+    ctx.globalAlpha = 1;
+  }
+
+  /** One recipe, back to front: behind details, the base mask, then the details. */
+  private drawRecipe(
+    ctx: Canvas2D,
+    recipe: BiomeRecipe,
+    sky: SkyState,
+    ix: number,
+    iy: number,
+    iw: number,
+    ih: number,
+  ): void {
+    const base = this.art.sprites[BASE_SLOTS[recipe.base]];
+    if (!base) {
+      // Art without this recipe's masks: the original strip, so nothing disappears.
+      if (recipe.id !== DEFAULT_RECIPE.id)
+        this.drawRecipe(ctx, DEFAULT_RECIPE, sky, ix, iy, iw, ih);
+      return;
+    }
+    const light = groundLight(sky);
+    const paint = (sprite: typeof base, color: Rgb, dx: number, dy: number) => {
+      const w = sprite.def.w;
+      const tinted = this.tinted(sprite, 0, color);
+      const y = iy + ih - sprite.def.h - dy;
+      for (let x = -(((dx % w) + w) % w); x < iw; x += w) ctx.drawImage(tinted, ix + x, y);
+    };
+    const detailColor = (layer: DetailLayer): Rgb => {
+      const kind = layerTint(layer);
+      const hex = recipe.tints[kind] ?? recipe.tints.detail ?? recipe.tints.ground;
+      return hex ? litTint(hexToRgb(hex), light, layer.mul ?? 1) : sky.ground;
+    };
+    const drawDetail = (layer: DetailLayer) => {
+      const sprite = this.art.sprites[detailSlot(layer.id)];
+      if (sprite) paint(sprite, detailColor(layer), layer.dx ?? 0, layer.dy ?? 0);
+    };
+    for (const layer of recipe.details) if (layer.behind) drawDetail(layer);
+    const ground = recipe.tints.ground;
+    paint(base, ground ? litTint(hexToRgb(ground), light) : sky.ground, 0, 0);
+    for (const layer of recipe.details) if (!layer.behind) drawDetail(layer);
   }
 
   private drawDayLabel(ctx: Canvas2D, day: number): void {
@@ -430,6 +544,8 @@ export class DayCycleRenderer {
         c.drawImage(sprite.image, state * w, 0, w, h, 0, 0, w, h);
       }
     }
+    // Light changes the colour every few frames: keep the cache from growing for ever.
+    if (this.tintCache.size > 600) this.tintCache.clear();
     this.tintCache.set(key, out);
     return out;
   }

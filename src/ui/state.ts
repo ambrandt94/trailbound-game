@@ -19,14 +19,25 @@ export interface DayCycleView {
   day: number;
   /** Which view is up. The paused tag only belongs on the map. */
   view: 'map' | 'area';
+  /** World biome id under the caravan (or the hero on foot). Null without a map. */
+  biome: number | null;
 }
 export const dayCycle = signal<DayCycleView | null>(null);
 export interface DayCycleOptions {
   season: SeasonId | SeasonPreset;
   /** Beads at the left end under pre-dawn fog. 0 is off. */
   fogUnits: number;
+  /**
+   * Debug: force the sky strip's biome with a biome name or recipe id
+   * ('Desert', 'snow_mountains'). Null follows the biome under the party.
+   */
+  biome: string | null;
 }
-export const dayCycleOptions = signal<DayCycleOptions>({ season: DEFAULT_SEASON, fogUnits: 0 });
+export const dayCycleOptions = signal<DayCycleOptions>({
+  season: DEFAULT_SEASON,
+  fogUnits: 0,
+  biome: null,
+});
 /** Empty at the full map clock. A short multiplier while zoom has slowed time. */
 export const clockRate = signal('');
 /** Party supplies and the TU of the shared clock. */

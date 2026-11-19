@@ -15,6 +15,7 @@
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { BIOME_SLOTS } from './hud-day-cycle-biome-art.mjs';
 import { createImage, encodePng } from './ui-png.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -485,6 +486,8 @@ export const SLOTS = [
     anchor: [0, 0],
     note: 'Night stem (violet).',
   },
+  // Biome terrain strips for the sky strip: bases and details. See hud-day-cycle-biome-art.mjs.
+  ...BIOME_SLOTS,
 ];
 
 /** Build the manifest object from the slots. */
@@ -501,6 +504,7 @@ export function buildManifest() {
       ...(slot.slice ? { slice: slot.slice } : {}),
       ...(slot.tint ? { tint: true } : {}),
       ...(slot.tile ? { tile: true } : {}),
+      ...(slot.sheet ? { sheet: slot.sheet } : {}),
       ...(slot.fps ? { fps: slot.fps } : {}),
       note: slot.note,
     };

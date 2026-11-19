@@ -1,7 +1,7 @@
 /**
  * Slices an edited day-cycle HUD template back into the game's sprite PNGs.
  *
- *   node tools/hud-day-cycle-slice.mjs <edited-sheet.png> [--out <dir>] [--layout <layout.json>]
+ *   node tools/hud-day-cycle-slice.mjs <edited-sheet.png> [--out <dir>] [--layout <layout.json>] [--sheet main|biomes]
  *                                      [--alpha-min <0-255>] [--dry-run]
  *
  * The sheet can be the 512 template, the native 1x one, or the 512 sheet at a
@@ -12,6 +12,11 @@
  * clear). Frames of one slot are put back side by side, so the written files
  * match `manifest.json`. Default output is `public/assets/ui/hud-day-cycle/`.
  *
+ * There are two sheets: `main` (the HUD sprites and the font) and `biomes` (the
+ * terrain strips for the sky strip). A file with "biomes" in its name is sliced as
+ * the biomes sheet; otherwise pass `--sheet biomes` or `--sheet main`. Each sheet
+ * only writes its own slots, so slicing one never touches the other's PNGs.
+ *
  * Only the cells listed in `layout.json` are read. The sample band at the top of
  * the sheet (`layout.preview`) and the space between cells are ignored, so
  * nothing drawn there reaches the game. The pixel font is rebuilt in the game's
@@ -19,7 +24,7 @@
  * padded with clear pixels) from the spaced-out glyph cells.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createImage, decodePng, encodePng } from './ui-png.mjs';
 
@@ -74,7 +79,23 @@ function cutCell(sheet, rect512, k, scale, alphaMin, native) {
   return out;
 }
 
-/** Slice a decoded sheet into `{file, image}` pairs. */
+/**
+ * The layout of one sheet: `main` is the layout itself (slots and the font),
+ * `biomes` is `layout.sheets.biomes` (the biome terrain strips).
+ */
+export function sheetLayout(layout, id = 'main') {
+  if (id === 'main') return layout;
+  const found = layout.sheets?.[id];
+  if (!found)
+    throw new Error(
+      `layout has no sheet "${id}" (has: main${Object.keys(layout.sheets ?? {})
+        .map((k) => `, ${k}`)
+        .join('')})`,
+    );
+  return found;
+}
+
+/** Slice a decoded sheet into `{file, image}` pairs. `layout` is a sheet layout (see `sheetLayout`). */
 export function sliceSheet(sheet, layout, { alphaMin = DEFAULT_ALPHA_MIN } = {}) {
   const native = sheet.w === layout.native.w && sheet.h === layout.native.h;
   let k = 1;
@@ -99,6 +120,8 @@ export function sliceSheet(sheet, layout, { alphaMin = DEFAULT_ALPHA_MIN } = {})
     out.push({ file: slot.file, image });
   }
   const font = layout.font;
+  // The biomes sheet has no font.
+  if (!font) return out;
   const fontImage = createImage(font.glyphs.length * font.cellW, font.cellH);
   // Version 2 layouts have one cell per glyph; version 1 had strips of glyphs side by side.
   if (font.cells) {
@@ -129,9 +152,10 @@ export function sliceFile(
     layoutPath = DEFAULT_LAYOUT,
     alphaMin = DEFAULT_ALPHA_MIN,
     dryRun = false,
+    sheet: sheetId = /biomes/i.test(basename(sheetPath)) ? 'biomes' : 'main',
   } = {},
 ) {
-  const layout = JSON.parse(readFileSync(layoutPath, 'utf8'));
+  const layout = sheetLayout(JSON.parse(readFileSync(layoutPath, 'utf8')), sheetId);
   const sheet = decodePng(readFileSync(sheetPath));
   const files = sliceSheet(sheet, layout, { alphaMin });
   const manifestPath = join(outDir, 'manifest.json');
@@ -160,11 +184,12 @@ if (invoked) {
   };
   const sheetPath = args.find(
     (a, i) =>
-      !a.startsWith('--') && !['--out', '--layout', '--alpha-min'].includes(args[i - 1] ?? ''),
+      !a.startsWith('--') &&
+      !['--out', '--layout', '--alpha-min', '--sheet'].includes(args[i - 1] ?? ''),
   );
   if (!sheetPath) {
     console.error(
-      'usage: node tools/hud-day-cycle-slice.mjs <edited-sheet.png> [--out dir] [--layout layout.json] [--alpha-min 16] [--dry-run]',
+      'usage: node tools/hud-day-cycle-slice.mjs <edited-sheet.png> [--out dir] [--layout layout.json] [--alpha-min 16] [--sheet main|biomes] [--dry-run]',
     );
     process.exit(1);
   }
@@ -174,6 +199,7 @@ if (invoked) {
       layoutPath: opt('--layout') ? resolve(opt('--layout')) : DEFAULT_LAYOUT,
       alphaMin: opt('--alpha-min') ? Number(opt('--alpha-min')) : DEFAULT_ALPHA_MIN,
       dryRun: args.includes('--dry-run'),
+      ...(opt('--sheet') ? { sheet: opt('--sheet') } : {}),
     });
     console.log(`${args.includes('--dry-run') ? 'would write' : 'wrote'} ${files.length} files`);
   } catch (error) {

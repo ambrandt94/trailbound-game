@@ -285,6 +285,37 @@ export function skyAt(tuFloat: number, th: DayThresholds): SkyState {
   return { top, mid, horizon, ground, glowColor, glowAlpha, starAlpha, daylight, bodyX, bodyElev };
 }
 
+// ------------------------------------------------------------ light
+
+/** The ground colour at noon: the reference the other hours' light is measured against. */
+const NOON_GROUND_LUM = 0.2126 * 0x16 + 0.7152 * 0xa3 + 0.0722 * 0x4a;
+const WARM: readonly [number, number, number] = [1.2, 0.95, 0.76];
+const COOL: readonly [number, number, number] = [0.8, 0.9, 1.25];
+
+/**
+ * Light of the hour as a per-channel multiplier for biome ground, detail and
+ * water tints (tints are written for full noon light, so noon is `[1, 1, 1]`).
+ * Brightness follows the sky's own ground colour, with a floor so night never
+ * goes black. Dawn and dusk warm the colours, night cools them.
+ */
+export function groundLight(sky: SkyState): readonly [number, number, number] {
+  const lum = 0.2126 * sky.ground[0] + 0.7152 * sky.ground[1] + 0.0722 * sky.ground[2];
+  const b = Math.max(0.34, Math.min(1, lum / NOON_GROUND_LUM));
+  const glow = Math.max(0, Math.min(1, sky.glowAlpha));
+  const night = sky.daylight ? 0 : 1 - glow * 0.5;
+  return [0, 1, 2].map((i) => {
+    const warm = 1 + ((WARM[i] ?? 1) - 1) * glow * 0.8;
+    const cool = 1 + ((COOL[i] ?? 1) - 1) * night;
+    return b * warm * cool;
+  }) as [number, number, number];
+}
+
+/** A tint (written for noon) under the light of the hour, clamped to a colour. */
+export function litTint(tint: Rgb, light: readonly [number, number, number], mul = 1): Rgb {
+  const c = (i: 0 | 1 | 2) => Math.max(0, Math.min(255, Math.round(tint[i] * light[i] * mul)));
+  return [c(0), c(1), c(2)];
+}
+
 // ------------------------------------------------------------ serpentine
 
 export interface NodeLayout {
