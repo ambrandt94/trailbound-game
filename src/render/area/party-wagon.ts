@@ -127,8 +127,8 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
       phase: 0,
       yaw: spot.yaw,
     };
-    // PullWalk is authored at 0.32 m/s; let it play fast enough for a walking wagon.
-    setPackOxPlaybackCap(4.2);
+    // PullWalk is authored at 0.32 m/s; let it play fast enough for a trotting wagon.
+    setPackOxPlaybackCap(6);
   }
   return spot;
 }
@@ -184,7 +184,8 @@ export function driveConvoyWagon(
   const back = groundY(pose.x - fx * 1.6, pose.z - fz * 1.6);
   const pitch = Math.atan2(front - back, 3.2);
   const moving = pose.speed > 0.05;
-  if (moving) rig.phase += dt * Math.max(0.6, pose.speed) * 2.4;
+  // The bed bob tops out near 3.5 Hz: a faster wagon should rumble, not buzz.
+  if (moving) rig.phase += dt * Math.min(1.45, Math.max(0.6, pose.speed)) * 2.4;
   const g = rig.group;
   g.rotation.order = 'YXZ';
   g.position.set(pose.x, y, pose.z);

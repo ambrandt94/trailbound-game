@@ -117,6 +117,8 @@ export interface AreaHandoff {
 export interface ConvoyHandoff {
   frame: AreaFrame;
   bounds: ConvoyBounds;
+  /** The place the window stands for. `adoptConvoyHandoff` makes it the current one. */
+  town: { id: string; name: string; x: number; y: number };
 }
 
 export type WorldEvent =
@@ -296,15 +298,13 @@ export class WorldState {
    * the route), with the route painted through it as a track. Not cached:
    * the window moves with the wagons. Null in a settlement or on water.
    */
-  buildConvoyHandoff(x = this.caravan.x, y = this.caravan.y): AreaHandoff | null {
+  buildConvoyHandoff(x = this.caravan.x, y = this.caravan.y, adopt = true): AreaHandoff | null {
     const world = this.data;
     if (!world || !hasRoute(this.caravan)) return null;
     const resolved = resolveConvoyArea(world, x, y);
     if (!resolved) return null;
-    this.entryPose = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
-    this.footprint = null;
     const node = resolved.node;
-    this.town = { id: node.id, name: node.name, x: node.cx, y: node.cy };
+    const town = { id: node.id, name: node.name, x: node.cx, y: node.cy };
     const areaExport = buildAreaExport(world, node, {
       timeOfDayHours: this.clockHours,
       trail: this.caravan.route,
@@ -315,11 +315,24 @@ export class WorldState {
     };
     const min = tileToLocal(frame, resolved.minX, resolved.minY);
     const max = tileToLocal(frame, resolved.maxX + 1, resolved.maxY + 1);
-    return {
+    const handoff: AreaHandoff = {
       areaExport,
       entry: { placeId: node.id, placeName: node.name, tier: tierForKind(node.kind) },
-      convoy: { frame, bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z } },
+      convoy: { frame, bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z }, town },
     };
+    if (adopt && handoff.convoy) this.adoptConvoyHandoff(handoff.convoy);
+    return handoff;
+  }
+
+  /**
+   * Make a convoy window the current place. A window cut ahead of time
+   * (`adopt` false) must not move the town or exit pose while the old window
+   * is still on screen; the swap adopts it.
+   */
+  adoptConvoyHandoff(convoy: ConvoyHandoff): void {
+    this.entryPose = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
+    this.footprint = null;
+    this.town = { ...convoy.town };
   }
 
   /** True when the map clock should run this frame. See `mapClockRuns`. */

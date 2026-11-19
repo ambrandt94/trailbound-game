@@ -7,6 +7,7 @@ import {
   advanceCaravanTiles,
   createCaravan,
   mapClockRuns,
+  etaTu,
   setRoute,
   type CaravanStepEnv,
 } from '../../src/core/sim/caravan';
@@ -23,7 +24,13 @@ import {
   convoyBench,
   convoyClockMps,
   convoyMps,
+  convoyClockHours,
   convoyNeedsRecut,
+  convoyRoom,
+  CONVOY_PRECUT_LEAD_M,
+  preparedWindowFits,
+  recutAction,
+  routeCrossing,
   convoySlot,
   followVelocity,
   leashState,
@@ -35,6 +42,7 @@ import {
   tileToLocal,
   type ConvoyModeInput,
 } from '../../src/core/sim/convoy';
+import { HOURS_PER_TU } from '../../src/core/sim/time';
 import { WorldState } from '../../src/core/state/world-state';
 import { metersToNormalized } from '../../src/core/world/terrain';
 import { Biome, DEFAULT_WORLD_SETTINGS, type WorldData } from '../../src/core/world/models';
@@ -92,10 +100,15 @@ test('rolling by tiles matches rolling by clock and stops at the end', () => {
   expect(advanceCaravanTiles({ ...straight(2), halted: true }, 4, even).units).toBe(0);
 });
 
-test('convoy pace: a walking ox in 3D, with the clock-true pace on hand', () => {
-  expect(convoyMps(1)).toBeCloseTo(1.3, 6);
-  expect(convoyMps(0.8)).toBeCloseTo(1.04, 6);
-  expect(convoyMps(Number.NaN)).toBeCloseTo(1.3, 6);
+test('convoy pace: a brisk trot in 3D, close to the clock-true map pace', () => {
+  expect(convoyMps(1)).toBeCloseTo(5, 6);
+  expect(convoyMps(0.8)).toBeCloseTo(4, 6);
+  // Within reach of a jog: the wagon's top pace stays under the auto-walk jog.
+  expect(convoyMps(1.1)).toBeLessThan(FOLLOW_RUN_MPS);
+  // 85% of clock-true, so a 3D trip is the same order of time as on the map.
+  expect(convoyMps(1) / convoyClockMps(1)).toBeGreaterThan(0.8);
+  expect(convoyMps(1) / convoyClockMps(1)).toBeLessThan(1);
+  expect(convoyMps(Number.NaN)).toBeCloseTo(5, 6);
   expect(convoyClockMps(1)).toBeGreaterThan(5.5);
   expect(convoyClockMps(1)).toBeLessThan(6.2);
   expect(metresToTiles(32)).toBeCloseTo(4, 6);
@@ -133,15 +146,16 @@ test('the walking slot sits on the wagon left, the bench up front', () => {
 });
 
 test('follow keeps pace on the slot, catches up at a run, sprints past the leash', () => {
-  const wagon = { x: 0, z: 0, yaw: 0, speed: 1.3 };
+  const wagon = { x: 0, z: 0, yaw: 0, speed: 5 };
   const slot = convoySlot(wagon);
   const on = followVelocity(slot, wagon);
   expect(on.vx).toBeCloseTo(0, 6);
-  expect(on.vz).toBeCloseTo(1.3, 6);
+  expect(on.vz).toBeCloseTo(5, 6);
   const parked = followVelocity(slot, { ...wagon, speed: 0 });
   expect(Math.hypot(parked.vx, parked.vz)).toBe(0);
   const behind = followVelocity({ x: slot.x, z: slot.z - 10 }, wagon);
   expect(Math.hypot(behind.vx, behind.vz)).toBeCloseTo(FOLLOW_RUN_MPS, 6);
+  expect(FOLLOW_RUN_MPS).toBeGreaterThan(convoyMps(1.1));
   const far = followVelocity({ x: slot.x, z: slot.z - 60 }, wagon);
   expect(Math.hypot(far.vx, far.vz)).toBeCloseTo(FOLLOW_SPRINT_MPS, 6);
   expect(far.vz).toBeGreaterThan(0);
@@ -247,4 +261,68 @@ test('a convoy handoff paints the route as a dirt track with the wagon inside', 
   // Without a route there is no convoy: today's area at the hero stands.
   world.caravan = createCaravan(20, 20.5);
   expect(world.buildConvoyHandoff()).toBeNull();
+});
+
+test('3D clock pays by road: a unit costs 1 TU at an even mood, more in the mountains', () => {
+  expect(convoyClockHours(1, 1)).toBeCloseTo(HOURS_PER_TU, 9);
+  expect(convoyClockHours(10, 1)).toBeCloseTo(10 * HOURS_PER_TU, 9);
+  expect(convoyClockHours(1, 0.8)).toBeCloseTo(HOURS_PER_TU / 0.8, 9);
+  expect(convoyClockHours(0, 1)).toBe(0);
+  expect(convoyClockHours(-3, 1)).toBe(0);
+  // Same TU per unit as the map's ETA.
+  const car = straight(10);
+  expect(etaTu(car, 0.9)! * HOURS_PER_TU).toBeCloseTo(convoyClockHours(10, 0.9), 9);
+});
+
+const box = { minX: 0, maxX: 96, minZ: 0, maxZ: 96 };
+
+test('re-cut plan: prepare early, swap on the line, never while swapping or routeless', () => {
+  const base = { routed: true, room: 40, crossing: 60, prepared: false, swapping: false };
+  expect(recutAction(base)).toBe('none');
+  expect(recutAction({ ...base, crossing: CONVOY_PRECUT_LEAD_M })).toBe('prepare');
+  expect(recutAction({ ...base, crossing: CONVOY_PRECUT_LEAD_M, prepared: true })).toBe('none');
+  expect(recutAction({ ...base, room: CONVOY_RECUT_EDGE_M - 1, prepared: true })).toBe('swap');
+  expect(recutAction({ ...base, room: 3 })).toBe('swap');
+  expect(recutAction({ ...base, room: 3, swapping: true })).toBe('none');
+  expect(recutAction({ ...base, room: 3, routed: false })).toBe('none');
+  // A clear route (no crossing in sight) never prepares.
+  expect(recutAction({ ...base, crossing: Number.POSITIVE_INFINITY })).toBe('none');
+});
+
+test('a window cut ahead fits only while the wagon has room in it', () => {
+  expect(convoyRoom({ x: 48, z: 48 }, box)).toBe(48);
+  expect(preparedWindowFits({ x: 48, z: 22 }, box)).toBe(true);
+  expect(preparedWindowFits({ x: 48, z: 12 }, box)).toBe(false);
+  expect(preparedWindowFits({ x: 90, z: 48 }, box)).toBe(false);
+});
+
+test('routeCrossing finds where the route meets the re-cut line, and no sooner', () => {
+  const frame = { innerOrigin: { x: 0, y: 0 }, metersPerTile: 1 };
+  // A window of 12 tiles (96 m) at the origin. The route runs east along z = 48 m (tile y 6).
+  const route = [0.5, 6, 30, 6];
+  const from = 2;
+  const at = routeCrossing(route, from, frame, box, 40);
+  expect(at).not.toBeNull();
+  // The line is 16 m inside the east edge: x = 80 m, which is tile 10.
+  // `at` counts along the route, which starts at tile x 0.5.
+  expect(at!).toBeGreaterThan(9.5 - 0.2);
+  expect(at!).toBeLessThan(9.5 + 0.5);
+  expect(routeCrossing(route, from, frame, box, 3)).toBeNull();
+  // Starting past the line, the crossing is the start itself.
+  const late = routeCrossing(route, 11, frame, box, 5);
+  expect(late).toBeCloseTo(11, 3);
+  expect(routeCrossing([], 0, frame, box, 10)).toBeNull();
+});
+
+test('a convoy handoff cut ahead does not move the town until it is adopted', () => {
+  const world = new WorldState();
+  world.data = plains(4411);
+  world.seed = 4411;
+  world.caravan = { ...straight(6, { x: 8, y: 20.5 }), along: 12, x: 20, y: 20.5 };
+  const before = world.town;
+  const ahead = world.buildConvoyHandoff(30, 20.5, false);
+  expect(ahead?.convoy).toBeTruthy();
+  expect(world.town).toEqual(before);
+  world.adoptConvoyHandoff(ahead!.convoy!);
+  expect(world.town?.id).toBe(ahead!.convoy!.town.id);
 });

@@ -1,17 +1,26 @@
 import { hasRoute, isRolling, pointAlong } from '../core/sim/caravan';
 import {
   CONVOY_LOOKAHEAD_M,
+  convoyClockHours,
   convoyMps,
-  convoyNeedsRecut,
+  convoyRoom,
+  preparedWindowFits,
+  recutAction,
+  routeCrossing,
+  type RecutAction,
   localToTile,
   mapYawToArea,
   areaYawToMap,
   metresToTiles,
   tileToLocal,
 } from '../core/sim/convoy';
+import { METERS_PER_WORLD_TILE } from '../core/world/models';
 import type { CaravanEvent } from '../core/sim/caravan';
 import type { ConvoyHandoff, WorldState } from '../core/state/world-state';
 import type { ConvoyFrame } from '../render/area/area-renderer';
+
+/** How far down the route to look for the re-cut line, metres. */
+const PRECUT_SEARCH_M = 160;
 
 /**
  * Drives the caravan through a convoy area. The world caravan is the one
@@ -20,6 +29,9 @@ import type { ConvoyFrame } from '../render/area/area-renderer';
  */
 export class ConvoyDriver {
   private speed = 0;
+  /** Units rolled by the last `step`, and the clock hours that road costs. */
+  private rolled = 0;
+  private cross: { route: readonly number[]; from: number; at: number | null } | null = null;
 
   constructor(
     private readonly world: () => WorldState,
@@ -30,11 +42,22 @@ export class ConvoyDriver {
   step(dt: number): CaravanEvent[] {
     const world = this.world();
     this.speed = 0;
+    this.rolled = 0;
     if (!(dt > 0) || !isRolling(world.caravan)) return world.takeCaravanEvents();
     const metres = convoyMps(world.caravanSpeedAt()) * dt;
     const units = world.rollConvoy(metresToTiles(metres));
     this.speed = units > 0 ? metres / dt : 0;
+    this.rolled = units;
     return world.takeCaravanEvents();
+  }
+
+  /**
+   * Game hours the clock owes for the road the last `step` rolled, or null
+   * when the wagon did not move (the area clock runs then).
+   */
+  clockHours(): number | null {
+    if (!(this.rolled > 0)) return null;
+    return convoyClockHours(this.rolled, this.world().caravanSpeedAt());
   }
 
   /** Wagon pose in area metres for the renderer. */
@@ -44,17 +67,72 @@ export class ConvoyDriver {
     return { x: at.x, z: at.z, yaw: mapYawToArea(caravan.yaw), speed: this.speed };
   }
 
-  /** The wagon is close to the playable edge and the route goes on. */
-  needsRecut(): boolean {
-    if (!hasRoute(this.world().caravan)) return false;
-    return convoyNeedsRecut(this.frame(), this.handoff.bounds);
+  /** Metres from the wagon to this window's nearest edge. */
+  room(): number {
+    return convoyRoom(this.frame(), this.handoff.bounds);
   }
 
-  /** Where the next window should centre: ahead of the wagon along the route. */
+  /** What the re-cut machinery should do now. */
+  recutAction(prepared: boolean, swapping: boolean): RecutAction {
+    const caravan = this.world().caravan;
+    const cross = this.crossAlong();
+    return recutAction({
+      routed: hasRoute(caravan),
+      room: this.room(),
+      crossing:
+        cross === null ? Number.POSITIVE_INFINITY : (cross - caravan.along) * METERS_PER_WORLD_TILE,
+      prepared,
+      swapping,
+    });
+  }
+
+  /** The cut window still holds the wagon with room to spare. */
+  fits(handoff: ConvoyHandoff): boolean {
+    const at = tileToLocal(handoff.frame, this.world().caravan.x, this.world().caravan.y);
+    return preparedWindowFits(at, handoff.bounds);
+  }
+
+  /**
+   * Route distance where the wagon will cross the re-cut line of this window.
+   * Searched once per route and cached; a clear route is looked at again after
+   * the wagon has moved a good way down it.
+   */
+  private crossAlong(): number | null {
+    const caravan = this.world().caravan;
+    if (!hasRoute(caravan)) return null;
+    const cache = this.cross;
+    const stale =
+      !cache ||
+      cache.route !== caravan.route ||
+      caravan.along < cache.from ||
+      (cache.at === null && caravan.along > cache.from + metresToTiles(PRECUT_SEARCH_M / 3));
+    if (stale) {
+      this.cross = {
+        route: caravan.route,
+        from: caravan.along,
+        at: routeCrossing(
+          caravan.route,
+          caravan.along,
+          this.handoff.frame,
+          this.handoff.bounds,
+          metresToTiles(PRECUT_SEARCH_M),
+        ),
+      };
+    }
+    return this.cross?.at ?? null;
+  }
+
+  /**
+   * Where the next window should centre when it is swapped in at the re-cut
+   * line: the route point `CONVOY_LOOKAHEAD_M` past where the wagon crosses
+   * the line. Cutting for that point, not for where the wagon is now, is what
+   * lets the window be built early and still fit when the swap comes.
+   */
   recutCentre(): { x: number; y: number } {
     const caravan = this.world().caravan;
     if (!hasRoute(caravan)) return { x: caravan.x, y: caravan.y };
-    const ahead = Math.min(caravan.length, caravan.along + metresToTiles(CONVOY_LOOKAHEAD_M));
+    const cross = this.crossAlong() ?? caravan.along;
+    const ahead = Math.min(caravan.length, cross + metresToTiles(CONVOY_LOOKAHEAD_M));
     const at = pointAlong(caravan.route, ahead);
     return { x: at.x, y: at.y };
   }

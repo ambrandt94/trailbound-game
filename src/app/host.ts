@@ -34,6 +34,10 @@ export interface GameHost {
   /** Hide the map and area canvases while the character creator is open. */
   setCreatorVisible(visible: boolean): void;
   setFade(opacity: number): void;
+  /** Copy the last 3D frame over the canvas so a window swap can hide behind it. */
+  holdFrame(): boolean;
+  /** Dissolve the held frame away over `seconds` (0 drops it at once). */
+  releaseFrame(seconds: number): void;
   paintMap(state: MapDrawState): void;
   syncChunks(chunks: ChunkData[]): void;
   enterArea(): void;

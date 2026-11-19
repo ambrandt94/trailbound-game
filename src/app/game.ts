@@ -36,6 +36,7 @@ import { Keyboard, type AreaActionSnapshot } from '../input/keyboard';
 import { attachTouchControls } from '../input/touch/index';
 import { loadTownFixture, townFixtureId } from '../render/area/area-from-export';
 import { AreaRenderer } from '../render/area/area-renderer';
+import { FrameHold } from '../render/area/frame-hold';
 import { clearAreaLeaveOverlay } from '../render/area/leave-overlay';
 import { MapRenderer, type MapDrawState } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
@@ -126,6 +127,7 @@ export class Game implements GameHost {
   private areaScene: AreaView | null = null;
   private mode: AppMode = 'boot';
   private fadeOpacity = 0;
+  private readonly frameHold: FrameHold;
   private running = false;
   private raf = 0;
   private saveCount = 0;
@@ -146,6 +148,7 @@ export class Game implements GameHost {
     this.clockLoop = new FrameClock(options.clock);
     this.world = createWorld({ id: 'waystead', name: 'Waystead', x: 8, y: 8 });
     this.mapRenderer = new MapRenderer(options.mapCanvas);
+    this.frameHold = new FrameHold(options.areaCanvas);
     settings.value = normalizeSettings(options.settings.load());
     this.minigames = new MinigameHost({
       root: options.root,
@@ -343,15 +346,26 @@ export class Game implements GameHost {
   }
 
   /**
-   * Re-cut the convoy window around `centre` (fine tiles) and boot a fresh
-   * renderer for it. The caller swaps it in under a short dip.
+   * Cut the next convoy window now, without making it the current place, so
+   * the swap later only has to open it. Null with no window ahead.
+   */
+  prepareConvoyRecut(centre: { x: number; y: number }): AreaHandoff | null {
+    const handoff = this.world.buildConvoyHandoff(centre.x, centre.y, false);
+    return handoff?.convoy ? handoff : null;
+  }
+
+  /**
+   * Boot a renderer for the convoy window ahead. `source` is a window cut
+   * earlier by `prepareConvoyRecut`, or a centre (fine tiles) to cut now.
+   * The caller swaps the result in behind a held still of the old frame.
    */
   async recutConvoy(
-    centre: { x: number; y: number },
+    source: { x: number; y: number } | AreaHandoff,
     entry: (pos: ConvoyDriver) => AreaEntry,
   ): Promise<{ renderer: AreaRenderer; driver: ConvoyDriver; handoff: AreaHandoff } | null> {
-    const handoff = this.world.buildConvoyHandoff(centre.x, centre.y);
+    const handoff = 'areaExport' in source ? source : this.prepareConvoyRecut(source);
     if (!handoff?.convoy) return null;
+    this.world.adoptConvoyHandoff(handoff.convoy);
     const driver = new ConvoyDriver(() => this.world, handoff.convoy);
     const renderer = this.makeRenderer(driver);
     try {
@@ -362,6 +376,17 @@ export class Game implements GameHost {
       return null;
     }
     return { renderer, driver, handoff };
+  }
+
+  /** Copy the last 3D frame over the canvas. See `FrameHold`. */
+  holdFrame(): boolean {
+    return this.frameHold.capture();
+  }
+
+  /** Dissolve the held frame away, or drop it at once with no time. */
+  releaseFrame(seconds: number): void {
+    if (seconds > 0) this.frameHold.release(seconds);
+    else this.frameHold.clear();
   }
 
   private makeRenderer(driver: ConvoyDriver | null): AreaRenderer {
