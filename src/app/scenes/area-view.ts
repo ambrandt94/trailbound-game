@@ -28,8 +28,8 @@ const CONTROLS =
   'WASD walk · Shift jog, hold to sprint · Ctrl sneak · Space jump · Alt roll · F use · Q/E orbit · Z/X pitch · V zoom · C overhead/3rd · wheel zoom. Walk off the edge to leave.';
 const CONVOY_CONTROLS = 'B ride the bench · H halt/resume · G rejoin the wagon';
 
-/** Black dip that hides a convoy re-cut, seconds each way. */
-export const RECUT_DIP_SEC = 0.22;
+/** The held still of the old window dissolves over the new one in this long. */
+export const RECUT_DISSOLVE_SEC = 0.3;
 /** Off the bench and this far from the wagon, leaving counts as stepping off. */
 const ABOARD_RADIUS_M = 6;
 
@@ -37,14 +37,22 @@ export class AreaView implements Scene {
   readonly id = 'area';
   private leaving = false;
   private hudKey = '';
-  private recut: { phase: 'out' | 'load' | 'in'; t: number } | null = null;
+  /** A window swap in flight: waiting for the next render to copy a still, or loading. */
+  private recut: { phase: 'snap' | 'load' } | null = null;
+  /** The next window, cut ahead of the swap. */
+  private prepared: AreaHandoff | null = null;
+  /** The cut found no window ahead (water, a settlement). Do not retry for this route. */
+  private noWindow = false;
+  /** Route the prepared window was cut for. A new route makes it stale. */
+  private preparedRoute: readonly number[] | null = null;
 
   handoff: AreaHandoff | null;
 
   constructor(
     private readonly host: GameHost & {
+      prepareConvoyRecut?: (centre: { x: number; y: number }) => AreaHandoff | null;
       recutConvoy?: (
-        centre: { x: number; y: number },
+        source: { x: number; y: number } | AreaHandoff,
         entry: (driver: ConvoyDriver) => AreaEntry,
       ) => Promise<{ renderer: AreaRenderer; driver: ConvoyDriver; handoff: AreaHandoff } | null>;
     },
@@ -115,14 +123,14 @@ export class AreaView implements Scene {
         games.tick(dt);
         if (kind === 'world' && wasPlaying && games.isPlaying()) {
           this.renderer.step(dt);
-          this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
+          this.advanceAreaClock(dt);
         }
       }
       return;
     }
     if (this.driver) this.stepConvoy(dt);
     this.renderer.step(dt);
-    this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
+    this.advanceAreaClock(dt);
     const action = areaEscapeAction({
       minigameOpen: false,
       settingsOpen: settingsOpen.value,
@@ -133,7 +141,7 @@ export class AreaView implements Scene {
       this.leave(exitFromCancel(0));
       return;
     }
-    if (this.driver?.needsRecut()) this.recut = { phase: 'out', t: 0 };
+    this.planRecut();
   }
 
   render(_alpha: number): void {
@@ -141,16 +149,21 @@ export class AreaView implements Scene {
     if (!this.renderer) return;
     const games = this.host.minigames;
     if (!games.isOpen() || games.kind === 'world') this.renderer.frame();
+    // Copy the still now, in the same task as the draw, while the buffer is readable.
+    const swap = this.recut?.phase === 'snap';
+    if (swap) this.host.holdFrame();
     const mix = settings.value;
     music.setVolume((mix.music / 100) * (mix.master / 100));
     music.setMuffle(this.renderer.indoors() ? 1 : 0);
     if (games.isOpen()) {
       hint.value = games.hint();
-      return;
+    } else {
+      const line = this.renderer.prompt();
+      const controls = this.driver ? `${CONVOY_CONTROLS}  ·  ${CONTROLS}` : CONTROLS;
+      hint.value = line ? `${line}  ·  ${controls}` : controls;
     }
-    const line = this.renderer.prompt();
-    const controls = this.driver ? `${CONVOY_CONTROLS}  ·  ${CONTROLS}` : CONTROLS;
-    hint.value = line ? `${line}  ·  ${controls}` : controls;
+    // Last: opening the next window tears this renderer down.
+    if (swap) this.beginSwap();
   }
 
   exit(): void {
@@ -189,32 +202,51 @@ export class AreaView implements Scene {
   }
 
   /**
-   * Dip, re-cut the window ahead of the wagon, dip back. The old renderer is
-   * disposed before the new one opens the same canvas.
+   * The 3D clock. While the wagon rolls it pays by road, the same TU per unit
+   * as the map; standing still it runs at the area rate.
    */
+  private advanceAreaClock(dt: number): void {
+    const hours = this.driver?.clockHours() ?? null;
+    if (hours !== null) this.host.world.advanceClock(1, hours);
+    else {
+      this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
+    }
+  }
+
+  /** Cut the next window early, and start the swap once the wagon reaches the line. */
+  private planRecut(): void {
+    const driver = this.driver;
+    if (!driver) return;
+    if ((this.prepared || this.noWindow) && this.host.world.caravan.route !== this.preparedRoute) {
+      this.prepared = null;
+      this.noWindow = false;
+    }
+    const action = driver.recutAction(this.prepared !== null || this.noWindow, false);
+    if (action === 'prepare') {
+      const cut = this.host.prepareConvoyRecut?.(driver.recutCentre()) ?? null;
+      this.prepared = cut;
+      this.noWindow = cut === null;
+      this.preparedRoute = this.host.world.caravan.route;
+    } else if (action === 'swap') {
+      this.recut = { phase: 'snap' };
+    }
+  }
+
+  /** The world keeps rolling while the next window opens: no pause, no jump in the clock. */
   private stepRecut(dt: number): void {
-    const recut = this.recut;
-    if (!recut) return;
-    recut.t += Math.max(0, dt);
-    if (recut.phase === 'out') {
-      this.host.setFade(Math.min(1, recut.t / RECUT_DIP_SEC));
-      if (recut.t < RECUT_DIP_SEC) return;
-      recut.phase = 'load';
-      recut.t = 0;
-      void this.loadRecut().finally(() => {
-        if (this.recut) this.recut = { phase: 'in', t: 0 };
-      });
-      return;
+    const driver = this.driver;
+    if (!driver) return;
+    for (const event of driver.step(dt)) {
+      if (event.type === 'stopped') this.host.toast(`The caravan halts at ${event.name}.`);
+      else this.host.toast(`The caravan reaches ${event.name ?? 'its destination'}.`);
     }
-    if (recut.phase === 'load') {
-      this.host.setFade(1);
-      return;
-    }
-    this.host.setFade(1 - Math.min(1, recut.t / RECUT_DIP_SEC));
-    if (recut.t >= RECUT_DIP_SEC) {
-      this.host.setFade(0);
-      this.recut = null;
-    }
+    this.advanceAreaClock(dt);
+  }
+
+  /** The still is held; open the next window behind it. */
+  private beginSwap(): void {
+    this.recut = { phase: 'load' };
+    void this.loadRecut();
   }
 
   private async loadRecut(): Promise<void> {
@@ -224,10 +256,19 @@ export class AreaView implements Scene {
     const status = old.convoyStatus();
     const hero = status ? driver.toMap(status.x, status.z, status.yaw) : null;
     const mode = status?.mode ?? 'walk';
-    const centre = driver.recutCentre();
+    const ready = this.prepared;
+    const usable =
+      ready?.convoy &&
+      this.host.world.caravan.route === this.preparedRoute &&
+      driver.fits(ready.convoy)
+        ? ready
+        : null;
+    this.prepared = null;
+    this.noWindow = false;
+    const source = usable ?? driver.recutCentre();
     old.dispose();
     this.renderer = null;
-    const next = await this.host.recutConvoy(centre, (fresh) => {
+    const next = await this.host.recutConvoy(source, (fresh) => {
       if (mode !== 'free' || !hero || !status) return { convoyMode: mode };
       const pos = fresh.toLocal(hero.x, hero.y);
       return fresh.inside(pos.x, pos.z, 3)
@@ -236,12 +277,13 @@ export class AreaView implements Scene {
     });
     if (this.leaving) {
       next?.renderer.dispose();
+      this.host.releaseFrame(0);
       return;
     }
     if (!next) {
       // No window ahead (water, a settlement). Hand back to the map beside the wagons.
       this.recut = null;
-      this.host.setFade(0);
+      this.host.releaseFrame(0);
       this.leave(exitFromCancel(0), {
         x: this.host.world.caravan.x,
         y: this.host.world.caravan.y,
@@ -253,6 +295,8 @@ export class AreaView implements Scene {
     this.renderer = next.renderer;
     this.driver = next.driver;
     this.handoff = next.handoff;
+    this.recut = null;
+    this.host.releaseFrame(RECUT_DISSOLVE_SEC);
   }
 
   private publishTravel(): void {

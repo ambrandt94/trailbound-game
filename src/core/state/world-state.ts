@@ -4,6 +4,7 @@ import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import type { CfPin, PackedWorld, PlayerSave, PartySave } from '../save/types';
 import { GAME_HOURS_PER_REAL_SECOND, START_HOUR } from '../sim/clock';
+import { mapTimeRuns } from '../sim/map-pace';
 import {
   applyOvernight,
   applyWagonAction,
@@ -29,7 +30,6 @@ import {
   hasRoute,
   isRolling,
   loadCaravan,
-  mapClockRuns,
   setRoute,
   type CaravanEvent,
   type CaravanPlace,
@@ -117,6 +117,8 @@ export interface AreaHandoff {
 export interface ConvoyHandoff {
   frame: AreaFrame;
   bounds: ConvoyBounds;
+  /** The place the window stands for. `adoptConvoyHandoff` makes it the current one. */
+  town: { id: string; name: string; x: number; y: number };
 }
 
 export type WorldEvent =
@@ -210,13 +212,31 @@ export class WorldState {
   }
 
   /**
-   * Charge a walk on the clock and step travellers by that same game time.
-   * Distance is metres; pace is metres per game second.
+   * Idle map frame under the pace settings. With "time moves only when I
+   * move" on this does nothing; off, a rolling caravan runs the clock at the
+   * zoomed map rate times the map speed step. Returns whether time ran.
    */
-  advanceTravel(distanceMeters: number, paceMps: number): number {
+  stepMapIdle(
+    realSeconds: number,
+    hoursPerRealSec: number,
+    speed: number,
+    onlyWhenMoving: boolean,
+  ) {
+    if (!this.mapClockRuns(false, onlyWhenMoving)) return false;
+    this.stepIdle(realSeconds, hoursPerRealSec * Math.max(1, speed));
+    return true;
+  }
+
+  /**
+   * Charge a walk on the clock and step travellers by that same game time.
+   * Distance is metres; pace is metres per game second. `speed` is the map
+   * speed step: a faster walk covers more game time per frame, so the sim
+   * budget grows with it instead of cutting the walk short.
+   */
+  advanceTravel(distanceMeters: number, paceMps: number, speed = 1): number {
     const hours = travelGameHours(distanceMeters, paceMps);
     if (hours <= 0) return 0;
-    const budgetHours = TRAVEL_SIM_BUDGET_SEC * GAME_HOURS_PER_REAL_SEC;
+    const budgetHours = TRAVEL_SIM_BUDGET_SEC * Math.max(1, speed) * GAME_HOURS_PER_REAL_SEC;
     const applied = Math.min(hours, budgetHours);
     let simSec = applied / GAME_HOURS_PER_REAL_SEC;
     while (simSec > 1e-8) {
@@ -278,15 +298,13 @@ export class WorldState {
    * the route), with the route painted through it as a track. Not cached:
    * the window moves with the wagons. Null in a settlement or on water.
    */
-  buildConvoyHandoff(x = this.caravan.x, y = this.caravan.y): AreaHandoff | null {
+  buildConvoyHandoff(x = this.caravan.x, y = this.caravan.y, adopt = true): AreaHandoff | null {
     const world = this.data;
     if (!world || !hasRoute(this.caravan)) return null;
     const resolved = resolveConvoyArea(world, x, y);
     if (!resolved) return null;
-    this.entryPose = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
-    this.footprint = null;
     const node = resolved.node;
-    this.town = { id: node.id, name: node.name, x: node.cx, y: node.cy };
+    const town = { id: node.id, name: node.name, x: node.cx, y: node.cy };
     const areaExport = buildAreaExport(world, node, {
       timeOfDayHours: this.clockHours,
       trail: this.caravan.route,
@@ -297,16 +315,29 @@ export class WorldState {
     };
     const min = tileToLocal(frame, resolved.minX, resolved.minY);
     const max = tileToLocal(frame, resolved.maxX + 1, resolved.maxY + 1);
-    return {
+    const handoff: AreaHandoff = {
       areaExport,
       entry: { placeId: node.id, placeName: node.name, tier: tierForKind(node.kind) },
-      convoy: { frame, bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z } },
+      convoy: { frame, bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z }, town },
     };
+    if (adopt && handoff.convoy) this.adoptConvoyHandoff(handoff.convoy);
+    return handoff;
+  }
+
+  /**
+   * Make a convoy window the current place. A window cut ahead of time
+   * (`adopt` false) must not move the town or exit pose while the old window
+   * is still on screen; the swap adopts it.
+   */
+  adoptConvoyHandoff(convoy: ConvoyHandoff): void {
+    this.entryPose = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
+    this.footprint = null;
+    this.town = { ...convoy.town };
   }
 
   /** True when the map clock should run this frame. See `mapClockRuns`. */
-  mapClockRuns(heroMoving: boolean): boolean {
-    return mapClockRuns(this.caravan, heroMoving);
+  mapClockRuns(heroMoving: boolean, onlyWhenMoving = false): boolean {
+    return mapTimeRuns(this.caravan, heroMoving, onlyWhenMoving);
   }
 
   /** Roll the caravan by the metres the 3D convoy wagon covered. */

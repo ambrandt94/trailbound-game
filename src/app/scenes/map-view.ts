@@ -33,6 +33,7 @@ import {
   placeKind,
   placeName,
   placeTier,
+  settings,
   standLine,
   travelHud,
 } from '../../ui/state';
@@ -90,6 +91,9 @@ export class MapView implements Scene {
       this.host.keyboard.isDown('ShiftLeft') || this.host.keyboard.isDown('ShiftRight');
     const move = this.host.keyboard.mapAxis();
     const motionScale = this.camera.scale / this.camera.step;
+    // Map-only pace settings. 3D areas never read these.
+    const mapSpeed = settings.value.mapSpeed;
+    const onlyWhenMoving = settings.value.timeOnlyWhenMoving;
     const rate = mapClockHoursPerRealSec(motionScale);
     if (motionScale < SETTLEMENT_STOP_SCALE) this.settlementHold = null;
     this.flushClicks();
@@ -97,7 +101,7 @@ export class MapView implements Scene {
     if ((move.x !== 0 || move.y !== 0) && world.data && !this.settlementHold) {
       this.camera.follow = true;
       const speed = travelSpeedTilesPerSec('overworld', sprint, motionScale);
-      const dist = speed * dt;
+      const dist = speed * mapSpeed * dt;
       const len = Math.hypot(move.x, move.y);
       const step = clampStepToSettlement(
         world.data,
@@ -110,14 +114,19 @@ export class MapView implements Scene {
       world.moveHero(step.dx, step.dy);
       const travelled = Math.hypot(step.dx, step.dy);
       this.walking = travelled > 0;
-      world.advanceTravel(travelled * METERS_PER_WORLD_TILE, travelChargePaceMps(0, sprint));
+      world.advanceTravel(
+        travelled * METERS_PER_WORLD_TILE,
+        travelChargePaceMps(0, sprint),
+        mapSpeed,
+      );
       if (step.holdId) this.settlementHold = step.holdId;
     } else {
       if (move.x === 0 && move.y === 0) this.settlementHold = null;
       this.walking = false;
-      // Time only moves while something travels: the rolling caravan here,
-      // or the hero's own walk above (charged by distance).
-      if (world.mapClockRuns(false)) world.stepIdle(dt, rate);
+      // Time only moves while something travels. With "time moves only when I
+      // move" on, that is the hero's own walk above (charged by distance) and
+      // nothing here. Off, the rolling caravan runs the clock by itself.
+      world.stepMapIdle(dt, rate, mapSpeed, onlyWhenMoving);
     }
     if (this.host.keyboard.consumePress('Equal') || this.host.keyboard.consumePress('NumpadAdd')) {
       this.zoom(1.12);
@@ -243,7 +252,7 @@ export class MapView implements Scene {
   private publishTravel(): void {
     const world = this.host.world;
     const hud = travelHudFor(world, {
-      clockPaused: !world.mapClockRuns(this.walking),
+      clockPaused: !world.mapClockRuns(this.walking, settings.value.timeOnlyWhenMoving),
       view: 'map',
       convoy: null,
     });

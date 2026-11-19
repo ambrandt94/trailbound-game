@@ -1,3 +1,9 @@
+import {
+  DEFAULT_MAP_SPEED,
+  DEFAULT_TIME_ONLY_WHEN_MOVING,
+  normalizeMapSpeed,
+  type MapSpeed,
+} from '../sim/map-pace';
 import { DEFAULT_AREA_LOOK, normalizeAreaLook, type AreaLook } from './area-look';
 
 export type MapSkinId = 'classic' | 'trailbound48';
@@ -14,6 +20,10 @@ export interface GameSettings {
    * Otherwise the shared clock drives sun, sky, and fog.
    */
   lockTimeOfDay: boolean;
+  /** Map only: the clock and caravan wait until the hero moves. Default on. */
+  timeOnlyWhenMoving: boolean;
+  /** Map only: 1x/2x/4x/8x on the hero, caravan, other movers, and the clock. 3D stays 1x. */
+  mapSpeed: MapSpeed;
   /** 3D area look, camera, and controller feel. Lives with the other preferences. */
   look: AreaLook;
 }
@@ -26,6 +36,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
   muteVoices: false,
   mapSkin: 'classic',
   lockTimeOfDay: false,
+  timeOnlyWhenMoving: DEFAULT_TIME_ONLY_WHEN_MOVING,
+  mapSpeed: DEFAULT_MAP_SPEED,
   look: DEFAULT_AREA_LOOK,
 };
 
@@ -49,6 +61,11 @@ export function normalizeSettings(value: unknown): GameSettings {
       typeof record.muteVoices === 'boolean' ? record.muteVoices : DEFAULT_SETTINGS.muteVoices,
     mapSkin: record.mapSkin === 'trailbound48' ? 'trailbound48' : 'classic',
     lockTimeOfDay: record.lockTimeOfDay === true,
+    timeOnlyWhenMoving:
+      typeof record.timeOnlyWhenMoving === 'boolean'
+        ? record.timeOnlyWhenMoving
+        : DEFAULT_SETTINGS.timeOnlyWhenMoving,
+    mapSpeed: normalizeMapSpeed(record.mapSpeed),
     look: normalizeAreaLook(record.look),
   };
 }

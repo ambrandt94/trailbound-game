@@ -1,3 +1,4 @@
+import { caravanStatus } from '../core/sim/map-pace';
 import { CreatorScreen } from './creator';
 import { skinText } from './glyphs';
 import { SettingsPanel } from './area-settings';
@@ -170,7 +171,7 @@ function TravelPanel() {
   if (!t) return null;
   const pct = Math.max(0, Math.min(100, (t.todayUnits / Math.max(1, t.goalUnits)) * 100));
   const roleLabel = t.role === 'passenger' ? 'Passenger' : t.role === 'solo' ? 'Solo' : 'Leader';
-  const status = !t.hasRoute ? 'No route' : t.halted ? 'Halted' : 'Rolling';
+  const status = caravanStatus(t);
   const inArea = t.view === 'area';
   const convoy = t.convoy;
   return (
