@@ -1,7 +1,9 @@
 import {
   DEFAULT_MAP_SPEED,
+  DEFAULT_ON_FOOT_SPEED,
   DEFAULT_TIME_ONLY_WHEN_MOVING,
   normalizeMapSpeed,
+  normalizeOnFootSpeed,
   type MapSpeed,
 } from '../sim/map-pace';
 import { DEFAULT_AREA_LOOK, normalizeAreaLook, type AreaLook } from './area-look';
@@ -45,6 +47,8 @@ export interface GameSettings {
   timeOnlyWhenMoving: boolean;
   /** Map only: 1x/2x/4x/8x on the hero, caravan, other movers, and the clock. 3D stays 1x. */
   mapSpeed: MapSpeed;
+  /** Map only: hero's on-foot pace as a multiple of the wagon's map pace, 1.0–2.0. */
+  onFootSpeed: number;
   /** 3D area look, camera, and controller feel. Lives with the other preferences. */
   look: AreaLook;
   /** Collapsible HUD panels. */
@@ -61,6 +65,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   lockTimeOfDay: false,
   timeOnlyWhenMoving: DEFAULT_TIME_ONLY_WHEN_MOVING,
   mapSpeed: DEFAULT_MAP_SPEED,
+  onFootSpeed: DEFAULT_ON_FOOT_SPEED,
   look: DEFAULT_AREA_LOOK,
   hud: DEFAULT_HUD_PREFS,
 };
@@ -90,6 +95,7 @@ export function normalizeSettings(value: unknown): GameSettings {
         ? record.timeOnlyWhenMoving
         : DEFAULT_SETTINGS.timeOnlyWhenMoving,
     mapSpeed: normalizeMapSpeed(record.mapSpeed),
+    onFootSpeed: normalizeOnFootSpeed(record.onFootSpeed),
     look: normalizeAreaLook(record.look),
     hud: normalizeHudPrefs(record.hud),
   };

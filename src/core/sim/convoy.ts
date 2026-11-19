@@ -49,6 +49,19 @@ export const CONVOY_RECUT_EDGE_M = 16;
  * the build is done before the wagon needs it. At 5 m/s that is about 4 s.
  */
 export const CONVOY_PRECUT_LEAD_M = 20;
+/**
+ * Zones are instanced blocks. With this off (the default) the wagon does not
+ * stream a next window ahead of itself: it rolls off the edge of the zone and
+ * the hero follows it, or returns to the map. Turn it on to bring back the
+ * cut-ahead-and-swap behaviour (`recutAction`).
+ */
+export const CONVOY_STREAM_RECUT = false;
+/** The wagon has left the zone once it is this far past the playable edge, metres. */
+export const CONVOY_GONE_M = 6;
+/** The hero's auto-walk beside the wagon stops this far inside the zone edge: they stay while the wagon rolls on. */
+export const CONVOY_EDGE_HOLD_M = 2.5;
+/** A zone hop centres the new zone this far toward the wagon from the exit point, at most. */
+export const CONVOY_HOP_SHIFT_M = 34;
 /** A re-cut centres the new window this far ahead of the wagon along the route. */
 export const CONVOY_LOOKAHEAD_M = 26;
 /** The bench toggle only seats a hero this close to the wagon; farther, it walks them back. */
@@ -71,6 +84,20 @@ export interface ConvoyPose {
 export function convoyMps(speedMod: number): number {
   const mod = Number.isFinite(speedMod) && speedMod > 0 ? speedMod : 1;
   return CONVOY_MPS * mod;
+}
+
+/**
+ * Metres the wagon rolls in `dt` real seconds. It rolls whenever a route is
+ * active and not halted, with no input needed, and stands still when paused.
+ */
+export function convoyRollMetres(input: {
+  rolling: boolean;
+  paused: boolean;
+  speedMod: number;
+  dt: number;
+}): number {
+  if (!input.rolling || input.paused || !(input.dt > 0)) return 0;
+  return convoyMps(input.speedMod) * input.dt;
 }
 
 /**
@@ -341,4 +368,30 @@ export function preparedWindowFits(
   margin = CONVOY_RECUT_EDGE_M + 4,
 ): boolean {
   return convoyRoom(wagon, bounds) >= margin;
+}
+
+/**
+ * True once the wagon has rolled off the zone: past the playable edge by
+ * `CONVOY_GONE_M`. `room` is `convoyRoom`, negative outside the zone.
+ */
+export function convoyLeftZone(room: number): boolean {
+  return room < -CONVOY_GONE_M;
+}
+
+/**
+ * Where to cut the adjacent zone when the hero walks off the edge after the
+ * wagon has rolled on: the exit point, nudged toward the wagon (half the gap,
+ * at most `CONVOY_HOP_SHIFT_M`) so a wagon just ahead lands in the new zone
+ * too, and the hero stays well inside it. Fine tiles in and out.
+ */
+export function zoneHopCentre(
+  exit: { x: number; y: number },
+  wagon: { x: number; y: number },
+): { x: number; y: number } {
+  const dx = wagon.x - exit.x;
+  const dy = wagon.y - exit.y;
+  const gap = Math.hypot(dx, dy);
+  if (!(gap > 1e-9)) return { x: exit.x, y: exit.y };
+  const shift = Math.min(metresToTiles(CONVOY_HOP_SHIFT_M), gap / 2);
+  return { x: exit.x + (dx / gap) * shift, y: exit.y + (dy / gap) * shift };
 }

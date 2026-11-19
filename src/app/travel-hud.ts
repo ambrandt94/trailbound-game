@@ -57,7 +57,9 @@ export function travelHudKey(hud: TravelHud): string {
     hud.speed.toFixed(2),
     hud.clockPaused,
     hud.view,
-    hud.convoy ? `${hud.convoy.mode}:${hud.convoy.leash}:${Math.round(hud.convoy.dist)}` : '-',
+    hud.convoy
+      ? `${hud.convoy.mode}:${hud.convoy.leash}:${Math.round(hud.convoy.dist)}:${hud.convoy.gone === true}`
+      : '-',
   ].join('|');
 }
 

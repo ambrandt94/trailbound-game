@@ -100,6 +100,8 @@ export interface ConvoyHud {
   leash: 'ok' | 'hint' | 'pull';
   /** Hero to the lead wagon, metres. */
   dist: number;
+  /** The wagon rolled off this zone. Follow it or return to the map. */
+  gone?: boolean;
 }
 export const travelHud = signal<TravelHud | null>(null);
 /** Registered minigames, filled by the app so settings can launch them. */

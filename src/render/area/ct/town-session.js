@@ -24,11 +24,13 @@ import {
   convoyWagonMounted,
   convoyWagonPose,
   driveConvoyWagon,
+  hideConvoyWagon,
   mountPartyWagon,
   tickPartyWagon,
 } from '../party-wagon.ts';
 import {
   CONVOY_BENCH,
+  CONVOY_EDGE_HOLD_M,
   LEASH_HINT_M,
   convoyBench,
   convoySlot,
@@ -645,6 +647,20 @@ export async function createTownSession(canvas, hooks) {
   /* Convoy: the party wagon rolls along the caravan route and the hero walks
      beside it, rides the bench, or walks free on a soft leash. */
   let convoyFrame = null;
+  /* The wagon rolled off this zone. Hidden; the hero is free and nothing pulls them back. */
+  let convoyGone = false;
+  function readConvoy() {
+    convoyFrame = hooks.getConvoy ? hooks.getConvoy() : null;
+    if (convoyFrame && convoyFrame.gone) {
+      if (!convoyGone) {
+        convoyGone = true;
+        cv.mode = 'free';
+        cv.auto = null;
+        hideConvoyWagon();
+      }
+      convoyFrame = null;
+    }
+  }
   const cv = { mode: 'walk', idle: 0, dist: 0, slotDist: 0, bench: false, rejoin: false, leash: 'ok', auto: null };
   function convoyPose() {
     if (!convoyFrame || !convoyWagonMounted()) return null;
@@ -704,11 +720,25 @@ export async function createTownSession(canvas, hooks) {
       return true;
     }
     if (next === 'walk') {
-      const want = followVelocity(p, wagon);
+      const want = holdAtEdge(p, followVelocity(p, wagon));
       const stick = stickFor(want.vx, want.vz, P.camYaw);
       cv.auto = stick.speed > 0 ? stick : { ix: 0, iz: 0, speed: 0 };
     }
     return false;
+  }
+  /* Auto-walk never carries the hero off the zone: they hold at the edge while the wagon rolls on. */
+  function holdAtEdge(p, want) {
+    const edge = convoyFrame && convoyFrame.edge;
+    if (!edge) return want;
+    const lo = { x: edge.minX, z: edge.minZ };
+    const hi = { x: edge.maxX, z: edge.maxZ };
+    const m = CONVOY_EDGE_HOLD_M;
+    let { vx, vz } = want;
+    if (p.x < lo.x + m && vx < 0) vx = 0;
+    if (p.x > hi.x - m && vx > 0) vx = 0;
+    if (p.z < lo.z + m && vz < 0) vz = 0;
+    if (p.z > hi.z - m && vz > 0) vz = 0;
+    return { ...want, vx, vz };
   }
   function convoyLeash() {
     if (!convoyFrame) return 'ok';
@@ -1302,10 +1332,11 @@ export async function createTownSession(canvas, hooks) {
       }
       if (entry) applyEntry(entry);
       const spawn = window.TBArea && TBArea.spawn ? TBArea.spawn() : { x: PLS[0].x, z: PLS[0].z, yaw: PLS[0].yaw };
-      convoyFrame = hooks.getConvoy ? hooks.getConvoy() : null;
+      const first = hooks.getConvoy ? hooks.getConvoy() : null;
+      convoyFrame = first;
       try {
         await mountPartyWagon({
-          pose: convoyFrame ? { x: convoyFrame.x, z: convoyFrame.z, yaw: convoyFrame.yaw } : null,
+          pose: first ? { x: first.x, z: first.z, yaw: first.yaw } : null,
           scene,
           blocks: BX,
           things: TH,
@@ -1320,7 +1351,20 @@ export async function createTownSession(canvas, hooks) {
         console.warn('party wagon', error);
       }
       mountMinigameSigns();
-      if (convoyFrame && convoyWagonMounted()) {
+      if (first && first.gone && convoyWagonMounted()) {
+        // The wagon is already past this zone's edge: it is not here.
+        readConvoy();
+        if (entry && entry.pos && typeof entry.pos === 'object') {
+          const p = PLS[0];
+          p.x = entry.pos.x;
+          p.z = entry.pos.z;
+          p.yaw = typeof entry.yaw === 'number' ? entry.yaw : p.yaw;
+          p.y = gAt(p.x, p.z, 2);
+          p.vx = p.vy = p.vz = 0;
+          p.g = true;
+          p.snap = true;
+        }
+      } else if (convoyFrame && convoyWagonMounted()) {
         const p = PLS[0];
         const wagon = { x: convoyFrame.x, z: convoyFrame.z, yaw: convoyFrame.yaw, speed: 0 };
         const start = entry && entry.pos && typeof entry.pos === 'object' ? entry.pos : convoySlot(wagon);
@@ -1354,7 +1398,7 @@ export async function createTownSession(canvas, hooks) {
       }
       applyPad(PLS[0].i, actions.p1 || blankActions().p1);
       if (NP > 1) applyPad(PLS[1].i, actions.p2 || blankActions().p2);
-      convoyFrame = hooks.getConvoy ? hooks.getConvoy() : null;
+      readConvoy();
       if (convoyFrame && convoyWagonMounted()) {
         driveConvoyWagon(convoyFrame, (x, z) => (TBArea.groundY ? TBArea.groundY(x, z) : 0), dt);
       }
@@ -1448,11 +1492,16 @@ export async function createTownSession(canvas, hooks) {
       return cs.d;
     },
     convoyStatus() {
+      if (convoyGone && convoyWagonMounted()) {
+        const p = PLS[0];
+        return { mode: 'free', leash: 'ok', dist: 0, x: p.x, z: p.z, yaw: p.yaw, gone: true };
+      }
       if (!convoyFrame || !convoyWagonMounted()) return null;
       const p = PLS[0];
       return { mode: cv.mode, leash: convoyLeash(), dist: cv.dist, x: p.x, z: p.z, yaw: p.yaw };
     },
     convoyCommand(command) {
+      if (convoyGone) return;
       if (command === 'bench') cv.bench = true;
       else if (command === 'rejoin') cv.rejoin = true;
     },

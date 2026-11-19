@@ -154,6 +154,23 @@ export function convoyWagonMounted(): boolean {
   return convoy !== null;
 }
 
+/**
+ * The convoy wagon has rolled off the zone: hide it, and take its collision
+ * boxes and F prompt out of play. The rig stays so the session can tell.
+ */
+export function hideConvoyWagon(): void {
+  const rig = convoy;
+  if (!rig || !rig.group.visible) return;
+  rig.group.visible = false;
+  const gone = { x: 1e9, z: 1e9, w: 0, d: 0, h: -1e3, y0: -1e3 };
+  Object.assign(rig.wagonBlock, gone);
+  if (rig.oxBlock) Object.assign(rig.oxBlock, gone);
+  rig.thing.x = 1e9;
+  rig.thing.z = 1e9;
+  const posted = globalThis as { __tbWagon?: unknown };
+  posted.__tbWagon = undefined;
+}
+
 /** Smoothed wagon pose as drawn (yaw eases through route corners). */
 export function convoyWagonPose(): { x: number; z: number; yaw: number; y: number } | null {
   if (!convoy) return null;
