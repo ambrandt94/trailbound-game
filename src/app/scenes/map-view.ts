@@ -33,12 +33,16 @@ import {
   placeKind,
   placeName,
   placeTier,
+  prompt,
   settings,
   standLine,
   travelHud,
 } from '../../ui/state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
+
+const MAP_CONTROLS =
+  'WASD walk · Shift sprint · wheel or +/- zoom · drag to pan · click a town, site, or land to route · Shift+click adds a stop · Enter walks this ground in 3D';
 
 export class MapView implements Scene {
   readonly id = 'map';
@@ -201,9 +205,8 @@ export class MapView implements Scene {
       nearestLine.value = stand.nearestLine;
       clockRate.value = formatMapClockRate(this.camera.scale / this.camera.step);
       mapNight.value = dayLightAt(world.clockHours).mapNight;
-      hint.value = stand.blockedReason
-        ? 'Open water. Walk ashore to enter.'
-        : 'Enter walks this ground in 3D.';
+      hint.value = MAP_CONTROLS;
+      prompt.value = stand.blockedReason ? 'Open water. Walk ashore to enter.' : '';
     }
     this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(3);
     // Under the 3D view the dive holds the map still: keep its last bare frame.

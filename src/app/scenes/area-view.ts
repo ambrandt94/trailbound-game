@@ -5,7 +5,7 @@ import { areaHoursPerRealSec } from '../../core/sim/time';
 import type { AreaHandoff } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
 import { AreaRenderer, type ConvoyStatus } from '../../render/area/area-renderer';
-import { hint, settings, settingsOpen, travelHud } from '../../ui/state';
+import { hint, prompt, settings, settingsOpen, travelHud } from '../../ui/state';
 import { areaEscapeAction } from '../area-escape';
 import {
   controllerExitToMap,
@@ -156,17 +156,18 @@ export class AreaView implements Scene {
     music.setVolume((mix.music / 100) * (mix.master / 100));
     music.setMuffle(this.renderer.indoors() ? 1 : 0);
     if (games.isOpen()) {
-      hint.value = games.hint();
+      prompt.value = games.hint();
     } else {
-      const line = this.renderer.prompt();
-      const controls = this.driver ? `${CONVOY_CONTROLS}  ·  ${CONTROLS}` : CONTROLS;
-      hint.value = line ? `${line}  ·  ${controls}` : controls;
+      // The prompt is the one short line that stays on screen. The controls wait in the help panel.
+      prompt.value = this.renderer.prompt();
+      hint.value = this.driver ? `${CONVOY_CONTROLS}  ·  ${CONTROLS}` : CONTROLS;
     }
     // Last: opening the next window tears this renderer down.
     if (swap) this.beginSwap();
   }
 
   exit(): void {
+    prompt.value = '';
     this.renderer?.dispose();
     this.renderer = null;
     if (this.hudKey) travelHud.value = null;

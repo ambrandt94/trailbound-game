@@ -8,6 +8,27 @@ import { DEFAULT_AREA_LOOK, normalizeAreaLook, type AreaLook } from './area-look
 
 export type MapSkinId = 'classic' | 'trailbound48';
 
+/** Which collapsible HUD panels stay open between sessions. Everything starts closed. */
+export interface HudPrefs {
+  /** Caravan details card (route, pace, buttons). */
+  caravan: boolean;
+  /** Controls cheat-sheet. */
+  help: boolean;
+  /** Draw the serpentine day strip at 1 art pixel per CSS pixel instead of the auto size. */
+  daySmall: boolean;
+}
+
+export const DEFAULT_HUD_PREFS: HudPrefs = { caravan: false, help: false, daySmall: false };
+
+export function normalizeHudPrefs(value: unknown): HudPrefs {
+  const record = isRecord(value) ? value : {};
+  return {
+    caravan: typeof record.caravan === 'boolean' ? record.caravan : DEFAULT_HUD_PREFS.caravan,
+    help: typeof record.help === 'boolean' ? record.help : DEFAULT_HUD_PREFS.help,
+    daySmall: typeof record.daySmall === 'boolean' ? record.daySmall : DEFAULT_HUD_PREFS.daySmall,
+  };
+}
+
 export interface GameSettings {
   master: number;
   music: number;
@@ -26,6 +47,8 @@ export interface GameSettings {
   mapSpeed: MapSpeed;
   /** 3D area look, camera, and controller feel. Lives with the other preferences. */
   look: AreaLook;
+  /** Collapsible HUD panels. */
+  hud: HudPrefs;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -39,6 +62,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   timeOnlyWhenMoving: DEFAULT_TIME_ONLY_WHEN_MOVING,
   mapSpeed: DEFAULT_MAP_SPEED,
   look: DEFAULT_AREA_LOOK,
+  hud: DEFAULT_HUD_PREFS,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -67,5 +91,6 @@ export function normalizeSettings(value: unknown): GameSettings {
         : DEFAULT_SETTINGS.timeOnlyWhenMoving,
     mapSpeed: normalizeMapSpeed(record.mapSpeed),
     look: normalizeAreaLook(record.look),
+    hud: normalizeHudPrefs(record.hud),
   };
 }

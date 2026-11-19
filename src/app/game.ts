@@ -55,7 +55,6 @@ import {
   clockText,
   dayCycle,
   generating,
-  hint,
   nearTown,
   minigameCatalog,
   notice,
@@ -258,7 +257,7 @@ export class Game implements GameHost {
     const world = this.world;
     const at = this.diveTarget();
     if (world.data && !resolveAreaAt(world.data, at.x, at.y)) {
-      hint.value = 'Open water. Walk ashore to enter.';
+      this.toast('Open water. Walk ashore to enter.');
       return;
     }
     // The clock no longer rolls the caravan; a convoy area moves it by the wagon's metres.
@@ -533,7 +532,7 @@ export class Game implements GameHost {
     } catch (error) {
       this.world.areaHold = false;
       this.setLayers(1, 1);
-      hint.value = error instanceof Error ? error.message : 'Could not start the 3D view';
+      this.toast(error instanceof Error ? error.message : 'Could not start the 3D view');
     }
   }
 

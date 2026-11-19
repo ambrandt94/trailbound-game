@@ -1,0 +1,635 @@
+/*
+ * World-first HUD. Loaded after the menu skin, so it overrides the skin's big
+ * 32px panels with a compact layer on the 16px design grid: a small status chip,
+ * the day-cycle strip, one icon toolbar, and panels that stay closed until asked
+ * for. The world and the map stay visible. The full-screen menus (title, creator,
+ * settings from the title) keep the big skin.
+ */
+#ui {
+  --u: calc(1px * var(--tb-ui-scale));
+  --hud-fs: calc(16px * var(--tb-ui-scale));
+  --hud-lh: calc(20px * var(--tb-ui-scale));
+  --hud-panel-w: calc(268px * var(--tb-ui-scale));
+  --hud-pad: calc(8px * var(--tb-ui-scale));
+  --hud-tool: calc(28px * var(--tb-ui-scale));
+  --hud-glass: rgba(255, 241, 210, 0.84);
+  --hud-edge: rgba(122, 58, 38, 0.9);
+}
+
+@media (pointer: coarse) {
+  #ui {
+    --hud-tool: calc(32px * var(--tb-ui-scale));
+  }
+}
+
+/* The shared translucent plate. */
+#ui .hud-box {
+  box-sizing: border-box;
+  margin: 0;
+  padding: calc(var(--u) * 3) calc(var(--u) * 6);
+  color: var(--tb-ink);
+  background: var(--hud-glass);
+  border: calc(var(--u) * 2) solid var(--hud-edge);
+  border-image: none;
+  border-radius: 0;
+  font-size: var(--hud-fs);
+  line-height: var(--hud-lh);
+  pointer-events: auto;
+}
+
+/* Top row: status chip, day-cycle strip, toolbar. Three columns, middle is the strip. */
+#ui .hud-top {
+  position: absolute;
+  z-index: 2;
+  top: max(var(--hud-pad), env(safe-area-inset-top, 0px));
+  left: max(var(--hud-pad), env(safe-area-inset-left, 0px));
+  right: max(var(--hud-pad), env(safe-area-inset-right, 0px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: var(--hud-pad);
+  pointer-events: none;
+}
+
+#ui .hud-top > .dc-hud {
+  grid-column: 2;
+}
+
+#ui .hud-status {
+  grid-column: 1;
+  justify-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 4);
+  max-width: 100%;
+  min-width: 0;
+}
+
+#ui .hud-right {
+  grid-column: 3;
+  justify-self: end;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(var(--u) * 6);
+  max-width: 100%;
+  min-width: 0;
+  pointer-events: none;
+}
+
+/* Status chip. A button: click it to open the caravan card. */
+#ui .hud-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--u) * 2);
+  width: min(calc(var(--u) * 224), 100%);
+  min-width: calc(var(--u) * 150);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#ui .hud-chip:hover {
+  background: rgba(255, 241, 210, 0.96);
+}
+
+#ui .chip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--u) * 8);
+  font-variant-numeric: tabular-nums;
+}
+
+#ui .chip-state {
+  color: #8a3412;
+}
+
+#ui .chip-bar {
+  display: block;
+  height: calc(var(--u) * 4);
+  background: #2e1510;
+  overflow: hidden;
+}
+
+#ui .chip-fill {
+  display: block;
+  height: 100%;
+  background: #ffb030;
+}
+
+#ui .chip-sub {
+  display: block;
+  color: var(--tb-muted);
+  line-height: calc(var(--u) * 18);
+  overflow-wrap: anywhere;
+}
+
+#ui .hud-chip-btn {
+  display: inline-flex;
+  min-height: calc(var(--u) * 28);
+  align-items: center;
+  font-family: inherit;
+  color: var(--tb-cream);
+  background: #c65a24;
+  border-color: #8a3412;
+  cursor: pointer;
+}
+
+/* Icon toolbar. */
+#ui .hud-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 2);
+}
+
+#ui .tool-btn,
+#ui .card-x {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--hud-tool);
+  height: var(--hud-tool);
+  margin: 0;
+  padding: 0;
+  color: var(--tb-ink);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+#ui .card-x {
+  width: calc(var(--u) * 24);
+  height: calc(var(--u) * 24);
+}
+
+#ui .tool-btn:hover,
+#ui .card-x:hover,
+#ui .menu-item:hover {
+  color: var(--tb-cream);
+  background: var(--tb-leather-hot);
+}
+
+#ui .tool-btn[aria-pressed='true'] {
+  color: var(--tb-cream);
+  background: var(--tb-leather);
+}
+
+#ui .tool-btn:focus-visible,
+#ui .card-x:focus-visible,
+#ui .menu-item:focus-visible,
+#ui .hud-chip:focus-visible,
+#ui .hud-ghost:focus-visible {
+  outline: calc(var(--u) * 2) solid var(--tb-brass);
+  outline-offset: calc(var(--u) * -2);
+}
+
+#ui .hud-icon {
+  display: block;
+  width: calc(var(--u) * 16);
+  height: calc(var(--u) * 16);
+  image-rendering: pixelated;
+}
+
+/* Panels in the right slot: caravan card, more menu, wagon. One at a time. */
+#ui .hud-panel {
+  width: var(--hud-panel-w);
+  max-width: 100%;
+  max-height: calc(100vh - var(--hud-tool) * 2 - var(--hud-pad) * 4);
+  overflow: auto;
+}
+
+#ui .card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--u) * 6);
+  margin: 0 0 calc(var(--u) * 4);
+  color: var(--tb-leather);
+}
+
+#ui .hud-panel .travel-line {
+  margin: 0 0 calc(var(--u) * 2);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+#ui .hud-panel .travel-help,
+#ui .hud-panel .travel-scout {
+  color: var(--tb-muted);
+}
+
+#ui .hud-panel .travel-mode {
+  color: var(--tb-fit);
+}
+
+#ui .travel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 4);
+  margin-top: calc(var(--u) * 6);
+}
+
+#ui .hud-more {
+  display: grid;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 2);
+}
+
+#ui .menu-item {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  min-height: var(--hud-tool);
+  padding: 0 calc(var(--u) * 6);
+  color: var(--tb-ink);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-size: var(--hud-fs);
+  line-height: var(--hud-lh);
+  text-align: left;
+  cursor: pointer;
+}
+
+#ui .menu-item[aria-pressed='true'] {
+  background: rgba(122, 58, 38, 0.2);
+}
+
+#ui .menu-item.skin {
+  justify-content: space-between;
+  cursor: default;
+}
+
+#ui .menu-item.skin:hover {
+  color: var(--tb-ink);
+  background: transparent;
+}
+
+#ui .menu-item select {
+  min-height: calc(var(--u) * 24);
+  max-width: 100%;
+  padding: 0 calc(var(--u) * 4);
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border: calc(var(--u) * 2) solid var(--tb-wood);
+  border-radius: 0;
+  font: inherit;
+  font-size: var(--hud-fs);
+  line-height: var(--hud-lh);
+}
+
+/* Compact buttons inside HUD plates and the docked settings. */
+#ui .hud-box .action,
+#ui .settings-dock .action {
+  min-width: 0;
+  min-height: calc(var(--u) * 26);
+  padding: 0 calc(var(--u) * 8);
+  color: var(--tb-cream);
+  background: var(--tb-leather);
+  border: calc(var(--u) * 2) solid var(--tb-ink);
+  border-image: none;
+  border-radius: 0;
+  font-size: var(--hud-fs);
+  line-height: var(--hud-lh);
+}
+
+#ui .hud-box .action.secondary,
+#ui .settings-dock .action.secondary {
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border-color: var(--tb-leather);
+}
+
+#ui .hud-box .action:hover,
+#ui .settings-dock .action:hover {
+  color: var(--tb-cream);
+  background: var(--tb-leather-hot);
+  border-image: none;
+}
+
+#ui .hud-box .action:active,
+#ui .settings-dock .action:active {
+  background: var(--tb-leather-press);
+  border-image: none;
+}
+
+#ui .hud-box .action:disabled,
+#ui .settings-dock .action:disabled {
+  color: var(--tb-disabled-ink);
+  background: var(--tb-disabled);
+  border-color: var(--tb-wood);
+  border-image: none;
+  opacity: 0.8;
+}
+
+#ui .hud-box .action.rejoin,
+#ui .hud-box .action.rejoin-wagon {
+  color: var(--tb-cream);
+  background: #c65a24;
+  border-color: #8a3412;
+}
+
+#ui .hud-box .enter-place {
+  background: #c65a24;
+  border-color: #8a3412;
+}
+
+#ui .hud-box .enter-place:disabled {
+  background: var(--tb-disabled);
+  border-color: var(--tb-wood);
+}
+
+/* Wagon menu: a right-side panel under the toolbar, not a centred modal. */
+#ui .wagon-menu {
+  position: absolute;
+  z-index: 4;
+  top: calc(
+    max(var(--hud-pad), env(safe-area-inset-top, 0px)) + var(--hud-tool) + var(--hud-pad) * 1.5
+  );
+  right: max(var(--hud-pad), env(safe-area-inset-right, 0px));
+  left: auto;
+  transform: none;
+}
+
+#ui .wagon-rows {
+  display: grid;
+  gap: calc(var(--u) * 4);
+  margin: 0;
+}
+
+#ui .hud-box .wagon-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  min-height: calc(var(--u) * 40);
+  padding: calc(var(--u) * 2) calc(var(--u) * 8);
+  color: var(--tb-ink);
+  background: var(--tb-cream);
+  border-color: var(--tb-leather);
+  text-align: left;
+  white-space: normal;
+}
+
+#ui .hud-box .wagon-row:hover {
+  color: var(--tb-ink);
+  background: #fff8e6;
+  outline: calc(var(--u) * 2) solid var(--tb-brass);
+  outline-offset: calc(var(--u) * -4);
+}
+
+#ui .hud-box .wagon-row small {
+  margin: 0;
+  color: var(--tb-muted);
+  font-size: var(--hud-fs);
+  line-height: calc(var(--u) * 18);
+  text-align: left;
+}
+
+/* Bottom-left: transient and contextual lines, small, never the centre. */
+#ui .hud-foot {
+  position: absolute;
+  z-index: 2;
+  left: max(var(--hud-pad), env(safe-area-inset-left, 0px));
+  bottom: max(var(--hud-pad), env(safe-area-inset-bottom, 0px));
+  right: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 4);
+  width: auto;
+  max-width: min(calc(var(--u) * 460), calc(100% - var(--hud-pad) * 2));
+  overflow: visible;
+  pointer-events: none;
+}
+
+#ui .hud-box.hud-toast,
+#ui .hud-box.hud-prompt {
+  max-width: 100%;
+  width: auto;
+  background: rgba(255, 241, 210, 0.78);
+}
+
+#ui .hud-box.hud-prompt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ui .hud-box.hud-toast.ok {
+  color: var(--tb-fit);
+}
+
+#ui .hud-box.hud-toast.bad {
+  color: var(--tb-bad);
+}
+
+#ui .hud-box.hud-help {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 6);
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+#ui .hud-help p {
+  margin: 0;
+}
+
+#ui .hud-box.hud-warn {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  margin: 0;
+  color: #ffd27a;
+  background: rgba(46, 21, 16, 0.9);
+  border-color: #8a3412;
+}
+
+#ui .place-chip {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  max-width: 100%;
+  padding: calc(var(--u) * 3) calc(var(--u) * 4) calc(var(--u) * 3) calc(var(--u) * 8);
+}
+
+#ui .place-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#ui .place-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ui .place-tier {
+  color: var(--tb-muted);
+  line-height: calc(var(--u) * 16);
+}
+
+#ui .hud-box .enter-place {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: calc(var(--u) * 64);
+  min-height: calc(var(--u) * 32);
+  margin: 0;
+}
+
+/* Everything hidden (U): one faint eye to bring it back. */
+#ui .hud-ghost {
+  position: absolute;
+  z-index: 2;
+  top: max(var(--hud-pad), env(safe-area-inset-top, 0px));
+  right: max(var(--hud-pad), env(safe-area-inset-right, 0px));
+  display: grid;
+  place-items: center;
+  width: var(--hud-tool);
+  height: var(--hud-tool);
+  padding: 0;
+  color: var(--tb-ink);
+  background: rgba(255, 241, 210, 0.4);
+  border: calc(var(--u) * 2) solid rgba(122, 58, 38, 0.4);
+  border-radius: 0;
+  opacity: 0.55;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#ui .hud-ghost:hover {
+  opacity: 1;
+  background: var(--hud-glass);
+}
+
+/* Narrow screens: the strip keeps the top row, chip and toolbar tuck under it. */
+@media (max-width: 720px) {
+  #ui .hud-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  #ui .hud-top > .dc-hud {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: center;
+  }
+
+  #ui .hud-status {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  #ui .hud-right {
+    grid-column: 2;
+    grid-row: 2;
+  }
+}
+
+/* Settings dock: a slim translucent column under the toolbar. */
+#ui .settings-dock {
+  --tb-size-body: var(--hud-fs);
+  --tb-line: var(--hud-lh);
+  --tb-line-loose: var(--hud-lh);
+  top: calc(
+    max(var(--hud-pad), env(safe-area-inset-top, 0px)) + var(--hud-tool) + var(--hud-pad) * 1.5
+  );
+  right: max(var(--hud-pad), env(safe-area-inset-right, 0px));
+  bottom: var(--hud-pad);
+  width: clamp(calc(var(--u) * 250), 36vw, calc(var(--u) * 340));
+}
+
+#ui .settings-dock .settings-card {
+  padding: calc(var(--u) * 6) calc(var(--u) * 8) calc(var(--u) * 10);
+  background: rgba(255, 241, 210, 0.92);
+  border: calc(var(--u) * 2) solid var(--hud-edge);
+  border-image: none;
+}
+
+#ui .settings-dock .eyebrow {
+  display: none;
+}
+
+#ui .settings-dock .tb-heading,
+#ui .settings-dock .look-group summary {
+  min-height: calc(var(--u) * 28);
+  margin: 0 0 calc(var(--u) * 4);
+  padding: calc(var(--u) * 2) calc(var(--u) * 8);
+  border-width: calc(var(--u) * 4) 0;
+}
+
+#ui .settings-dock .look-group {
+  margin: calc(var(--u) * 4) 0;
+}
+
+#ui .settings-dock .slider,
+#ui .settings-dock .settings-card .slider {
+  grid-template-columns: minmax(calc(var(--u) * 96), 1fr) minmax(calc(var(--u) * 80), 1fr) auto;
+  gap: calc(var(--u) * 6);
+  min-height: calc(var(--u) * 28);
+  margin: calc(var(--u) * 2) 0;
+}
+
+#ui .settings-dock .value,
+#ui .settings-dock .settings-card .value {
+  min-width: calc(var(--u) * 40);
+}
+
+#ui .settings-dock .field {
+  gap: calc(var(--u) * 2);
+  margin: calc(var(--u) * 4) 0;
+}
+
+#ui .settings-dock .field select,
+#ui .settings-dock .screen .field select {
+  min-height: calc(var(--u) * 28);
+  padding: calc(var(--u) * 2) calc(var(--u) * 6);
+}
+
+#ui .settings-dock .check {
+  gap: calc(var(--u) * 8);
+  min-height: calc(var(--u) * 24);
+  margin: calc(var(--u) * 2) 0;
+}
+
+#ui .settings-dock .check input {
+  width: calc(var(--u) * 20);
+  height: calc(var(--u) * 20);
+}
+
+#ui .settings-dock .lede.tight {
+  margin: 0 0 calc(var(--u) * 6);
+  line-height: var(--hud-lh);
+}
+
+#ui .settings-dock .lock {
+  min-width: 0;
+  min-height: calc(var(--u) * 24);
+  padding: 0 calc(var(--u) * 6);
+  border-width: calc(var(--u) * 4);
+}
+
+#ui .settings-dock .actions,
+#ui .settings-dock .look-actions,
+#ui .settings-dock .wagon-rows {
+  gap: calc(var(--u) * 4);
+}
+
+#ui .settings-dock input[type='range'] {
+  height: calc(var(--u) * 20);
+}
+
+#ui .settings-dock input[type='color'] {
+  width: calc(var(--u) * 28);
+  height: calc(var(--u) * 24);
+}

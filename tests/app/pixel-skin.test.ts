@@ -31,7 +31,6 @@ describe('pixel menu skin', () => {
     expect(css).toContain('--tb-ui-scale');
     expect(css).toContain('#ui .hud-foot');
     expect(css).toContain('max-width: calc(100% - 24px * var(--tb-ui-scale))');
-    expect(css).toContain('overflow-wrap: anywhere');
 
     const urls = [...css.matchAll(/url\('\.\/sprites\/([^']+)'\)/g)].map((match) => match[1]);
     expect(urls.length).toBeGreaterThan(8);

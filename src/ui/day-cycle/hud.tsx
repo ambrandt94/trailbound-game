@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { clockLabelFor, litUnits } from '../../core/sim/day-cycle';
-import { dayCycle, dayCycleOptions, travelHud } from '../state';
+import { dayCycle, dayCycleOptions, settings, travelHud } from '../state';
 import './day-cycle.css';
 import { HUD_NATIVE_H, HUD_NATIVE_W, chooseHudScale } from './layout';
 import { DayCycleRenderer } from './render';
@@ -19,8 +19,11 @@ Object.assign(globalThis, {
   },
 });
 
-function viewScale(): number {
-  return chooseHudScale(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+function viewScale(small = settings.peek().hud.daySmall): number {
+  const dpr = window.devicePixelRatio || 1;
+  // Small: one art pixel per CSS pixel (whole device pixels), whatever the window size.
+  if (small) return Math.max(1, Math.floor(dpr + 1e-6));
+  return chooseHudScale(window.innerWidth, window.innerHeight, dpr);
 }
 
 /**
@@ -35,13 +38,15 @@ export function DayCycleHud() {
     view?.view === 'map' && travel !== null && travel.view === 'map' && travel.clockPaused;
   const canvas = useRef<HTMLCanvasElement>(null);
   const redraw = useRef<(() => void) | null>(null);
-  const [scale, setScale] = useState(viewScale);
+  const small = settings.value.hud.daySmall;
+  const [scale, setScale] = useState(() => viewScale(small));
 
   useEffect(() => {
-    const onResize = () => setScale(viewScale());
+    const onResize = () => setScale(viewScale(small));
+    onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [small]);
 
   // Load art once, then repaint on a short timer so the pulse animates.
   useEffect(() => {
