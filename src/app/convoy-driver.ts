@@ -32,14 +32,26 @@ export class ConvoyDriver {
   private speed = 0;
   /** Units rolled by the last `step`, and the clock hours that road costs. */
   private rolled = 0;
-  /** The wagon has rolled off this zone. Latched; it never comes back to this block. */
-  private left = false;
+  /**
+   * The wagon is not in this zone: it rolled off past the edge, or it has not
+   * reached the zone yet (the hero zoomed in on foot, away from it). It shows
+   * again once its route brings it back inside the playable box.
+   */
+  private out = false;
+  /** The wagon has stood inside this zone at least once. */
+  private seen = false;
   private noticed = false;
   private cross: { route: readonly number[]; from: number; at: number | null } | null = null;
 
+  /**
+   * @param chasing This zone was cut for a hero following the wagon off the
+   *   last one: walking off its edge again keeps following (hops), even when
+   *   the wagon is already past it.
+   */
   constructor(
     private readonly world: () => WorldState,
     readonly handoff: ConvoyHandoff,
+    readonly chasing = false,
   ) {}
 
   /** Advance the caravan for `dt` real seconds of 3D time. */
@@ -69,29 +81,46 @@ export class ConvoyDriver {
     return convoyClockHours(this.rolled, this.world().caravanSpeedAt());
   }
 
-  /** Wagon pose in area metres for the renderer. `gone` once it has rolled off the zone. */
+  /**
+   * Wagon pose in area metres for the renderer. `gone` while the wagon is not
+   * in this zone; `away` too when it has not been in it yet.
+   */
   frame(): ConvoyFrame {
     const caravan = this.world().caravan;
     const at = tileToLocal(this.handoff.frame, caravan.x, caravan.y);
-    if (!this.left && convoyLeftZone(convoyRoom(at, this.handoff.bounds))) this.left = true;
+    const room = convoyRoom(at, this.handoff.bounds);
+    if (room >= 0) {
+      this.seen = true;
+      this.out = false;
+      this.noticed = false;
+    } else if (!this.seen || convoyLeftZone(room)) {
+      this.out = true;
+    }
     return {
       x: at.x,
       z: at.z,
       yaw: mapYawToArea(caravan.yaw),
       speed: this.speed,
-      gone: this.left,
+      gone: this.out,
+      away: this.out && !this.seen && !this.chasing,
       edge: this.handoff.bounds,
     };
   }
 
-  /** The wagon has rolled off this zone block. */
+  /** The wagon is not in this zone block (rolled off, or not here yet). */
   get gone(): boolean {
     return this.frame().gone === true;
   }
 
-  /** True once, the first time the wagon is seen to have left. */
+  /** The wagon has been inside this zone: walking off after it follows it. */
+  get followable(): boolean {
+    this.frame();
+    return this.seen || this.chasing;
+  }
+
+  /** True once each time the wagon is seen to roll off this zone. Not for a wagon that was never here. */
   takeLeftNotice(): boolean {
-    if (!this.gone || this.noticed) return false;
+    if (!this.gone || !this.seen || this.noticed) return false;
     this.noticed = true;
     return true;
   }

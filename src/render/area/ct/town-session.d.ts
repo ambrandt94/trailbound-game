@@ -13,6 +13,8 @@ export interface ConvoyFrame {
   speed: number;
   /** The wagon has rolled off this zone: hide it and stop following it. */
   gone?: boolean;
+  /** Gone because the wagon has not reached this zone yet (the hero came on foot). */
+  away?: boolean;
   /** This zone's edge in area metres. The hero's auto-walk stops short of it. */
   edge?: { minX: number; maxX: number; minZ: number; maxZ: number };
 }
@@ -26,6 +28,8 @@ export interface ConvoyStatus {
   yaw: number;
   /** The wagon has rolled off this zone. The hero is on foot and free. */
   gone?: boolean;
+  /** The wagon has not been in this zone yet: it is elsewhere on its route. */
+  away?: boolean;
 }
 
 export interface TownSession {

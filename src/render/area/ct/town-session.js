@@ -26,6 +26,7 @@ import {
   driveConvoyWagon,
   hideConvoyWagon,
   mountPartyWagon,
+  showConvoyWagon,
   tickPartyWagon,
 } from '../party-wagon.ts';
 import {
@@ -647,11 +648,14 @@ export async function createTownSession(canvas, hooks) {
   /* Convoy: the party wagon rolls along the caravan route and the hero walks
      beside it, rides the bench, or walks free on a soft leash. */
   let convoyFrame = null;
-  /* The wagon rolled off this zone. Hidden; the hero is free and nothing pulls them back. */
+  /* The wagon is not in this zone: it rolled off, or has not got here yet. Hidden; the hero
+     is free and nothing pulls them back. It shows again when its road brings it inside. */
   let convoyGone = false;
+  let convoyAway = false;
   function readConvoy() {
     convoyFrame = hooks.getConvoy ? hooks.getConvoy() : null;
     if (convoyFrame && convoyFrame.gone) {
+      convoyAway = !!convoyFrame.away;
       if (!convoyGone) {
         convoyGone = true;
         cv.mode = 'free';
@@ -659,6 +663,12 @@ export async function createTownSession(canvas, hooks) {
         hideConvoyWagon();
       }
       convoyFrame = null;
+    } else if (convoyFrame && convoyGone) {
+      // Back in this zone (or arriving for the first time): the one wagon shows where it is.
+      convoyGone = false;
+      convoyAway = false;
+      cv.idle = 0;
+      showConvoyWagon();
     }
   }
   const cv = { mode: 'walk', idle: 0, dist: 0, slotDist: 0, bench: false, rejoin: false, leash: 'ok', auto: null };
@@ -1337,6 +1347,7 @@ export async function createTownSession(canvas, hooks) {
       try {
         await mountPartyWagon({
           pose: first ? { x: first.x, z: first.z, yaw: first.yaw } : null,
+          park: !first && entry && entry.wagon !== undefined ? entry.wagon : undefined,
           scene,
           blocks: BX,
           things: TH,
@@ -1352,7 +1363,7 @@ export async function createTownSession(canvas, hooks) {
       }
       mountMinigameSigns();
       if (first && first.gone && convoyWagonMounted()) {
-        // The wagon is already past this zone's edge: it is not here.
+        // The wagon is past this zone's edge, or not here yet: it is not drawn.
         readConvoy();
         if (entry && entry.pos && typeof entry.pos === 'object') {
           const p = PLS[0];
@@ -1367,11 +1378,13 @@ export async function createTownSession(canvas, hooks) {
       } else if (convoyFrame && convoyWagonMounted()) {
         const p = PLS[0];
         const wagon = { x: convoyFrame.x, z: convoyFrame.z, yaw: convoyFrame.yaw, speed: 0 };
-        const start = entry && entry.pos && typeof entry.pos === 'object' ? entry.pos : convoySlot(wagon);
+        const own = entry && entry.pos && typeof entry.pos === 'object' ? entry.pos : null;
         cv.mode = entry && entry.convoyMode ? entry.convoyMode : 'walk';
+        // On foot the hero starts where they stood (or the area spawn), never pulled to the wagon.
+        const start = own || (cv.mode === 'free' ? { x: spawn.x, z: spawn.z } : convoySlot(wagon));
         p.x = start.x;
         p.z = start.z;
-        p.yaw = typeof entry?.yaw === 'number' ? entry.yaw : convoyFrame.yaw;
+        p.yaw = typeof entry?.yaw === 'number' ? entry.yaw : cv.mode === 'free' && Number.isFinite(spawn.yaw) ? spawn.yaw : convoyFrame.yaw;
         p.y = gAt(p.x, p.z, 2);
         p.vx = p.vy = p.vz = 0;
         p.g = true;
@@ -1494,7 +1507,7 @@ export async function createTownSession(canvas, hooks) {
     convoyStatus() {
       if (convoyGone && convoyWagonMounted()) {
         const p = PLS[0];
-        return { mode: 'free', leash: 'ok', dist: 0, x: p.x, z: p.z, yaw: p.yaw, gone: true };
+        return { mode: 'free', leash: 'ok', dist: 0, x: p.x, z: p.z, yaw: p.yaw, gone: true, away: convoyAway };
       }
       if (!convoyFrame || !convoyWagonMounted()) return null;
       const p = PLS[0];
@@ -1710,6 +1723,21 @@ export async function createTownSession(canvas, hooks) {
         p.vx = 2.2;
         p.vz = 0;
         p.snap = true;
+      },
+      /** Every wagon in play: party-wagon groups in the scene and wagon F prompts. Read-only. */
+      wagons() {
+        const groups = [];
+        scene.traverse((o) => {
+          if (o.name === 'party-wagon') {
+            groups.push({ x: o.position.x, z: o.position.z, visible: o.visible });
+          }
+        });
+        const prompts = TH.filter((t) => t && t.label === 'F: Wagon').map((t) => ({
+          label: t.label,
+          x: t.x,
+          z: t.z,
+        }));
+        return { groups, prompts, convoy: convoyWagonMounted(), gone: convoyGone, mode: cv.mode };
       },
       counts() {
         let meshes = 0;

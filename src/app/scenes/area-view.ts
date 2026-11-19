@@ -203,6 +203,9 @@ export class AreaView implements Scene {
     if (!driver || !status?.gone || !hasRoute(world.caravan) || !this.host.recutConvoy) {
       return false;
     }
+    // A wagon that was never in this zone (the hero zoomed in on foot, elsewhere) is not
+    // being followed: walking off the edge goes back to the map as in any area.
+    if (!driver.followable) return false;
     const hero = driver.toMap(status.x, status.z, status.yaw);
     // The new zone leans down the road from where the hero walked out: they land near its
     // trailing edge with the road ahead, and a wagon not too far on is inside it too. With
@@ -381,7 +384,13 @@ export class AreaView implements Scene {
       clockPaused: false,
       view: 'area',
       convoy: status
-        ? { mode: status.mode, leash: status.leash, dist: status.dist, gone: status.gone === true }
+        ? {
+            mode: status.mode,
+            leash: status.leash,
+            dist: status.dist,
+            gone: status.gone === true,
+            away: status.away === true,
+          }
         : null,
     });
     const key = travelHudKey(hud);

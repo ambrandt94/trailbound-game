@@ -7,6 +7,7 @@ import {
   type AreaExit,
   type AreaHandoff,
   type ConvoyCut,
+  type ZoomEntry,
   type WorldState,
 } from '../core/state/world-state';
 import { DEFAULT_WORLD_SEED } from '../core/world/index';
@@ -94,7 +95,6 @@ import { DIVE_BARE_MAGNIFY, DIVE_MAP_MAGNIFY, DIVE_MAX_MAGNIFY, DiveScene } from
 import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
 import { ConvoyDriver } from './convoy-driver';
 import { resolveAreaAt } from '../core/area/area-window';
-import { hasRoute } from '../core/sim/caravan';
 import type { AreaEntry } from '../render/area/area-from-export';
 import { codeForTouchAction } from './touch-wire';
 import { CF_PIN, GAME_VERSION, PLAYER_NAME, SAVE_SLOT } from './version';
@@ -338,17 +338,18 @@ export class Game implements GameHost {
     else if (exit) this.world.placeHeroOutside(exit);
   }
 
-  /** Bake the area the dive lands in: a convoy window when the hero rides a routed caravan. */
+  /**
+   * Bake the area the dive lands in. See `WorldState.zoomInPlan`: a routed
+   * caravan is always the one driven wagon, riding or on foot, wild or town.
+   */
   private bakeHere(): AreaHandoff | null {
-    const world = this.world;
-    if (!world.heroAboard) return world.buildHandoffHere();
-    // Zoomed in on a rolling wagon, the zone leans down the road: the wagon sits near the
-    // edge it came from and most of the zone lies ahead. Halted or no route: centred.
-    const convoy = hasRoute(world.caravan)
-      ? world.buildConvoyHandoff(world.caravan.x, world.caravan.y, true, world.convoyAhead())
-      : null;
-    return convoy ?? world.buildHandoffHere(world.caravan.x, world.caravan.y);
+    const plan = this.world.zoomInPlan();
+    this.pendingEntry = plan.entry;
+    return plan.handoff;
   }
+
+  /** How the hero starts in the area `bakeHere` cut. */
+  private pendingEntry: ZoomEntry = {};
 
   /**
    * Cut the next convoy window now, without making it the current place, so
@@ -371,7 +372,8 @@ export class Game implements GameHost {
     const handoff = 'areaExport' in source ? source : this.prepareConvoyRecut(source);
     if (!handoff?.convoy) return null;
     this.world.adoptConvoyHandoff(handoff.convoy);
-    const driver = new ConvoyDriver(() => this.world, handoff.convoy);
+    // Recuts are zone hops now: the hero followed the wagon off the last zone.
+    const driver = new ConvoyDriver(() => this.world, handoff.convoy, true);
     const renderer = this.makeRenderer(driver);
     try {
       await renderer.start(handoff.areaExport, entry(driver));
@@ -528,7 +530,13 @@ export class Game implements GameHost {
       // Under a dive the 3D canvas starts hidden (the dive set it) and the map
       // stays magnified; the dive cross-fades it in. Otherwise show it.
       if (this.stack.current()?.id !== 'transition') this.setLayers(1, 1);
-      await renderer.start(areaExport, driver ? { convoyMode: 'walk' } : undefined);
+      const entry: AreaEntry | undefined = this.pendingArea
+        ? { ...this.pendingEntry }
+        : driver
+          ? { convoyMode: 'walk' }
+          : undefined;
+      if (entry && driver && !entry.convoyMode) entry.convoyMode = 'walk';
+      await renderer.start(areaExport, entry);
       this.world.areaHold = true;
       const view = new AreaView(this, renderer, this.pendingArea, driver);
       this.areaScene = view;

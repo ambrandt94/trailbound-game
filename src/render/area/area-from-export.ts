@@ -17,6 +17,11 @@ export interface AreaEntry {
   yaw?: number;
   /** Convoy areas: how the hero starts (beside the wagon, on the bench, or on foot). */
   convoyMode?: 'walk' | 'bench' | 'free';
+  /**
+   * No convoy, hero on foot: park the wagon near this spot (where the caravan
+   * stands, area metres), or null when the caravan is not in this area.
+   */
+  wagon?: { x: number; z: number } | null;
 }
 
 export type FixtureId = 'veldcross' | 'hollowmere' | 'jadewild';

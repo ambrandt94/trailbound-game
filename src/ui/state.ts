@@ -102,6 +102,8 @@ export interface ConvoyHud {
   dist: number;
   /** The wagon rolled off this zone. Follow it or return to the map. */
   gone?: boolean;
+  /** The wagon is not in this zone yet: it is elsewhere on the road. */
+  away?: boolean;
 }
 export const travelHud = signal<TravelHud | null>(null);
 /** Registered minigames, filled by the app so settings can launch them. */
