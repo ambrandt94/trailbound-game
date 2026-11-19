@@ -1,9 +1,12 @@
 import { music } from '../../audio/music';
 import { GAME_HOURS_PER_REAL_SECOND } from '../../core/sim/clock';
 import { hasRoute } from '../../core/sim/caravan';
+import { CONVOY_STREAM_RECUT, zoneHopCentre } from '../../core/sim/convoy';
 import { areaHoursPerRealSec } from '../../core/sim/time';
+import { areaClockHours } from '../../core/sim/map-pace';
 import type { AreaHandoff } from '../../core/state/world-state';
 import type { AreaEntry } from '../../render/area/area-from-export';
+import { clearAreaLeaveOverlay } from '../../render/area/leave-overlay';
 import { AreaRenderer, type ConvoyStatus } from '../../render/area/area-renderer';
 import { hint, prompt, settings, settingsOpen, travelHud } from '../../ui/state';
 import { areaEscapeAction } from '../area-escape';
@@ -45,6 +48,11 @@ export class AreaView implements Scene {
   private noWindow = false;
   /** Route the prepared window was cut for. A new route makes it stale. */
   private preparedRoute: readonly number[] | null = null;
+  /** The hero walked off the edge after the wagon rolled on: cut the zone beyond, here. */
+  private hop: {
+    centre: { x: number; y: number };
+    hero: { x: number; y: number; yaw: number };
+  } | null = null;
 
   handoff: AreaHandoff | null;
 
@@ -122,6 +130,8 @@ export class AreaView implements Scene {
         const wasPlaying = games.isPlaying();
         games.tick(dt);
         if (kind === 'world' && wasPlaying && games.isPlaying()) {
+          // An in-world game is not a pause: the wagon keeps rolling and time runs.
+          this.driver?.step(dt);
           this.renderer.step(dt);
           this.advanceAreaClock(dt);
         }
@@ -175,7 +185,31 @@ export class AreaView implements Scene {
   }
 
   leaveFromController(info: ControllerExit): void {
+    if (this.recut || this.leaving) return;
+    if (this.beginHop()) return;
     this.leave(controllerExitToMap(info, this.renderer?.bounds() ?? null));
+  }
+
+  /**
+   * The wagon rolled off this zone and the hero walks off the edge after it:
+   * cut the adjacent zone, with the road through it and the wagon where the
+   * caravan now is, instead of dropping to the map. Only while a route is
+   * still active (an arrived or cleared route has nothing to follow).
+   */
+  private beginHop(): boolean {
+    const driver = this.driver;
+    const status = this.renderer?.convoyStatus() ?? null;
+    const world = this.host.world;
+    if (!driver || !status?.gone || !hasRoute(world.caravan) || !this.host.recutConvoy) {
+      return false;
+    }
+    const hero = driver.toMap(status.x, status.z, status.yaw);
+    this.hop = {
+      centre: zoneHopCentre(hero, { x: world.caravan.x, y: world.caravan.y }),
+      hero,
+    };
+    this.recut = { phase: 'snap' };
+    return true;
   }
 
   private stepConvoy(dt: number): void {
@@ -207,17 +241,26 @@ export class AreaView implements Scene {
    * as the map; standing still it runs at the area rate.
    */
   private advanceAreaClock(dt: number): void {
-    const hours = this.driver?.clockHours() ?? null;
-    if (hours !== null) this.host.world.advanceClock(1, hours);
-    else {
-      this.host.world.advanceClock(dt, areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND));
-    }
+    // 3D time ignores the map's "time moves only when I move". It runs every
+    // frame this scene updates; a popup or instance minigame pauses it by not
+    // updating the scene at all. Halted at camp it still runs at the area rate.
+    const hours = areaClockHours({
+      paused: false,
+      dt,
+      roadHours: this.driver?.clockHours() ?? null,
+      areaHoursPerRealSec: areaHoursPerRealSec(GAME_HOURS_PER_REAL_SECOND),
+    });
+    if (hours > 0) this.host.world.advanceClock(1, hours);
   }
 
   /** Cut the next window early, and start the swap once the wagon reaches the line. */
   private planRecut(): void {
     const driver = this.driver;
     if (!driver) return;
+    if (!CONVOY_STREAM_RECUT) {
+      this.noteWagonLeft();
+      return;
+    }
     if ((this.prepared || this.noWindow) && this.host.world.caravan.route !== this.preparedRoute) {
       this.prepared = null;
       this.noWindow = false;
@@ -231,6 +274,16 @@ export class AreaView implements Scene {
     } else if (action === 'swap') {
       this.recut = { phase: 'snap' };
     }
+  }
+
+  /**
+   * Zones are instanced blocks: the wagon rolls on past the edge and leaves.
+   * Say so once. The caravan keeps rolling on the map and the clock keeps running.
+   */
+  private noteWagonLeft(): void {
+    const driver = this.driver;
+    if (!driver || !driver.takeLeftNotice()) return;
+    this.host.toast('The caravan rolled on ahead. Follow it, or return to the map.');
   }
 
   /** The world keeps rolling while the next window opens: no pause, no jump in the clock. */
@@ -266,7 +319,9 @@ export class AreaView implements Scene {
         : null;
     this.prepared = null;
     this.noWindow = false;
-    const source = usable ?? driver.recutCentre();
+    const hop = this.hop;
+    this.hop = null;
+    const source = hop ? hop.centre : (usable ?? driver.recutCentre());
     old.dispose();
     this.renderer = null;
     const next = await this.host.recutConvoy(source, (fresh) => {
@@ -282,9 +337,14 @@ export class AreaView implements Scene {
       return;
     }
     if (!next) {
-      // No window ahead (water, a settlement). Hand back to the map beside the wagons.
+      // No window ahead (water, a settlement). Hand back to the map: on foot where the
+      // hero stood after a hop, otherwise beside the wagons.
       this.recut = null;
       this.host.releaseFrame(0);
+      if (hop) {
+        this.leave(exitFromCancel(0), { ...hop.hero, aboard: false });
+        return;
+      }
       this.leave(exitFromCancel(0), {
         x: this.host.world.caravan.x,
         y: this.host.world.caravan.y,
@@ -293,6 +353,9 @@ export class AreaView implements Scene {
       });
       return;
     }
+    // The controller's "Back on the map" card went up when the hero crossed the edge;
+    // a hop stays in 3D, so take it down.
+    if (hop) clearAreaLeaveOverlay(this.host.mapCanvas.ownerDocument);
     this.renderer = next.renderer;
     this.driver = next.driver;
     this.handoff = next.handoff;
@@ -311,7 +374,9 @@ export class AreaView implements Scene {
     const hud = travelHudFor(this.host.world, {
       clockPaused: false,
       view: 'area',
-      convoy: status ? { mode: status.mode, leash: status.leash, dist: status.dist } : null,
+      convoy: status
+        ? { mode: status.mode, leash: status.leash, dist: status.dist, gone: status.gone === true }
+        : null,
     });
     const key = travelHudKey(hud);
     if (key === this.hudKey) return;
@@ -335,6 +400,8 @@ export class AreaView implements Scene {
       return { x: world.caravan.x, y: world.caravan.y, yaw: world.caravan.yaw, aboard: true };
     }
     const at = driver.toMap(status.x, status.z, status.yaw);
+    // The wagon rolled on without them: they land on foot where they stand, and catch up.
+    if (status.gone) return { ...at, aboard: false };
     return { ...at, aboard: status.mode !== 'free' || status.dist < ABOARD_RADIUS_M };
   }
 

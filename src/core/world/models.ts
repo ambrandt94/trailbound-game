@@ -164,9 +164,9 @@ export function travelChargePaceMps(_scale = 1, sprint = false): number {
  * canonical 8 game hours per real minute that keeps the walker near
  * `MAP_WALK_SCREEN_PX` per real second. Walk km/h does not change.
  */
-export function mapClockScale(scale: number): number {
+export function mapClockScale(scale: number, basePace = paceMps(false)): number {
   if (!Number.isFinite(scale) || scale <= 0) return 1;
-  const baseTiles = (paceMps(false) * GAME_SECONDS_PER_REAL_SEC) / METERS_PER_WORLD_TILE;
+  const baseTiles = (basePace * GAME_SECONDS_PER_REAL_SEC) / METERS_PER_WORLD_TILE;
   if (!(baseTiles > 0)) return 1;
   const desiredTiles = MAP_WALK_SCREEN_PX / (scale * TILE);
   const factor = desiredTiles / baseTiles;
@@ -175,13 +175,25 @@ export function mapClockScale(scale: number): number {
 }
 
 /** Game hours advanced per real second on the map at this camera scale. */
-export function mapClockHoursPerRealSec(scale: number): number {
-  return GAME_HOURS_PER_REAL_SEC * mapClockScale(scale);
+export function mapClockHoursPerRealSec(scale: number, basePace = paceMps(false)): number {
+  return GAME_HOURS_PER_REAL_SEC * mapClockScale(scale, basePace);
+}
+
+/**
+ * Map walk in tiles per real second for a walker charged `pace` metres per
+ * game second. `basePace` is the pace the zoom slowdown is measured against
+ * (the walker's own unhurried pace), so a slow walker is not slowed again.
+ */
+export function walkTilesPerSec(pace: number, scale: number, basePace = pace): number {
+  if (!(pace > 0)) return 0;
+  return (
+    (pace * GAME_SECONDS_PER_REAL_SEC * mapClockScale(scale, basePace)) / METERS_PER_WORLD_TILE
+  );
 }
 
 /** Empty at the full clock. A short multiplier once zoom has slowed time. */
-export function formatMapClockRate(scale: number): string {
-  const factor = mapClockScale(scale);
+export function formatMapClockRate(scale: number, basePace = paceMps(false)): string {
+  const factor = mapClockScale(scale, basePace);
   if (factor > 0.995) return '';
   return `×${factor.toFixed(2)}`;
 }

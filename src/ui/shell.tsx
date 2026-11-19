@@ -337,11 +337,13 @@ function CaravanCard() {
       {convoy ? (
         <p class="travel-line travel-mode">
           {skinText(
-            convoy.mode === 'bench'
-              ? 'Riding the bench · B to step down'
-              : convoy.mode === 'walk'
-                ? 'Walking beside the wagon · B to ride'
-                : `On foot · ${Math.round(convoy.dist)} m from the wagon`,
+            convoy.gone
+              ? 'The wagon rolled on · follow it or return to the map'
+              : convoy.mode === 'bench'
+                ? 'Riding the bench · B to step down'
+                : convoy.mode === 'walk'
+                  ? 'Walking beside the wagon · B to ride'
+                  : `On foot · ${Math.round(convoy.dist)} m from the wagon`,
           )}
         </p>
       ) : null}
@@ -383,7 +385,7 @@ function CaravanCard() {
             Rejoin caravan
           </button>
         ) : null}
-        {convoy ? (
+        {convoy && !convoy.gone ? (
           <button
             type="button"
             class="action secondary travel-btn bench"

@@ -272,6 +272,15 @@ export class WorldState {
     return node;
   }
 
+  /** Name of the zone block at a map point: a settlement, else the wild biome there. */
+  zoneNameAt(x: number, y: number): string {
+    const world = this.data;
+    if (!world) return 'the next zone';
+    return (
+      this.settlementAt(x, y)?.name ?? resolveConvoyArea(world, x, y)?.node.name ?? 'the next zone'
+    );
+  }
+
   /** Bake the place and remember its edge so the 3D exit lands outside it. */
   buildHandoff(node: MapNode): AreaHandoff {
     const world = this.data;

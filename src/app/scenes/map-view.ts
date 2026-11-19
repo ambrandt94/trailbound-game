@@ -12,9 +12,9 @@ import {
   METERS_PER_WORLD_TILE,
   formatMapClockRate,
   mapClockHoursPerRealSec,
-  travelChargePaceMps,
-  travelSpeedTilesPerSec,
+  walkTilesPerSec,
 } from '../../core/world/models';
+import { onFootPaceMps } from '../../core/sim/map-pace';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
 import { dayLightAt } from '../../core/sim/time';
@@ -98,13 +98,17 @@ export class MapView implements Scene {
     // Map-only pace settings. 3D areas never read these.
     const mapSpeed = settings.value.mapSpeed;
     const onlyWhenMoving = settings.value.timeOnlyWhenMoving;
-    const rate = mapClockHoursPerRealSec(motionScale);
+    // On-foot pace is a multiple of the wagon's map pace, so a scout is only a
+    // little quicker than the caravan. The zoom slowdown is measured against it.
+    const footWalk = onFootPaceMps(settings.value.onFootSpeed, false);
+    const rate = mapClockHoursPerRealSec(motionScale, footWalk);
     if (motionScale < SETTLEMENT_STOP_SCALE) this.settlementHold = null;
     this.flushClicks();
     if ((move.x !== 0 || move.y !== 0) && world.heroAboard) world.leaveCaravan();
     if ((move.x !== 0 || move.y !== 0) && world.data && !this.settlementHold) {
       this.camera.follow = true;
-      const speed = travelSpeedTilesPerSec('overworld', sprint, motionScale);
+      const footPace = onFootPaceMps(settings.value.onFootSpeed, sprint);
+      const speed = walkTilesPerSec(footPace, motionScale, footWalk);
       const dist = speed * mapSpeed * dt;
       const len = Math.hypot(move.x, move.y);
       const step = clampStepToSettlement(
@@ -118,11 +122,7 @@ export class MapView implements Scene {
       world.moveHero(step.dx, step.dy);
       const travelled = Math.hypot(step.dx, step.dy);
       this.walking = travelled > 0;
-      world.advanceTravel(
-        travelled * METERS_PER_WORLD_TILE,
-        travelChargePaceMps(0, sprint),
-        mapSpeed,
-      );
+      world.advanceTravel(travelled * METERS_PER_WORLD_TILE, footPace, mapSpeed);
       if (step.holdId) this.settlementHold = step.holdId;
     } else {
       if (move.x === 0 && move.y === 0) this.settlementHold = null;
@@ -203,7 +203,10 @@ export class MapView implements Scene {
       placeKind.value = stand.kind;
       standLine.value = stand.standLine;
       nearestLine.value = stand.nearestLine;
-      clockRate.value = formatMapClockRate(this.camera.scale / this.camera.step);
+      clockRate.value = formatMapClockRate(
+        this.camera.scale / this.camera.step,
+        onFootPaceMps(settings.value.onFootSpeed, false),
+      );
       mapNight.value = dayLightAt(world.clockHours).mapNight;
       hint.value = MAP_CONTROLS;
       prompt.value = stand.blockedReason ? 'Open water. Walk ashore to enter.' : '';

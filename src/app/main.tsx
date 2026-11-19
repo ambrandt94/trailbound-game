@@ -44,14 +44,15 @@ const game = new Game({
 
 render(<Shell />, ui);
 Object.assign(globalThis, { __TRAILBOUND__: game });
-// Debug hook, like the other `__tb*` globals: `__tbPace.set({ mapSpeed: 8, timeOnlyWhenMoving: false })`.
+// Debug hook, like the other `__tb*` globals: `__tbPace.set({ mapSpeed: 8, timeOnlyWhenMoving: false, onFootSpeed: 1.5 })`.
 Object.assign(globalThis, {
   __tbPace: {
     get: () => ({
       mapSpeed: settings.value.mapSpeed,
       timeOnlyWhenMoving: settings.value.timeOnlyWhenMoving,
+      onFootSpeed: settings.value.onFootSpeed,
     }),
-    set: (partial: { mapSpeed?: number; timeOnlyWhenMoving?: boolean }) => {
+    set: (partial: { mapSpeed?: number; timeOnlyWhenMoving?: boolean; onFootSpeed?: number }) => {
       commands.changeSettings(partial as Parameters<typeof commands.changeSettings>[0]);
     },
   },

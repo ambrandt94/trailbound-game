@@ -2,7 +2,8 @@ import { hasRoute, isRolling, pointAlong } from '../core/sim/caravan';
 import {
   CONVOY_LOOKAHEAD_M,
   convoyClockHours,
-  convoyMps,
+  convoyLeftZone,
+  convoyRollMetres,
   convoyRoom,
   preparedWindowFits,
   recutAction,
@@ -31,6 +32,9 @@ export class ConvoyDriver {
   private speed = 0;
   /** Units rolled by the last `step`, and the clock hours that road costs. */
   private rolled = 0;
+  /** The wagon has rolled off this zone. Latched; it never comes back to this block. */
+  private left = false;
+  private noticed = false;
   private cross: { route: readonly number[]; from: number; at: number | null } | null = null;
 
   constructor(
@@ -43,8 +47,13 @@ export class ConvoyDriver {
     const world = this.world();
     this.speed = 0;
     this.rolled = 0;
-    if (!(dt > 0) || !isRolling(world.caravan)) return world.takeCaravanEvents();
-    const metres = convoyMps(world.caravanSpeedAt()) * dt;
+    const metres = convoyRollMetres({
+      rolling: isRolling(world.caravan),
+      paused: false,
+      speedMod: world.caravanSpeedAt(),
+      dt,
+    });
+    if (!(metres > 0)) return world.takeCaravanEvents();
     const units = world.rollConvoy(metresToTiles(metres));
     this.speed = units > 0 ? metres / dt : 0;
     this.rolled = units;
@@ -60,11 +69,31 @@ export class ConvoyDriver {
     return convoyClockHours(this.rolled, this.world().caravanSpeedAt());
   }
 
-  /** Wagon pose in area metres for the renderer. */
+  /** Wagon pose in area metres for the renderer. `gone` once it has rolled off the zone. */
   frame(): ConvoyFrame {
     const caravan = this.world().caravan;
     const at = tileToLocal(this.handoff.frame, caravan.x, caravan.y);
-    return { x: at.x, z: at.z, yaw: mapYawToArea(caravan.yaw), speed: this.speed };
+    if (!this.left && convoyLeftZone(convoyRoom(at, this.handoff.bounds))) this.left = true;
+    return {
+      x: at.x,
+      z: at.z,
+      yaw: mapYawToArea(caravan.yaw),
+      speed: this.speed,
+      gone: this.left,
+      edge: this.handoff.bounds,
+    };
+  }
+
+  /** The wagon has rolled off this zone block. */
+  get gone(): boolean {
+    return this.frame().gone === true;
+  }
+
+  /** True once, the first time the wagon is seen to have left. */
+  takeLeftNotice(): boolean {
+    if (!this.gone || this.noticed) return false;
+    this.noticed = true;
+    return true;
   }
 
   /** Metres from the wagon to this window's nearest edge. */

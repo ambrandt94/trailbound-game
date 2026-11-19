@@ -1,4 +1,13 @@
-import { MAP_SPEEDS, formatMapSpeed, normalizeMapSpeed } from '../core/sim/map-pace';
+import {
+  MAP_SPEEDS,
+  ON_FOOT_MAX,
+  ON_FOOT_MIN,
+  ON_FOOT_STEP,
+  formatMapSpeed,
+  formatOnFootSpeed,
+  normalizeMapSpeed,
+  normalizeOnFootSpeed,
+} from '../core/sim/map-pace';
 import type { GameSettings, MapSkinId } from '../core/state/settings';
 import {
   cycleZoom,
@@ -234,10 +243,10 @@ export function SettingsPanel(props: { dock?: boolean }) {
               }
             }}
           />
-          Time moves only when I move
+          Map: time moves only when I move
         </label>
         <label class="field">
-          Overworld speed
+          Map speed
           <select
             aria-label="Overworld speed"
             value={String(current.mapSpeed)}
@@ -254,9 +263,27 @@ export function SettingsPanel(props: { dock?: boolean }) {
             ))}
           </select>
         </label>
+        <label class="slider">
+          <span>On-foot speed (map)</span>
+          <input
+            type="range"
+            min={ON_FOOT_MIN}
+            max={ON_FOOT_MAX}
+            step={ON_FOOT_STEP}
+            value={current.onFootSpeed}
+            aria-label="On-foot speed (map)"
+            onInput={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) {
+                change({ onFootSpeed: normalizeOnFootSpeed(target.value) });
+              }
+            }}
+          />
+          <span class="value">{formatOnFootSpeed(current.onFootSpeed)}</span>
+        </label>
         <p class="lede tight">
           {skinText(
-            'Both apply on the overworld map only. In 3D the clock keeps running at 1x. Overworld speed scales the hero, the caravan, everyone else on the map, and the clock together.',
+            'These three apply on the overworld map only. In 3D the wagon rolls at 1x and the clock runs on its own, whatever you do. Map speed scales the hero, the caravan, everyone else on the map, and the clock together. On-foot speed is how much faster than the wagon you walk when scouting alone (1.00x matches it).',
           )}
         </p>
         <p class="lede tight">
