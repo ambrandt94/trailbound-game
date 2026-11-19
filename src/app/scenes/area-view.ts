@@ -283,8 +283,7 @@ export class AreaView implements Scene {
   private noteWagonLeft(): void {
     const driver = this.driver;
     if (!driver || !driver.takeLeftNotice()) return;
-    const name = this.host.world.zoneNameAt(this.host.world.caravan.x, this.host.world.caravan.y);
-    this.host.toast(`The caravan rolled on to ${name}. Follow it, or return to the map.`);
+    this.host.toast('The caravan rolled on ahead. Follow it, or return to the map.');
   }
 
   /** The world keeps rolling while the next window opens: no pause, no jump in the clock. */
