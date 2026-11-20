@@ -19,6 +19,25 @@ test('asset guard flags denied extensions and oversized files', () => {
   expect(violations.some((line) => line.includes('hero.glb'))).toBe(false);
 });
 
+test('asset guard rejects Kevin Iglesias animation names', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'tb-ki-'));
+  writeFileSync(join(dir, 'KI_HumanM_anims.glb'), 'nope');
+  writeFileSync(join(dir, 'notes-about-Kevin.txt'), 'nope');
+  writeFileSync(join(dir, 'ki_manifest.json'), '{}');
+  writeFileSync(join(dir, 'kaykit_anims.glb'), 'ok');
+  const violations = findViolations(dir, { maxBytes: 10_000_000 });
+  const flagged = violations.filter((line) => line.includes('Kevin Iglesias'));
+  expect(flagged.some((line) => line.includes('KI_HumanM_anims.glb'))).toBe(true);
+  expect(flagged.some((line) => line.includes('notes-about-Kevin.txt'))).toBe(true);
+  expect(flagged.some((line) => line.includes('ki_manifest.json'))).toBe(true);
+  expect(flagged.some((line) => line.includes('kaykit_anims.glb'))).toBe(false);
+});
+
+test('the repo has no Kevin Iglesias animation files', () => {
+  const hits = findViolations(process.cwd()).filter((line) => line.includes('Kevin Iglesias'));
+  expect(hits).toEqual([]);
+});
+
 test('asset guard skips dependency and build folders', () => {
   const dir = mkdtempSync(join(tmpdir(), 'tb-assets-skip-'));
   writeFileSync(join(dir, 'ok.json'), '{}');

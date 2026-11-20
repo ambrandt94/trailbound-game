@@ -4,10 +4,11 @@
  * Recipes stay opaque: generate from a seed plus a profile entry, then build.
  */
 import * as THREE from 'three';
-import type { AvatarEngine, PlayerProfileEntry } from '../../core/people/avatar';
+import type { AvatarEngine, PlayerAvatar, PlayerProfileEntry } from '../../core/people/avatar';
+import { HERO_HEIGHT_M, clipTimeScale } from '../../core/state/area-pace';
 import { createCharacterBackend } from './backends/select';
 import type { BuiltCharacter, CharacterBackend } from './backends/types';
-import { characterForgePaths } from './cf-pin';
+import { characterForgePaths, characterForgeV2Paths } from './cf-pin';
 
 export interface ForgeStatus {
   ok: boolean;
@@ -38,7 +39,16 @@ export interface ForgeCatalog {
    * Metres, keyed by race id. A Character Forge 2 backend fills this from its
    * catalog. The v1 backend leaves it unset.
    */
-  raceMetrics?: Readonly<Record<string, { heightM: number; strideM: number }>>;
+  raceMetrics?: Readonly<
+    Record<string, { heightM: number; strideM: number; walkDuration?: number }>
+  >;
+}
+
+/** Metres from a v2 catalog row, used to scale the body and time the Walk clip. */
+export interface ForgeRaceMetrics {
+  heightM: number;
+  strideM: number;
+  walkDuration: number;
 }
 
 /** Public fields the API documents, plus the untouched engine recipe. */
@@ -199,12 +209,14 @@ interface InitOptions {
   runtimeUrl?: string;
   /**
    * Pass false to force the placeholder path. `?cf=0` does the same.
-   * `?cf=2` (also `v2` / `cf2`) reserves the Character Forge 2 backend and
-   * falls back to v1 with a console warning.
+   * `?cf=2` (also `v2` / `cf2`) selects the Character Forge 2 backend.
+   * Anything else is v1. v1 stays the default.
    */
   enabled?: boolean;
   profile?: unknown;
   force?: boolean;
+  /** Forwarded to the backend. Unset leaves the public animation set alone. */
+  privateAnimBaseUrl?: string;
 }
 
 interface EngineRecipe {
@@ -304,6 +316,44 @@ export function recipeFromStored(engine: unknown, seed = 0): CharacterRecipe {
   return wrapRecipe(engine as EngineRecipe, seed, 1);
 }
 
+/**
+ * Recipe to build for a saved avatar. A cf1 avatar on the v2 backend is
+ * migrated in memory. The save object is not written and its cf1 recipe stays.
+ */
+export function recipeForAvatar(
+  avatar: Pick<PlayerAvatar, 'engine' | 'recipe' | 'legacyRecipe' | 'seed'>,
+): CharacterRecipe | null {
+  if (!backend || !status.ok) return null;
+  if (backend.id === 'cf2' && avatar.engine !== 'cf2') {
+    const source = avatar.legacyRecipe ?? avatar.recipe;
+    if (!source || !backend.migrateRecipe) return null;
+    const migrated = backend.migrateRecipe(source);
+    return wrapRecipe(migrated as EngineRecipe, avatar.seed, 1);
+  }
+  if (avatar.recipe) return recipeFromStored(avatar.recipe, avatar.seed);
+  return null;
+}
+
+/**
+ * Scale and Walk mixer rate. Without v2 metrics this is the v1 rule:
+ * scale 1, and `speed / 1.4` once the body is moving.
+ */
+export function forgePresentation(
+  metrics: ForgeRaceMetrics | null,
+  speed: number,
+): { scale: number; timeScale: number } {
+  const moving = speed > 0.4;
+  if (!metrics || !(metrics.heightM > 0) || !(metrics.strideM > 0) || !(metrics.walkDuration > 0)) {
+    return { scale: 1, timeScale: moving ? Math.max(0.6, speed / 1.4) : 1 };
+  }
+  const scale = HERO_HEIGHT_M / metrics.heightM;
+  if (!moving) return { scale, timeScale: 1 };
+  return {
+    scale,
+    timeScale: clipTimeScale(speed, metrics.walkDuration, metrics.strideM, scale),
+  };
+}
+
 export function describeRecipe(recipe: CharacterRecipe): EditSnapshot {
   if (!feature('describe') || !backend) throw new Error(status.reason || 'forge is not ready');
   return normalizeSnapshot(backend.describe(recipe.engine));
@@ -375,7 +425,7 @@ export async function buildAvatar(
   buildError = '';
   try {
     const built = await backend.build(recipe.engine, {
-      budgetMs: options.budgetMs ?? BUDGET_MS,
+      budgetMs: options.budgetMs ?? (backend.id === 'cf2' ? 6 : BUDGET_MS),
       atlasSize: 256,
     });
     buildMs = now() - started;
@@ -462,6 +512,14 @@ export function aimForgeSun(camera: THREE.Camera): void {
   backend?.aimSun(camera);
 }
 
+/** Warm v2 race assets during the loading screen. v1 returns without init. */
+export async function preloadForge(): Promise<void> {
+  if (createCharacterBackend().id !== 'cf2') return;
+  const ready = await initForge();
+  if (!ready.ok) return;
+  await backend?.preload?.();
+}
+
 async function runInit(options: InitOptions): Promise<ForgeStatus> {
   const started = now();
   backend?.dispose();
@@ -473,10 +531,12 @@ async function runInit(options: InitOptions): Promise<ForgeStatus> {
   let selected: CharacterBackend | null = null;
   try {
     selected = createCharacterBackend();
+    const paths = selected.id === 'cf2' ? characterForgeV2Paths() : characterForgePaths();
     await selected.init({
-      runtimeUrl: options.runtimeUrl ?? defaultRuntimeUrl(),
-      baseUrl: options.baseUrl ?? defaultBaseUrl(),
+      runtimeUrl: options.runtimeUrl ?? resolvePublic(paths.runtime),
+      baseUrl: options.baseUrl ?? resolvePublic(paths.base),
       profile: options.profile,
+      privateAnimBaseUrl: options.privateAnimBaseUrl,
     });
     backend = selected;
     status = { ok: true, reason: '', initMs: now() - started };
@@ -935,14 +995,6 @@ function queryDisablesForge(): boolean {
   } catch {
     return false;
   }
-}
-
-function defaultRuntimeUrl(): string {
-  return resolvePublic(characterForgePaths().runtime);
-}
-
-function defaultBaseUrl(): string {
-  return resolvePublic(characterForgePaths().base);
 }
 
 function resolvePublic(path: string): string {

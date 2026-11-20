@@ -73,11 +73,27 @@ import {
   getPlayerBody,
   forgeReady,
   forgeTimings,
+  forgePresentation,
   generateRecipe,
   initForge,
   placeholderAvatar,
-  recipeFromStored,
+  recipeForAvatar,
 } from '../render/characters/forge';
+import type { ForgeRaceMetrics } from '../render/characters/forge';
+
+function raceMetricsOf(object: { userData: Record<string, unknown> }): ForgeRaceMetrics | null {
+  const raw = object.userData.cfMetrics;
+  if (!raw || typeof raw !== 'object') return null;
+  const metrics = raw as Partial<ForgeRaceMetrics>;
+  if (
+    typeof metrics.heightM !== 'number' ||
+    typeof metrics.strideM !== 'number' ||
+    typeof metrics.walkDuration !== 'number'
+  ) {
+    return null;
+  }
+  return { heightM: metrics.heightM, strideM: metrics.strideM, walkDuration: metrics.walkDuration };
+}
 import type { PlayerAvatar } from '../core/people/avatar';
 import type { Clock } from './fixed-step';
 import { FrameClock } from './fixed-step';
@@ -664,11 +680,12 @@ export class Game implements GameHost {
     body.object3D.visible = true;
     body.object3D.position.set(avatar.x, avatar.y, avatar.z);
     body.object3D.rotation.y = avatar.yaw;
-    body.object3D.scale.setScalar(1);
     const speed = Math.hypot(avatar.vx, avatar.vz);
+    const pose = forgePresentation(raceMetricsOf(body.object3D), speed);
+    body.object3D.scale.setScalar(pose.scale);
     body.present({
       clip: speed > 0.4 ? 'Walk' : 'Idle',
-      timeScale: speed > 0.4 ? Math.max(0.6, speed / 1.4) : 1,
+      timeScale: pose.timeScale,
       fade: 0.12,
     });
     body.update(dt);
@@ -916,8 +933,8 @@ export class Game implements GameHost {
   private async buildSaved(avatar: PlayerAvatar) {
     await initForge();
     if (!forgeReady().ok) return placeholderAvatar(avatar.seed);
-    if (avatar.recipe)
-      return buildAvatar(recipeFromStored(avatar.recipe, avatar.seed), { budgetMs: 8 });
+    const stored = recipeForAvatar(avatar);
+    if (stored) return buildAvatar(stored);
     return buildAvatar(
       generateRecipe({
         seed: avatar.seed,
@@ -926,7 +943,6 @@ export class Game implements GameHost {
         gender: avatar.gender,
         generatorVersion: avatar.generatorVersion,
       }),
-      { budgetMs: 8 },
     );
   }
 

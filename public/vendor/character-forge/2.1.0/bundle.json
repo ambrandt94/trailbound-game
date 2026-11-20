@@ -1,0 +1,81 @@
+{
+ "format": "cf.bundle",
+ "name": "character-forge",
+ "engine": {
+  "name": "character-forge",
+  "version": "2.1.0"
+ },
+ "generator": {
+  "version": 1
+ },
+ "recipe": {
+  "version": 2,
+  "schema": "recipe.schema.json"
+ },
+ "api": 2,
+ "three": {
+  "peer": true,
+  "range": ">=0.187 <0.190",
+  "builtAgainst": "0.187.0"
+ },
+ "entry": "cf-runtime.mjs",
+ "types": "cf-runtime.d.ts",
+ "assets": "assets.json",
+ "baseUrl": "relative to this folder (pass CF.init({ baseUrl }))",
+ "clips": {
+  "builtin": [
+   "Idle",
+   "Walk"
+  ],
+  "flyerAliases": [
+   "Hover",
+   "FlyMove"
+  ],
+  "optionalCC0": "policy animationSet: \"cf+cc0\" (Quaternius UAL, CC0)",
+  "excluded": "Kevin Iglesias (private licence) never bundled"
+ },
+ "licenses": "LICENSES.md",
+ "files": {
+  "API.md": {
+   "bytes": 7426,
+   "sha256": "6cb7ddb8c10a448d3c708ea134ff693490883265aecc03b113d3cac4d1bd02b9"
+  },
+  "LICENSES.md": {
+   "bytes": 7163,
+   "sha256": "1c53bf29fcd52934d45f826fb77b076208079784683318b767449b6b6e6d578b"
+  },
+  "README.md": {
+   "bytes": 8353,
+   "sha256": "43c369853a758b84594ef2a9d211ceaf9051c111c40eac2d405a81decdd478f0"
+  },
+  "assets.json": {
+   "bytes": 17892,
+   "sha256": "89344de63c7d86dbd16d9ac0aaae710630e3ba57a26dae6e765046d54c66f719"
+  },
+  "cf-runtime.d.ts": {
+   "bytes": 6851,
+   "sha256": "7e6e13962c730f81c863f51c99f9bd02c7d0d5fdd83a05b7ae5b3c3240a67924"
+  },
+  "cf-runtime.mjs": {
+   "bytes": 82949,
+   "sha256": "059294740b1782e264f4eb55aaf8343b905fef7c54b3c2414eaa35f80cb1fe56"
+  },
+  "chunks/chunk-2LWS7J5I.mjs": {
+   "bytes": 989,
+   "sha256": "3fa04289ae7554b418f958c002d1e79b622c96bfeacf9a522f39a65eefe17178"
+  },
+  "chunks/engine_entry-PQ4LIH5M.mjs": {
+   "bytes": 300173,
+   "sha256": "1c44274ab12d24ad52a7889dfa8c4b014d4949efa5dd414de6c2b873565ed6c1"
+  },
+  "licenses.json": {
+   "bytes": 14154,
+   "sha256": "8d8c998e86b7f87becfcbe30e4b75cb607d026623107f95e2cfc7c8ac06bec7f"
+  },
+  "recipe.schema.json": {
+   "bytes": 3926,
+   "sha256": "7be9d1700b86f7d6a951649b6ee12f7c81642fe144c9031cce72648e0d5b3bf5"
+  }
+ },
+ "builtAt": "2026-11-20T14:52:04.802Z"
+}

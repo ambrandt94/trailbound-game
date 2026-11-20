@@ -1,0 +1,554 @@
+{
+ "rules": [
+  {
+   "match": "/^assets\\/models\\/.*\\.glb$/",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok",
+   "source": "Body meshes: bases generated with Meshy AI on Alex's paid Meshy plan (confirmed by Alex 2026-11-20, t282u), then remeshed, symmetrised, re-UVed, rigged and skinned by Character Forge (Blender scripts). Embedded Idle / Walk actions are CF-authored (bpy actions in races2..9 build_race*.py).",
+   "note": "Paid-plan Meshy output: commercial use and inclusion in the game (public repo) cleared by the owner."
+  },
+  {
+   "match": "/^assets\\/ears\\/.*\\.glb$/",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok",
+   "source": "Ear variants, Character Forge ear pipeline (symmetry/ears, ear_add.py); the default elf_long ear comes from the Meshy-derived rig (paid plan, t282u).",
+   "note": ""
+  },
+  {
+   "match": "/^assets\\/parts\\/.*\\.glb$/",
+   "license": "CF-authored",
+   "status": "ok",
+   "source": "Snouts / horns / wings / noses built procedurally by Character Forge Blender scripts (races2..9 build_race*.py, noses1/2).",
+   "note": "Generated geometry; palette textures CF-made."
+  },
+  {
+   "match": "/^assets\\/clips\\/.*\\.json$/",
+   "license": "CF-authored",
+   "status": "ok",
+   "source": "Walk exported from tiefling2260 (races3 build_race3.py procedural action).",
+   "note": ""
+  },
+  {
+   "match": "/^assets\\/packs\\/quaternius_anims\\.glb$/",
+   "license": "CC0-1.0",
+   "status": "ok",
+   "source": "Quaternius, Universal Animation Library 1 (Standard), https://quaternius.com/packs/universalanimationlibrary.html",
+   "note": "Optional (policy animationSet \"cf+cc0\"); retargeted to the CF rig."
+  },
+  {
+   "match": "/^assets\\/packs\\/kaykit_anims\\.glb$/",
+   "license": "CC0-1.0",
+   "status": "ok",
+   "source": "Kay Lousberg, KayKit Character Animations 1.1, https://kaylousberg.com/game-assets/character-animations",
+   "note": "Optional; retargeted to the CF rig. Not wired by default."
+  },
+  {
+   "match": "/^assets\\/shared\\/(hair|face|racepal|meta)\\.json$/",
+   "license": "CF-authored",
+   "status": "ok",
+   "source": "Hair index texture + ramps (hair4), face sheet pixel art (face presets, brows1), race palette role maps, labels.",
+   "note": "Role maps are painted on the UV layout of the Meshy-derived body; the pixels are CF-made."
+  },
+  {
+   "match": "/^assets\\/wardrobe\\/.*\\.png$/",
+   "license": "CF-authored",
+   "status": "ok",
+   "source": "Painted wardrobe index maps (wardrobe1 pipeline).",
+   "note": ""
+  },
+  {
+   "match": "/^(cf-runtime\\.mjs|chunks\\/.*\\.mjs)$/",
+   "license": "CF code + MIT (three.js addons GLTFLoader, SkeletonUtils bundled in the engine chunk)",
+   "status": "ok",
+   "source": "Character Forge runtime; three.js examples/jsm addons (c) three.js authors, MIT.",
+   "note": "three itself is a peer dependency, not bundled."
+  }
+ ],
+ "files": [
+  {
+   "file": "assets/models/bald2040.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/mouse2248.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/tiefling2260.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/halfling2052.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/gnome2088.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/dwarf2100.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/goliath2174.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/firbolg2162.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/orc2258.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/goblin2130.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/kobold2406.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/imp2440.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/pixie2254.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/models/dragon2390.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored edits",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/elf_long.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/elf_short.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/pointed_small.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/human_round.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/mouse_round.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/dragon_frill.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/tf_pointed_small.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/tf_elf_short.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/hf_round.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/hf_leaf.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/gn_swept.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/gn_tall.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/dw_round.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/ip_pointed.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/ip_long.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/px_long.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/px_swept.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/kb_frill.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/kb_fin.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/or_pointed.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/or_round.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/gb_swept.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/gb_wide.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/gl_round.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/gl_pointed.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/fb_droop.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/fb_long.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/ears/dw_lobe.glb",
+   "license": "Meshy paid plan (commercial use) + CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/snout_mouse.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/snout_dragon_long.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/snout_dragon_blunt.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_dragon_swept.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_dragon_short.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_tf_upswept.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_tf_swept.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_tf_ram.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_tf_short.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gn_button.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gn_bulb.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gn_pointed.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_dw_broad.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_dw_round.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_ip_swept.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_ip_curl.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/wings_ip_bat.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/wings_px_butterfly.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/wings_px_dragonfly.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/snout_kb_round.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/snout_kb_pointed.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_kb_swept.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/horns_kb_nubs.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_or_tusks.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_or_big.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gb_hook.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gb_long.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gl_broad.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gl_flat.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_fb_bovine.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_fb_soft.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_dw_hawk.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_gl_big.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_dw_big.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/parts/nose_or_large.glb",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/shared/hair.json",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/shared/face.json",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/shared/racepal.json",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/shared/meta.json",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/belt_leather.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/broadfall_patched.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/broadfall_plain.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/broadfall_striped.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/paint_baldric.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/shirt_calico.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/shirt_homespun.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/smallclothes_drawers.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/smallclothes_linen.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/socks_darned.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/socks_plain.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/vest_closed.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/wardrobe/vest_open.png",
+   "license": "CF-authored",
+   "status": "ok"
+  },
+  {
+   "file": "assets/packs/quaternius_anims.glb",
+   "license": "CC0-1.0",
+   "status": "ok"
+  },
+  {
+   "file": "assets/packs/kaykit_anims.glb",
+   "license": "CC0-1.0",
+   "status": "ok"
+  },
+  {
+   "file": "assets/clips/humanoid_walk.json",
+   "license": "CF-authored",
+   "status": "ok"
+  }
+ ]
+}

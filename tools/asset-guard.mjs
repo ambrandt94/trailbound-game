@@ -28,6 +28,21 @@ export function findViolations(root, options = {}) {
 }
 
 /**
+ * Kevin Iglesias clips are licensed to Alex privately. Filenames containing
+ * `KI_` or `Kevin`, and any `ki_manifest.json`, must never land in this repo.
+ * @param {string} display
+ */
+function isPrivateAnimPath(display) {
+  const parts = display.split(/[\\/]/);
+  for (const part of parts) {
+    if (part.toLowerCase() === 'ki_manifest.json') return true;
+    if (part.includes('KI_')) return true;
+    if (part.toLowerCase().includes('kevin')) return true;
+  }
+  return false;
+}
+
+/**
  * @param {string} dir
  * @param {string} root
  * @param {number} maxBytes
@@ -50,6 +65,9 @@ function walk(dir, root, maxBytes, violations) {
     }
     if (size > maxBytes) {
       violations.push(`${display} is ${size} bytes (limit ${maxBytes})`);
+    }
+    if (isPrivateAnimPath(display)) {
+      violations.push(`${display} is a Kevin Iglesias animation file and must not be committed`);
     }
   }
 }
