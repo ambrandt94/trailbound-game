@@ -8,7 +8,7 @@ import { CF_PIN } from '../../src/app/version';
 import { characterForgePaths, readCfPin } from '../../src/render/characters/cf-pin';
 import { syncCharacterBundle } from '../../tools/sync-character-bundle.mjs';
 
-test('the vendored pin is Character Forge 1.2.1 generator 1 and the loader follows it', async () => {
+test('current.json stays the 1.2.1 fallback pin and the v1 loader follows it', async () => {
   const pin = JSON.parse(await readFile('public/vendor/character-forge/current.json', 'utf8')) as {
     version: string;
     generatorVersion: number;
@@ -69,7 +69,7 @@ test('sync copies a dist into public/vendor/character-forge/<version> and writes
   );
 });
 
-test('sync of a 2.x dist writes current-v2.json and leaves the active pin', async () => {
+test('sync of a 2.x dist writes current-v2.json and leaves the v1 pin', async () => {
   const dist = await mkdtemp(path.join(tmpdir(), 'cf2-dist-'));
   const dest = await mkdtemp(path.join(tmpdir(), 'cf2-dest-'));
   await writeFile(path.join(dest, 'current.json'), '{"version":"1.2.1","generatorVersion":1}\n');

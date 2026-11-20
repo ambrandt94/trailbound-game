@@ -9,9 +9,10 @@
  * CF_DIST is the directory that contains bundle.json and cf-runtime.mjs
  * (the unpacked dist/<version>/ folder, not the tarball root).
  *
- * A 1.x dist updates the active pin, current.json. A 2.x dist is copied the
- * same way but leaves that pin alone and writes current-v2.json instead, so
- * v1 stays the runtime the game loads by default.
+ * A 1.x dist updates current.json, the v1 fallback pin. A 2.x dist is copied
+ * the same way but leaves that pin alone and writes current-v2.json, the pin
+ * the game loads by default. Do not point current.json at a 2.x build: the
+ * v1 backend checks its runtime against that file.
  */
 import {
   cpSync,

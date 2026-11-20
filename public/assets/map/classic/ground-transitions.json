@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "sheets": {"pk": "assets/map/classic/tilesets/grasslands.png"},
+  "grounds": [
+    {"id": "W", "fill": {"sheet": "pk", "col": 13, "row": 1}},
+    {"id": "D", "fill": {"sheet": "pk", "col": 9, "row": 1}},
+    {"id": "Db", "base": "D", "tint": [226, 150, 108]},
+    {"id": "Da", "base": "D", "tint": [204, 184, 164]},
+    {"id": "A", "fill": {"sheet": "pk", "col": 1, "row": 15}},
+    {"id": "G", "fill": {"sheet": "pk", "col": 1, "row": 1}},
+    {"id": "Gm", "base": "G", "tint": [150, 228, 136]},
+    {"id": "L", "fill": {"sheet": "pk", "col": 1, "row": 22}},
+    {"id": "S", "fill": {"sheet": "pk", "col": 1, "row": 8}}
+  ],
+  "biomes": {
+    "Water": "W",
+    "Sand": "D",
+    "Desert": "D",
+    "Badlands": "Db",
+    "Ashlands": "Da",
+    "Hills": "A",
+    "Plains": "G",
+    "Meadow": "G",
+    "Forest": "G",
+    "Mountain": "Gm",
+    "DarkForest": "L",
+    "Marsh": "L",
+    "Jungle": "L",
+    "Snow": "S",
+    "Taiga": "S"
+  },
+  "edges": [
+    {
+      "upper": "D",
+      "lower": "W",
+      "block": {"sheet": "pk", "col": 12, "row": 0},
+      "key": {"mode": "fill"}
+    },
+    {
+      "upper": "A",
+      "lower": "W",
+      "block": {"sheet": "pk", "col": 4, "row": 14},
+      "key": {"mode": "fill"}
+    },
+    {
+      "upper": "G",
+      "lower": "W",
+      "block": {"sheet": "pk", "col": 4, "row": 0},
+      "key": {"mode": "fill"}
+    },
+    {
+      "upper": "L",
+      "lower": "W",
+      "block": {"sheet": "pk", "col": 4, "row": 21},
+      "key": {"mode": "fill"}
+    },
+    {
+      "upper": "S",
+      "lower": "W",
+      "block": {"sheet": "pk", "col": 4, "row": 7},
+      "key": {"mode": "fill"}
+    },
+    {
+      "upper": "D",
+      "lower": "*",
+      "block": {"sheet": "pk", "col": 8, "row": 0},
+      "key": {"mode": "fill", "extra": [[233, 167, 106], [231, 148, 107]]},
+      "recolor": {"from": [104, 212, 98], "to": [250, 188, 128]}
+    },
+    {
+      "upper": "A",
+      "lower": "*",
+      "block": {"sheet": "pk", "col": 8, "row": 14},
+      "key": {"mode": "fill", "extra": [[233, 167, 106], [231, 148, 107]]}
+    },
+    {
+      "upper": "G",
+      "lower": "*",
+      "block": {"sheet": "pk", "col": 8, "row": 0},
+      "key": {"mode": "fill", "extra": [[233, 167, 106], [231, 148, 107]]}
+    },
+    {
+      "upper": "L",
+      "lower": "*",
+      "block": {"sheet": "pk", "col": 8, "row": 21},
+      "key": {"mode": "fill", "extra": [[233, 167, 106], [231, 148, 107]]}
+    },
+    {
+      "upper": "S",
+      "lower": "*",
+      "block": {"sheet": "pk", "col": 8, "row": 7},
+      "key": {"mode": "fill", "extra": [[233, 167, 106], [231, 148, 107]]}
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
  "format": "cf.assets",
- "version": "2.1.0",
+ "version": "2.1.1",
  "models": {
   "bald2040": "assets/models/bald2040.glb",
   "mouse2248": "assets/models/mouse2248.glb",

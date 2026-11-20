@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import { readWardrobeCatalog } from '../../src/app/wardrobe-edit';
 import { createCharacterBackend } from '../../src/render/characters/backends/select';
@@ -19,6 +20,7 @@ import {
   optionsFor,
   packsForRecipe,
   placeholderAvatar,
+  preloadForge,
   recipeForAvatar,
   recipeFromStored,
   recipeHashOf,
@@ -29,7 +31,7 @@ import { forgePresentation } from '../../src/render/characters/forge';
 const vendor = path.resolve('public', characterForgePaths().base);
 const profile = JSON.parse(readFileSync('content/characters/trailbound.json', 'utf8')) as unknown;
 
-test('?cf=2 selects the v2 backend, the default stays v1, and ?cf=0 still disables', async () => {
+test('no ?cf= selects v2, ?cf=1 keeps v1, and ?cf=0 still disables', async () => {
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
@@ -44,24 +46,34 @@ test('?cf=2 selects the v2 backend, the default stays v1, and ?cf=0 still disabl
     });
   };
   try {
+    expect(createCharacterBackend('').id).toBe('cf2');
     expect(createCharacterBackend('?cf=2').id).toBe('cf2');
     expect(createCharacterBackend('?cf=v2').id).toBe('cf2');
     expect(createCharacterBackend('?cf=cf2').id).toBe('cf2');
     expect(createCharacterBackend('?cf=1').id).toBe('cf1');
-    expect(createCharacterBackend('').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=v1').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=cf1').id).toBe('cf1');
     expect(warnings).toEqual([]);
-    const warnedCount = warnings.length;
-    expect(createCharacterBackend('?cf=1').id).toBe('cf1');
-    expect(warnings).toHaveLength(warnedCount);
+
+    setSearch('');
+    expect(createCharacterBackend().id).toBe('cf2');
+    setSearch('?cf=1');
+    expect(createCharacterBackend().id).toBe('cf1');
+    setSearch('?cf=v1');
+    expect(createCharacterBackend().id).toBe('cf1');
+    setSearch('?cf=cf1');
+    expect(createCharacterBackend().id).toBe('cf1');
+    expect(warnings).toEqual([]);
 
     setSearch('?cf=0');
     const disabled = await initForge({ force: true, enabled: true });
     expect(disabled.ok).toBe(false);
     expect(disabled.reason).toBe('cf=0');
     expect(characterEngine()).toBeNull();
+    expect(warnings).toEqual([]);
 
     const before = warnings.length;
-    setSearch('?cf=2');
+    setSearch('?cf=1');
     const rejected = await initForge({
       force: true,
       enabled: true,
@@ -79,6 +91,93 @@ test('?cf=2 selects the v2 backend, the default stays v1, and ?cf=0 still disabl
   }
 });
 
+test('a v2 init failure falls back to v1 and warns', async () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map((item) => String(item)).join(' '));
+  };
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  const restoreFetch = installDiskFetch();
+  installCanvasShim();
+  installBitmapShim();
+  const restoreBase = pointLocationAtPublic('');
+  try {
+    const status = await initForge({
+      force: true,
+      enabled: true,
+      runtimeUrl: 'data:text/javascript,export default {}',
+      baseUrl: 'http://cf-test/',
+    });
+    expect(status.ok, status.reason).toBe(true);
+    expect(characterEngine()).toBe('cf1');
+    expect(warnings.join('\n')).toMatch(/failed to init/);
+    expect(warnings.join('\n')).toMatch(/falling back to v1/);
+    expect(warnings.join('\n')).toMatch(/api mismatch/);
+  } finally {
+    console.warn = originalWarn;
+    restoreFetch();
+    restoreBase();
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
+  }
+}, 180_000);
+
+test('a v2 preload failure falls back to v1 and warns', async () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map((item) => String(item)).join(' '));
+  };
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  const restoreFetch = installDiskFetch();
+  installCanvasShim();
+  installBitmapShim();
+  const dir = await mkdtemp(path.join(tmpdir(), 'cf2-preload-'));
+  const runtime = path.join(dir, 'cf-runtime.mjs');
+  await writeFile(
+    runtime,
+    [
+      'const api = {',
+      '  api: 2,',
+      "  version: '2.1.1',",
+      '  generatorVersion: 1,',
+      '  freeCpuGeometry: true,',
+      '  async init() {},',
+      "  getPolicy() { return { animationSet: 'cf', regaliaMinRichness: 0.85 }; },",
+      '  catalog() { return { races: {} }; },',
+      '  dispose() {},',
+      '  races() { return []; },',
+      "  async preload() { throw new Error('preload missing pack'); },",
+      '};',
+      'export default api;',
+      '',
+    ].join('\n'),
+  );
+  const restoreBase = pointLocationAtPublic('');
+  try {
+    const status = await initForge({
+      force: true,
+      enabled: true,
+      runtimeUrl: pathToFileURL(runtime).href,
+      baseUrl: 'http://cf2-preload/',
+    });
+    expect(status.ok, status.reason).toBe(true);
+    expect(characterEngine()).toBe('cf2');
+    await preloadForge();
+    expect(characterEngine()).toBe('cf1');
+    expect(warnings.join('\n')).toMatch(/failed to preload/);
+    expect(warnings.join('\n')).toMatch(/preload missing pack/);
+    expect(warnings.join('\n')).toMatch(/falling back to v1/);
+  } finally {
+    console.warn = originalWarn;
+    restoreFetch();
+    restoreBase();
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
+  }
+}, 180_000);
+
 test('a disabled forge returns a placeholder pawn', async () => {
   const status = await initForge({ force: true, enabled: false });
   expect(status.ok).toBe(false);
@@ -95,6 +194,12 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
   const restoreFetch = installFileFetch();
   installCanvasShim();
   installBitmapShim();
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    writable: true,
+    value: { search: '?cf=1', href: 'http://trailbound.test/?cf=1' },
+  });
   try {
     const status = await initForge({
       force: true,
@@ -256,6 +361,8 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
     }
   } finally {
     restoreFetch();
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
   }
 }, 180_000);
 
@@ -263,14 +370,24 @@ test('a v1 body keeps the old scale rule, and v2 metrics scale toward the 1.4 m 
   expect(forgePresentation(null, 0)).toEqual({ scale: 1, timeScale: 1 });
   expect(forgePresentation(null, 1.4)).toEqual({ scale: 1, timeScale: 1 });
   expect(forgePresentation(null, 2.8)).toEqual({ scale: 1, timeScale: 2 });
-  const human = forgePresentation({ heightM: 0.946, strideM: 0.539, walkDuration: 1.375 }, 1.6);
-  expect(human.scale).toBeCloseTo(1.4 / 0.946, 5);
+  const shared = 1.4 / 0.946;
+  const human = forgePresentation(
+    { heightM: 0.946, strideM: 0.539, walkDuration: 1.375, scale: shared },
+    1.6,
+  );
+  const dwarf = forgePresentation(
+    { heightM: 0.762, strideM: 0.4, walkDuration: 1.375, scale: shared },
+    1.6,
+  );
+  expect(human.scale).toBeCloseTo(shared, 5);
+  expect(dwarf.scale).toBe(human.scale);
   expect(human.timeScale).toBeGreaterThan(0.2);
   expect(human.timeScale).not.toBe(Math.max(0.6, 1.6 / 1.4));
+  expect(dwarf.timeScale).not.toBe(human.timeScale);
 });
 
 test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unless asked', async () => {
-  installHeadlessShims();
+  const platform = installHeadlessShims();
   const vendor2 = path.resolve('public', characterForgeV2Paths().base);
   const fetched: string[] = [];
   const restoreFetch = installFetch(vendor2, 'cf2-test/', fetched);
@@ -279,9 +396,10 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
     await backend.init({
       runtimeUrl: pathToFileURL(path.join(vendor2, 'cf-runtime.mjs')).href,
       baseUrl: 'http://cf2-test/',
+      platform: platformWithFetch(platform),
     });
     const catalog = backend.catalog();
-    expect(catalog?.version).toBe('2.1.0');
+    expect(catalog?.version).toBe('2.1.1');
     expect(catalog?.raceMetrics?.human).toMatchObject({ heightM: 0.946, strideM: 0.539 });
     expect(catalog?.raceMetrics?.human?.walkDuration).toBeCloseTo(1.375, 3);
     expect(catalog?.flyerRaces).toEqual(expect.arrayContaining(['pixie', 'imp']));
@@ -357,7 +475,13 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
       heightM: expect.closeTo(0.762, 3),
       strideM: expect.any(Number),
       walkDuration: expect.closeTo(1.375, 3),
+      scale: expect.closeTo(1.4 / 0.946, 5),
     });
+    const aliased = backend.checkEdit(first, { hairStyle: 'arc_bob', skin: 1 });
+    expect(aliased.ok, JSON.stringify(aliased.errors)).toBe(true);
+    const stripped = backend.checkEdit(first, { name: 'nope', cape: 'red' });
+    expect(stripped.ok).toBe(true);
+    expect(stripped.recipe).toEqual(first);
     built.play('Walk');
     built.mixer.update(0.05);
     expect(built.socket?.('head')).toBeTruthy();
@@ -374,6 +498,7 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
         runtimeUrl: pathToFileURL(path.join(vendor2, 'cf-runtime.mjs')).href,
         baseUrl: 'http://cf2-private/',
         privateAnimBaseUrl: 'http://cf2-private/private-ki/',
+        platform: platformWithFetch(platform),
       });
       const recipe = opted.generate({
         seed: 9,
@@ -394,15 +519,15 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
   }
 }, 180_000);
 
-test('loading a cf1 avatar on v2 migrates a copy and leaves the save alone', async () => {
-  installHeadlessShims();
+test('loading a cf1 avatar on the default backend migrates a copy and leaves the save alone', async () => {
+  const platform = installHeadlessShims();
   const vendor2 = path.resolve('public', characterForgeV2Paths().base);
   const restoreFetch = installFetch(vendor2, 'cf2-load/', []);
   const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
   Object.defineProperty(globalThis, 'location', {
     configurable: true,
     writable: true,
-    value: { search: '?cf=2', href: 'http://trailbound.test/?cf=2' },
+    value: { search: '', href: 'http://trailbound.test/' },
   });
   try {
     const fixtures = JSON.parse(
@@ -420,6 +545,7 @@ test('loading a cf1 avatar on v2 migrates a copy and leaves the save alone', asy
       enabled: true,
       runtimeUrl: pathToFileURL(path.join(vendor2, 'cf-runtime.mjs')).href,
       baseUrl: 'http://cf2-load/',
+      platform: platformWithFetch(platform),
     });
     expect(ready.ok, ready.reason).toBe(true);
     expect(characterEngine()).toBe('cf2');
@@ -438,6 +564,42 @@ test('loading a cf1 avatar on v2 migrates a copy and leaves the save alone', asy
     else Reflect.deleteProperty(globalThis, 'location');
   }
 }, 180_000);
+
+function pointLocationAtPublic(search: string): () => void {
+  // Vitest reports `import.meta.env.BASE_URL` as `/`. The dev server uses `./`,
+  // which is what `resolvePublic` joins onto the page URL. A leading slash
+  // against a `file:` page URL drops the public directory.
+  const env = import.meta.env as { BASE_URL: string };
+  const previousBase = env.BASE_URL;
+  env.BASE_URL = './';
+  const href = pathToFileURL(`${path.resolve('public')}${path.sep}`).href;
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    writable: true,
+    value: { search, href },
+  });
+  return () => {
+    env.BASE_URL = previousBase;
+  };
+}
+
+function installDiskFetch(): () => void {
+  const original = globalThis.fetch.bind(globalThis);
+  const root = path.resolve('public');
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (!url.startsWith('file:')) return original(input, init);
+    const file = fileURLToPath(url.split('?')[0] ?? url);
+    if (file !== root && !file.startsWith(`${root}${path.sep}`)) {
+      throw new Error(`forge test fetch escaped: ${file}`);
+    }
+    const data = await readFile(file);
+    return new Response(data);
+  };
+  return () => {
+    globalThis.fetch = original;
+  };
+}
 
 function installFileFetch(): () => void {
   const original = globalThis.fetch.bind(globalThis);
@@ -507,7 +669,11 @@ function installCanvasShim(): void {
   Object.assign(globalThis, { OffscreenCanvas: CanvasShim });
 }
 
-function installHeadlessShims(): void {
+function installHeadlessShims(): {
+  createCanvas: () => unknown;
+  createImageBitmap: (blob: Blob) => Promise<unknown>;
+  document: { createElement(tag: string): unknown };
+} {
   class CanvasShim {
     width: number;
     height: number;
@@ -578,36 +744,33 @@ function installHeadlessShims(): void {
       };
     }
   }
-  class ImageShim {
-    width = 8;
-    height = 8;
-    onload: (() => void) | null = null;
-    set src(_value: string) {
-      queueMicrotask(() => this.onload?.());
-    }
-    decode(): Promise<void> {
-      return Promise.resolve();
-    }
-  }
-  (globalThis as unknown as { self: unknown }).self = globalThis;
-  (globalThis as unknown as { window: unknown }).window = globalThis;
-  const globals = globalThis;
-  globals.OffscreenCanvas = CanvasShim as unknown as typeof OffscreenCanvas;
-  globals.createImageBitmap = async () =>
-    ({
+  return {
+    createCanvas: () => new CanvasShim(32, 32),
+    createImageBitmap: async () => ({
       width: 8,
       height: 8,
       close() {
         return;
       },
-    }) as ImageBitmap;
-  globals.document = {
-    createElement(tag: string) {
-      if (tag === 'canvas') return new CanvasShim(32, 32) as unknown as HTMLCanvasElement;
-      return { style: {} } as HTMLElement;
+    }),
+    document: {
+      createElement(tag: string) {
+        if (tag !== 'canvas') throw new Error(`createElement ${tag}`);
+        return new CanvasShim(32, 32);
+      },
     },
-  } as Document;
-  globals.Image = ImageShim as unknown as typeof Image;
+  };
+}
+
+function platformWithFetch(platform: ReturnType<typeof installHeadlessShims>): ReturnType<
+  typeof installHeadlessShims
+> & {
+  fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+} {
+  return {
+    ...platform,
+    fetch: (input, init) => globalThis.fetch(input, init),
+  };
 }
 
 function installFetch(root: string, marker: string, seen: string[]): () => void {

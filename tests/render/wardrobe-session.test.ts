@@ -39,6 +39,10 @@ vi.mock('../../src/render/characters/forge', async (importOriginal) => {
 });
 
 beforeAll(() => {
+  // These cases exercise the v1 wardrobe. The default runtime is v2.
+  (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(
+    `${window.location.origin}${window.location.pathname}?cf=1`,
+  );
   installCanvasShim();
   installBitmapShim();
   installFetch();

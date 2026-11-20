@@ -13,15 +13,16 @@
  *     -> { recipe, displaced, hidden, warnings }         -> equip / unequip / dye
  *   catalog (races keyed by id, with heightM / strideM) -> catalog
  *   migrate                                              -> migrateRecipe
- *   setLighting({ mode, sunDir, sunColor, strength })    -> aimSun
- *     (v1 aimSun calls pixelSun; v2 derives a light from the camera)
+ *   setLighting({ mode, sunDir, strength, hue })         -> aimSun
+ *     (v1 aimSun calls pixelSun; v2 uses mode `tb`. `sunColor` throws.)
  *   build(recipe, { budgetMs, texSize, signal })
  *     -> { object3D, mixer, clips, play, setTimeScale,
  *          socket, setRecipe, dispose, info }            -> build
  *
  * Stage contract for every backend: feet at y = 0, +Z forward, metres.
  * Sockets, when `build` exposes them: hand_l, hand_r, back, belt, head.
- * `?cf=2` (also `v2` / `cf2`) selects `backends/v2.ts`. Anything else is v1.
+ * No `?cf=` param selects `backends/v2.ts`. `?cf=2` (also `v2` / `cf2`) does too.
+ * `?cf=1` (also `v1` / `cf1`) selects `backends/v1.ts`. `?cf=0` skips the runtime.
  */
 import type { AnimationClip, AnimationMixer, Camera, Object3D } from 'three';
 import type { AvatarEngine, PlayerProfileEntry } from '../../../core/people/avatar';
@@ -36,10 +37,24 @@ export interface CharacterBackendInit {
   profile?: unknown;
   /**
    * Opt-in base URL for a privately hosted animation pack.
-   * Unset in the public game. v2 registers it and switches to `cf+ki`.
-   * v1 ignores it.
+   * Unset in the public game. v2 registers it and passes `animationSet: 'cf+ki'`
+   * to init. v1 ignores it.
    */
   privateAnimBaseUrl?: string;
+  /**
+   * Headless canvas, image decode, fetch, and document. v2 passes these to
+   * `CF.init({ platform })` so a Node test does not shim DOM globals.
+   */
+  platform?: CharacterPlatform;
+}
+
+/** Injected DOM stand-ins for a headless Character Forge 2 build. */
+export interface CharacterPlatform {
+  createCanvas?: () => unknown;
+  createImageBitmap?: (blob: Blob) => Promise<unknown>;
+  decodeImage?: (b64png: string) => Promise<unknown>;
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  document?: { createElement(tag: string): unknown };
 }
 
 /** v1 `generate` input, plus the fields v2 `randomRecipe` takes. */
@@ -108,12 +123,13 @@ export interface CharacterEquipResult {
   warnings?: unknown;
 }
 
-/** v2 `setLighting`. v1 lighting goes through `aimSun` -> `pixelSun`. */
+/** v2 `setLighting`. Modes are `current`, `tb`, and `flat` (`pixel` aliases `tb`). */
 export interface CharacterLighting {
-  mode?: string;
+  mode?: 'current' | 'tb' | 'flat' | 'pixel';
   sunDir?: readonly [number, number, number];
-  sunColor?: string | number;
   strength?: number;
+  /** Tint in `tb` mode. There is no light colour. */
+  hue?: number;
 }
 
 export interface CharacterFeatures {
