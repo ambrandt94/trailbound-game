@@ -1,12 +1,23 @@
 export const TILE = 16;
 export const WORLD_BASE = 192;
 /**
- * 16× is about 24.6 km. The height field’s coarse stride grows with the map
- * (`coarseStride` in terrain.ts), so a 32× preset is a one-line addition here
- * once the full-resolution grids (~300 MB) are acceptable.
+ * 16× is about 24.6 km and stays the default. 32× (about 49 km) is
+ * experimental: its full-resolution grids (heights, metres, biomes, paths)
+ * take about 377 MB against 94 MB at 16×. The height field’s coarse stride
+ * grows with the map (`coarseStride` in terrain.ts) and the 2D map always
+ * draws 192 display cells, so the map renderer does not grow with it.
  */
-export const WORLD_SCALES = [1, 2, 4, 8, 16] as const;
+export const WORLD_SCALES = [1, 2, 4, 8, 16, 32] as const;
 export type WorldScale = (typeof WORLD_SCALES)[number];
+/** Sizes past the tested default. The new-world screen marks these. */
+export const EXPERIMENTAL_WORLD_SCALES: readonly WorldScale[] = [32];
+/** Metres per fine world tile. Matches `TILE_M` in terrain.ts. */
+export const WORLD_TILE_METRES = 8;
+
+/** Side length of a square world at `scale`, in kilometres. */
+export function worldSizeKm(scale: WorldScale): number {
+  return (WORLD_BASE * scale * WORLD_TILE_METRES) / 1000;
+}
 export const ZONE_SCALE = 8;
 /** Close enough that a person sprite fills the view. The world-map tool's ceiling. */
 export const MAX_SCALE = 160;

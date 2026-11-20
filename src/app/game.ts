@@ -1,4 +1,4 @@
-import { migrate } from '../core/save/migrations';
+import { migrate, savedWorldSettings } from '../core/save/migrations';
 import type { SaveBackend } from '../core/save/types';
 import { areaLooksEqual, normalizeAreaLook, type AreaLook } from '../core/state/area-look';
 import { normalizeSettings, type GameSettings } from '../core/state/settings';
@@ -15,13 +15,11 @@ import { biomeAtTile } from '../core/world/biome-at';
 import {
   Biome,
   WORLD_BASE,
-  clampSettings,
-  DEFAULT_WORLD_SETTINGS,
   startScaleFor,
   type ChunkData,
   type WorldData,
 } from '../core/world/models';
-import { resolveLandStyle } from '../core/world/world-gen';
+import { sameWorldSettings } from '../core/world/world-gen';
 import type { ContentSource, PlaceContent } from '../core/content/parse';
 import { formatClock } from '../core/sim/clock';
 import { formatPartyReadout, wagonMenuRows, wagonRefusal } from '../core/sim/party';
@@ -48,7 +46,7 @@ import {
   creatorSerial,
   creatorSource,
   creatorView,
-  newWorldLand,
+  newWorldSettings,
 } from '../ui/creator-state';
 import {
   bindCommands,
@@ -804,7 +802,7 @@ export class Game implements GameHost {
       y: this.place.map.y,
     });
     this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, {
-      settings: clampSettings({ ...DEFAULT_WORLD_SETTINGS, mapStyle: newWorldLand.value }),
+      settings: newWorldSettings(),
     });
     await this.mapRenderer.load(this.options.baseUrl ?? './');
     await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
@@ -831,7 +829,10 @@ export class Game implements GameHost {
       x: this.place?.map.x ?? 8,
       y: this.place?.map.y ?? 8,
     });
-    this.world.beginGeneratedWorld(migrated.core.worldSeed, { keepHero: true });
+    this.world.beginGeneratedWorld(migrated.core.worldSeed, {
+      keepHero: true,
+      settings: savedWorldSettings(migrated.core),
+    });
     this.world.load(migrated.core);
     await this.mapRenderer.load(this.options.baseUrl ?? './');
     await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
@@ -866,15 +867,18 @@ export class Game implements GameHost {
           await this.persist();
           await this.stack.pop();
           if (intent === 'new') {
-            const resolved = resolveLandStyle(newWorldLand.value, DEFAULT_WORLD_SEED);
-            if (this.world.data?.settings.mapStyle !== resolved) {
-              this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, {
-                settings: clampSettings({
-                  ...DEFAULT_WORLD_SETTINGS,
-                  mapStyle: newWorldLand.value,
-                }),
+            const wanted = newWorldSettings();
+            const current = this.world.data?.settings;
+            if (!current || !sameWorldSettings(current, wanted, DEFAULT_WORLD_SEED)) {
+              generating.value = true;
+              await new Promise((resolve) => {
+                setTimeout(resolve, 40);
               });
+              this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, { settings: wanted });
               await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
+              generating.value = false;
+              // The save above still describes the placeholder world. Store this one.
+              await this.persist();
             }
             await this.enterMap();
             return;

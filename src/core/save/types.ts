@@ -1,6 +1,7 @@
 import type { PlayerAvatar } from '../people/avatar';
 import type { ZoneRecord } from '../area/zone-history';
 import type { CaravanSave } from '../sim/caravan';
+import type { WorldSettings } from '../world/models';
 
 /**
  * Save seam from the project plan. Platform backends implement this.
@@ -56,6 +57,11 @@ export interface PackedWorld {
   caravan?: CaravanSave;
   /** The last zones entered, newest first. Missing on older saves; the history starts empty. */
   zones?: ZoneRecord[];
+  /**
+   * Generation settings with the land style resolved, so Continue rebuilds the
+   * same size and shape. Missing on older saves; those load the default world.
+   */
+  worldSettings?: WorldSettings;
   gameVersion: string;
   cfPin: CfPin;
 }

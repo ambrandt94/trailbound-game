@@ -721,6 +721,7 @@ export class WorldState {
       party: partySave(this.party),
       caravan: caravanSave(this.caravan, this.heroAboard),
       zones: zonesSave(this.zones),
+      ...(this.data ? { worldSettings: copyWorldSettings(this.data.settings) } : {}),
       gameVersion: meta.gameVersion,
       cfPin: { ...meta.cfPin },
     };
@@ -1110,4 +1111,11 @@ function clamp01(value: number): number {
   if (value < 0) return 0;
   if (value > 1) return 1;
   return value;
+}
+
+function copyWorldSettings(settings: WorldSettings): WorldSettings {
+  return {
+    ...settings,
+    landSketch: settings.landSketch ? [...settings.landSketch] : null,
+  };
 }

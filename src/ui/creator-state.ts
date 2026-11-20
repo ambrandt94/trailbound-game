@@ -1,5 +1,10 @@
 import { signal } from '@preact/signals';
-import type { LandStyle } from '../core/world/models';
+import {
+  DEFAULT_WORLD_SETTINGS,
+  clampSettings,
+  type LandStyle,
+  type WorldSettings,
+} from '../core/world/models';
 import type { AvatarGender } from '../core/people/avatar';
 
 export interface SwatchView {
@@ -97,6 +102,59 @@ export const creatorView = signal<CreatorView>(emptyCreatorView());
 
 /** Land shape for the next new world. Random picks a style from the world seed. */
 export const newWorldLand = signal<LandStyle>('random');
+
+/** New-world generation choices beside the land shape. Ranges follow `clampSettings`. */
+export type NewWorldGen = Pick<
+  WorldSettings,
+  | 'worldScale'
+  | 'poiCount'
+  | 'wanderers'
+  | 'caravans'
+  | 'armies'
+  | 'residentsMode'
+  | 'avgPerHouse'
+  | 'avgPerPlace'
+>;
+
+export function defaultNewWorldGen(): NewWorldGen {
+  const d = DEFAULT_WORLD_SETTINGS;
+  return {
+    worldScale: d.worldScale,
+    poiCount: d.poiCount,
+    wanderers: d.wanderers,
+    caravans: d.caravans,
+    armies: d.armies,
+    residentsMode: d.residentsMode,
+    avgPerHouse: d.avgPerHouse,
+    avgPerPlace: d.avgPerPlace,
+  };
+}
+
+export const newWorldGen = signal<NewWorldGen>(defaultNewWorldGen());
+
+/** Merge one change and clamp it to the world-settings ranges. */
+export function setNewWorldGen(patch: Partial<NewWorldGen>): void {
+  const next = clampSettings({ ...DEFAULT_WORLD_SETTINGS, ...newWorldGen.value, ...patch });
+  newWorldGen.value = {
+    worldScale: next.worldScale,
+    poiCount: next.poiCount,
+    wanderers: next.wanderers,
+    caravans: next.caravans,
+    armies: next.armies,
+    residentsMode: next.residentsMode,
+    avgPerHouse: next.avgPerHouse,
+    avgPerPlace: next.avgPerPlace,
+  };
+}
+
+/** Full settings for the next new world: land shape plus the generation choices. */
+export function newWorldSettings(): WorldSettings {
+  return clampSettings({
+    ...DEFAULT_WORLD_SETTINGS,
+    ...newWorldGen.value,
+    mapStyle: newWorldLand.value,
+  });
+}
 export const creatorBusy = signal(false);
 export const creatorSource = signal<'forge' | 'placeholder' | ''>('');
 export const creatorSerial = signal(0);
