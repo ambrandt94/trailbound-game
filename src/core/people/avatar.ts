@@ -39,8 +39,10 @@ export interface PlayerAvatar {
   race: string;
   gender: AvatarGender;
   /**
-   * Which runtime produced `recipe`. Schema 5. Missing on a schema 4 save
-   * until migration. New avatars are `cf1` while that runtime is the pin.
+   * Which runtime produced `recipe`. Schema 5. A schema 4 save is tagged
+   * `cf1` on load and is not rewritten. Confirming a look stores the
+   * selected engine (`cf2` by default). This empty default stays `cf1`
+   * until a look is confirmed.
    */
   engine?: AvatarEngine;
   /**

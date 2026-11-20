@@ -1,4 +1,4 @@
-# LICENSES: Character Forge runtime 2.1.0
+# LICENSES: Character Forge runtime 2.1.1
 
 Every shipped file is listed by rule below (machine-readable: `licenses.json`). `tools/licenses.mjs check` fails the build if a file has no rule or if any Kevin Iglesias (KI) clip is present.
 

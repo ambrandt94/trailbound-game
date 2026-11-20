@@ -70,6 +70,7 @@ import {
 import {
   adoptPlayerBody,
   buildAvatar,
+  characterEngine,
   getPlayerBody,
   forgeReady,
   forgeTimings,
@@ -92,7 +93,12 @@ function raceMetricsOf(object: { userData: Record<string, unknown> }): ForgeRace
   ) {
     return null;
   }
-  return { heightM: metrics.heightM, strideM: metrics.strideM, walkDuration: metrics.walkDuration };
+  return {
+    heightM: metrics.heightM,
+    strideM: metrics.strideM,
+    walkDuration: metrics.walkDuration,
+    scale: typeof metrics.scale === 'number' && metrics.scale > 0 ? metrics.scale : undefined,
+  };
 }
 import type { PlayerAvatar } from '../core/people/avatar';
 import type { Clock } from './fixed-step';
@@ -1025,6 +1031,7 @@ export class Game implements GameHost {
     root.dataset.building = creatorBusy.value ? 'true' : 'false';
     root.dataset.avatarSource = creatorSource.value;
     const timings = forgeTimings();
+    root.dataset.cfEngine = characterEngine() ?? '';
     root.dataset.cfInitMs = timings.initMs.toFixed(0);
     root.dataset.cfBuildMs = timings.buildMs.toFixed(0);
     root.dataset.buildSerial = String(creatorSerial.value);

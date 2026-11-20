@@ -3,7 +3,7 @@
  "name": "character-forge",
  "engine": {
   "name": "character-forge",
-  "version": "2.1.0"
+  "version": "2.1.1"
  },
  "generator": {
   "version": 1
@@ -37,36 +37,40 @@
  "licenses": "LICENSES.md",
  "files": {
   "API.md": {
-   "bytes": 7426,
-   "sha256": "6cb7ddb8c10a448d3c708ea134ff693490883265aecc03b113d3cac4d1bd02b9"
+   "bytes": 10352,
+   "sha256": "252385c5d35561de5d158833d4f02437a5063cb324a276aa670bceebda58361b"
+  },
+  "CHANGELOG.md": {
+   "bytes": 1960,
+   "sha256": "0c3286e6ca250f3066e8d613428817dda85bc4a790daac250538e853be3e49af"
   },
   "LICENSES.md": {
    "bytes": 7163,
-   "sha256": "1c53bf29fcd52934d45f826fb77b076208079784683318b767449b6b6e6d578b"
+   "sha256": "88f3fe51bfe8cf6868666a34c7049322cac3f8001e135b9dd712e0af69d5810d"
   },
   "README.md": {
-   "bytes": 8353,
-   "sha256": "43c369853a758b84594ef2a9d211ceaf9051c111c40eac2d405a81decdd478f0"
+   "bytes": 10440,
+   "sha256": "93ecee3bea01e3513676f2b0c91d50addaa2c88782e8b042458c8537134a47e5"
   },
   "assets.json": {
    "bytes": 17892,
-   "sha256": "89344de63c7d86dbd16d9ac0aaae710630e3ba57a26dae6e765046d54c66f719"
+   "sha256": "6285b5e20a1bc9ba1ce7e29eedbb89cf3c04ec7387b83c94833e6c7ce9c13cc5"
   },
   "cf-runtime.d.ts": {
-   "bytes": 6851,
-   "sha256": "7e6e13962c730f81c863f51c99f9bd02c7d0d5fdd83a05b7ae5b3c3240a67924"
+   "bytes": 8061,
+   "sha256": "a8c684559be877f57e7e4b3d2110d65882a44516e668f0cadea7859183f95258"
   },
   "cf-runtime.mjs": {
-   "bytes": 82949,
-   "sha256": "059294740b1782e264f4eb55aaf8343b905fef7c54b3c2414eaa35f80cb1fe56"
+   "bytes": 86814,
+   "sha256": "bdab2ea92cc76aa4b22f0c103eac436979a7ed3ef77b5937437e984e21e53f88"
   },
-  "chunks/chunk-2LWS7J5I.mjs": {
+  "chunks/chunk-YZGSMQMC.mjs": {
    "bytes": 989,
-   "sha256": "3fa04289ae7554b418f958c002d1e79b622c96bfeacf9a522f39a65eefe17178"
+   "sha256": "47d175804523f70005fb8ae245bb230144d3921592be6ea48cf03288738aa3ff"
   },
-  "chunks/engine_entry-PQ4LIH5M.mjs": {
-   "bytes": 300173,
-   "sha256": "1c44274ab12d24ad52a7889dfa8c4b014d4949efa5dd414de6c2b873565ed6c1"
+  "chunks/engine_entry-ZP73GT3T.mjs": {
+   "bytes": 301045,
+   "sha256": "80af5ce0ba8063360c1743331b82d4f2644569467bbb686c4fcb6a0da0cf789f"
   },
   "licenses.json": {
    "bytes": 14154,
@@ -77,5 +81,5 @@
    "sha256": "7be9d1700b86f7d6a951649b6ee12f7c81642fe144c9031cce72648e0d5b3bf5"
   }
  },
- "builtAt": "2026-11-20T14:52:04.802Z"
+ "builtAt": "2026-11-20T17:34:45.098Z"
 }

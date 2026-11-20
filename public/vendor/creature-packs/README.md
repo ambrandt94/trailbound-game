@@ -1,6 +1,6 @@
 # Creature packs
 
-Character Forge runtime `public/vendor/character-forge/` is the character-recipe bundle (pin `current.json`, currently 1.2.1). That runtime has no creature loader.
+Character Forge runtime `public/vendor/character-forge/` is the character-recipe bundle. The game loads 2.1.1 by default (`current-v2.json`). `current.json` stays the 1.2.1 fallback pin. That runtime has no creature loader.
 
 Approved creature packs live here, one immutable directory per version:
 

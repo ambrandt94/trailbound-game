@@ -5,9 +5,10 @@
  */
 import * as THREE from 'three';
 import type { AvatarEngine, PlayerAvatar, PlayerProfileEntry } from '../../core/people/avatar';
-import { HERO_HEIGHT_M, clipTimeScale } from '../../core/state/area-pace';
+import { clipTimeScale } from '../../core/state/area-pace';
 import { createCharacterBackend } from './backends/select';
-import type { BuiltCharacter, CharacterBackend } from './backends/types';
+import type { BuiltCharacter, CharacterBackend, CharacterPlatform } from './backends/types';
+import { createV1Backend } from './backends/v1';
 import { characterForgePaths, characterForgeV2Paths } from './cf-pin';
 
 export interface ForgeStatus {
@@ -44,11 +45,15 @@ export interface ForgeCatalog {
   >;
 }
 
-/** Metres from a v2 catalog row, used to scale the body and time the Walk clip. */
+/**
+ * Metres from a v2 catalog row, used to time the Walk clip.
+ * `scale` is the one town factor, 1.4 / the v2 human height, shared by every race.
+ */
 export interface ForgeRaceMetrics {
   heightM: number;
   strideM: number;
   walkDuration: number;
+  scale?: number;
 }
 
 /** Public fields the API documents, plus the untouched engine recipe. */
@@ -209,14 +214,17 @@ interface InitOptions {
   runtimeUrl?: string;
   /**
    * Pass false to force the placeholder path. `?cf=0` does the same.
-   * `?cf=2` (also `v2` / `cf2`) selects the Character Forge 2 backend.
-   * Anything else is v1. v1 stays the default.
+   * With no `?cf=` param the Character Forge 2 backend is selected.
+   * `?cf=1` (also `v1` / `cf1`) selects v1. `?cf=2` (also `v2` / `cf2`)
+   * still selects v2. A v2 init or preload failure falls back to v1.
    */
   enabled?: boolean;
   profile?: unknown;
   force?: boolean;
   /** Forwarded to the backend. Unset leaves the public animation set alone. */
   privateAnimBaseUrl?: string;
+  /** Headless Character Forge 2 hooks. v1 ignores them. */
+  platform?: CharacterPlatform;
 }
 
 interface EngineRecipe {
@@ -237,6 +245,7 @@ let status: ForgeStatus = { ok: false, reason: 'not started', initMs: 0 };
 let adopted: AvatarBody | null = null;
 let buildMs = 0;
 let buildError = '';
+let initOptions: InitOptions = {};
 
 export function initForge(options: InitOptions = {}): Promise<ForgeStatus> {
   if (pending && !options.force) return pending;
@@ -337,6 +346,8 @@ export function recipeForAvatar(
 /**
  * Scale and Walk mixer rate. Without v2 metrics this is the v1 rule:
  * scale 1, and `speed / 1.4` once the body is moving.
+ * v2 uses one uniform scale for every race (`metrics.scale`), from the human
+ * catalog height, so a dwarf stays shorter than a human.
  */
 export function forgePresentation(
   metrics: ForgeRaceMetrics | null,
@@ -346,7 +357,7 @@ export function forgePresentation(
   if (!metrics || !(metrics.heightM > 0) || !(metrics.strideM > 0) || !(metrics.walkDuration > 0)) {
     return { scale: 1, timeScale: moving ? Math.max(0.6, speed / 1.4) : 1 };
   }
-  const scale = HERO_HEIGHT_M / metrics.heightM;
+  const scale = metrics.scale && metrics.scale > 0 ? metrics.scale : 1;
   if (!moving) return { scale, timeScale: 1 };
   return {
     scale,
@@ -512,43 +523,89 @@ export function aimForgeSun(camera: THREE.Camera): void {
   backend?.aimSun(camera);
 }
 
-/** Warm v2 race assets during the loading screen. v1 returns without init. */
+/** Warm v2 race assets during the loading screen. v1 has nothing to preload. */
 export async function preloadForge(): Promise<void> {
-  if (createCharacterBackend().id !== 'cf2') return;
+  if (queryDisablesForge() || createCharacterBackend().id !== 'cf2') return;
   const ready = await initForge();
-  if (!ready.ok) return;
-  await backend?.preload?.();
+  if (!ready.ok || backend?.id !== 'cf2') return;
+  try {
+    await backend.preload?.();
+  } catch (error) {
+    await fallBackToV1(error, 'preload');
+  }
 }
 
 async function runInit(options: InitOptions): Promise<ForgeStatus> {
   const started = now();
+  initOptions = options;
   backend?.dispose();
   backend = null;
   if (options.enabled === false || queryDisablesForge()) {
     status = { ok: false, reason: 'cf=0', initMs: now() - started };
     return status;
   }
-  let selected: CharacterBackend | null = null;
+  const selected = createCharacterBackend();
   try {
-    selected = createCharacterBackend();
-    const paths = selected.id === 'cf2' ? characterForgeV2Paths() : characterForgePaths();
-    await selected.init({
-      runtimeUrl: options.runtimeUrl ?? resolvePublic(paths.runtime),
-      baseUrl: options.baseUrl ?? resolvePublic(paths.base),
-      profile: options.profile,
-      privateAnimBaseUrl: options.privateAnimBaseUrl,
-    });
+    await bindBackend(selected, options, false);
     backend = selected;
     status = { ok: true, reason: '', initMs: now() - started };
     return status;
   } catch (error) {
-    selected?.dispose();
+    selected.dispose();
+    backend = null;
+    if (selected.id !== 'cf2') {
+      status = {
+        ok: false,
+        reason: error instanceof Error ? error.message : 'forge init failed',
+        initMs: now() - started,
+      };
+      return status;
+    }
+    const fallen = await fallBackToV1(error, 'init');
+    status = { ...fallen, initMs: now() - started };
+    pending = Promise.resolve(status);
+    return status;
+  }
+}
+
+async function bindBackend(
+  selected: CharacterBackend,
+  options: InitOptions,
+  fallback: boolean,
+): Promise<void> {
+  const paths = selected.id === 'cf2' ? characterForgeV2Paths() : characterForgePaths();
+  await selected.init({
+    runtimeUrl: (fallback ? undefined : options.runtimeUrl) ?? resolvePublic(paths.runtime),
+    baseUrl: (fallback ? undefined : options.baseUrl) ?? resolvePublic(paths.base),
+    profile: options.profile,
+    privateAnimBaseUrl: options.privateAnimBaseUrl,
+    platform: options.platform,
+  });
+}
+
+/** v2 failed. Warn and load the vendored 1.2.1 runtime so the player still has a body. */
+async function fallBackToV1(error: unknown, stage: 'init' | 'preload'): Promise<ForgeStatus> {
+  const reason = error instanceof Error ? error.message : `forge ${stage} failed`;
+  console.warn(`Character Forge v2 failed to ${stage} (${reason}); falling back to v1.`);
+  backend?.dispose();
+  backend = null;
+  const fallback = createV1Backend();
+  const started = now();
+  try {
+    await bindBackend(fallback, initOptions, true);
+    backend = fallback;
+    status = { ok: true, reason: '', initMs: status.initMs || now() - started };
+    pending = Promise.resolve(status);
+    return status;
+  } catch (fallbackError) {
+    fallback.dispose();
     backend = null;
     status = {
       ok: false,
-      reason: error instanceof Error ? error.message : 'forge init failed',
+      reason: fallbackError instanceof Error ? fallbackError.message : 'forge init failed',
       initMs: now() - started,
     };
+    pending = Promise.resolve(status);
     return status;
   }
 }

@@ -160,6 +160,7 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
       matrixWorld?: unknown;
       updateWorldMatrix?: (parents: boolean, children: boolean) => void;
       getObjectByName?: (name: string) => Node | null;
+      children?: Node[];
     };
     const host = globalThis as {
       __tb?: {
@@ -212,16 +213,63 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
     tb?.place?.(spot.x, spot.z, 0.4);
     tb?.setView?.(7);
     tb?.session?.frame?.();
+    const skinnedUnder = (root: Node | null): Node | null => {
+      const stack: Node[] = root ? [root] : [];
+      let best: Node | null = null;
+      let bestCount = -1;
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        const count = node.geometry?.attributes?.position?.count ?? 0;
+        if (node.isSkinnedMesh && count > bestCount) {
+          best = node;
+          bestCount = count;
+        }
+        if (node.children) stack.push(...node.children);
+      }
+      return best;
+    };
     const scene = tb?.session?.worldView?.().scene;
     const avatar = scene?.getObjectByName?.('CF_avatar') ?? null;
-    const body = scene?.getObjectByName?.('CF_body') ?? null;
+    // v1 names the skinned mesh CF_body. v2 names its root group CF_body, and
+    // the game then renames that root CF_avatar, so the mesh is a descendant.
+    const named = scene?.getObjectByName?.('CF_body') ?? null;
+    const body = named?.isSkinnedMesh ? named : skinnedUnder(avatar);
     const bones = body?.skeleton?.bones ?? [];
     let inScene = false;
     for (let parent: Node | null | undefined = avatar; parent; parent = parent.parent) {
       if (parent === scene) inScene = true;
     }
     const position = body?.geometry?.attributes?.position;
-    const material = Array.isArray(body?.material) ? body?.material[0] : body?.material;
+    const textureWidth = (source: Node['material']): number => {
+      const list = Array.isArray(source) ? source : source ? [source] : [];
+      let best = 0;
+      for (const entry of list) {
+        const images: Array<{ width?: number }> = [];
+        if (entry?.map?.image) images.push(entry.map.image);
+        const uniforms = (
+          entry as { uniforms?: Record<string, { value?: { image?: { width?: number } } }> }
+        ).uniforms;
+        if (uniforms) {
+          for (const value of Object.values(uniforms)) {
+            if (value?.value?.image) images.push(value.value.image);
+          }
+        }
+        for (const image of images) best = Math.max(best, image.width ?? 0);
+      }
+      return best;
+    };
+    const widestTexture = (root: Node | null): number => {
+      const stack: Node[] = root ? [root] : [];
+      let best = 0;
+      while (stack.length > 0) {
+        const node = stack.pop();
+        if (!node) continue;
+        best = Math.max(best, textureWidth(node.material));
+        if (node.children) stack.push(...node.children);
+      }
+      return best;
+    };
     const renderer = host.TBRenderer;
     const canvas = renderer?.domElement;
     const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl');
@@ -311,7 +359,7 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
       scale: avatar?.scale?.x ?? 0,
       bytes: position?.array?.byteLength ?? 0,
       indexBytes: body?.geometry?.index?.array?.byteLength ?? 0,
-      mapWidth: material?.map?.image?.width ?? 0,
+      mapWidth: widestTexture(avatar),
       pixelDelta,
       verts: position?.count ?? 0,
     };
