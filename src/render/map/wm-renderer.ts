@@ -60,12 +60,13 @@ import {
 import { hash2 } from '../../core/world/noise';
 import {
   biomeSeason,
-  blobLocal,
   decoFor,
+  featureGroup,
   FLOORS,
   GROUPS,
-  overlayGroup,
+  NB_OFFSETS,
   tileSrc,
+  type TileSrc,
 } from '../../core/world/tileset';
 import { buildCoarseMap, type CoarseMap } from './coarse-map';
 import {
@@ -581,12 +582,31 @@ function characterWorldH(pxH: number): number {
   return pxH / ZONE_SCALE;
 }
 
-function grassSrc(biome: Biome): { sx: number; sy: number } {
-  return tileSrc(GROUPS.plateau, biomeSeason(biome === Biome.Water ? Biome.Plains : biome), 1, 1);
+/** Road neighbour mask (bit per {@link NB_OFFSETS} entry) for the quarter-tile autotile. */
+function roadMask(on: (ox: number, oy: number) => boolean): number {
+  let mask = 0;
+  for (let i = 0; i < 8; i++) {
+    const [ox, oy] = NB_OFFSETS[i]!;
+    if (on(ox, oy)) mask |= 1 << i;
+  }
+  return mask;
 }
 
-function pathSeason(biome: Biome): number {
-  return biomeSeason(biome);
+/** Sparse decos on the coarse sheet, same placement as before the ground pass. */
+function coarseDeco(biome: Biome, cx: number, cy: number): TileSrc | null {
+  const deco = (cx * 17 + cy * 31 + biome * 7) % 23;
+  if ((biome === Biome.Plains || biome === Biome.Meadow) && deco === 0) {
+    return decoFor(biome, 'flower');
+  }
+  if (biome === Biome.Meadow && deco === 4) return decoFor(biome, 'leaf');
+  if ((biome === Biome.Hills || biome === Biome.Heath || biome === Biome.Desert) && deco === 2) {
+    return decoFor(biome, 'pebble');
+  }
+  if (biome === Biome.Water && deco === 5) return decoFor(biome, 'ripple');
+  if ((biome === Biome.Marsh || biome === Biome.Jungle) && deco === 6) {
+    return decoFor(biome, 'lily');
+  }
+  return null;
 }
 
 type ChunkImage = CanvasImageSource & { width: number; height: number };
@@ -801,190 +821,42 @@ export class WorldRenderer {
     this.bakeMs = performance.now() - started;
   }
 
-  /** One 16 px Pixel Kingdom tile per coarse cell. Built once; zoom never rebuilds it. */
+  /**
+   * One 16 px Pixel Kingdom tile per coarse cell, grounds layered with
+   * 8-neighbour transitions. Built once; zoom never rebuilds it.
+   */
   private bakeCoarseSheet(coarse: CoarseMap): void {
     const { width, height } = coarse;
     const canvas = document.createElement('canvas');
     canvas.width = width * TILE;
     canvas.height = height * TILE;
     const ctx = canvas.getContext('2d');
-    if (!ctx || !this.assets.grasslands) {
+    const ground = this.assets.ground;
+    if (!ctx || !this.assets.grasslands || !ground) {
       this.worldBake = canvas;
       return;
     }
     ctx.imageSmoothingEnabled = false;
-    const g = this.assets.grasslands;
+    const wrap = (ix: number) => ((ix % width) + width) % width;
     const at = (x: number, y: number): Biome => {
       if (y < 0 || y >= height) return Biome.Water;
-      const wx = ((x % width) + width) % width;
-      return coarse.biomes[wx + y * width] as Biome;
+      return coarse.biomes[wrap(x) + y * width] as Biome;
     };
-    const stamp = (sx: number, sy: number, cx: number, cy: number) => {
-      ctx.drawImage(g, sx, sy, TILE, TILE, cx * TILE, cy * TILE, TILE, TILE);
-    };
+    const nb = new Uint8Array(9);
     for (let cy = 0; cy < height; cy++) {
       for (let cx = 0; cx < width; cx++) {
-        const biome = at(cx, cy);
-        const grass = grassSrc(biome);
-        stamp(grass.sx, grass.sy, cx, cy);
-        const group = overlayGroup(biome);
-        if (group !== null) {
-          const [lx, ly] = blobLocal(
-            at(cx, cy - 1) === biome,
-            at(cx + 1, cy) === biome,
-            at(cx, cy + 1) === biome,
-            at(cx - 1, cy) === biome,
-          );
-          const src = tileSrc(group, biomeSeason(biome), lx, ly);
-          stamp(src.sx, src.sy, cx, cy);
-        }
-        if (coarse.paths[cx + cy * width] && biome !== Biome.Water) {
-          const wrap = (ix: number) => ((ix % width) + width) % width;
-          const on = (x: number, y: number) =>
-            y >= 0 && y < height && coarse.paths[wrap(x) + y * width] === 1;
-          const [lx, ly] = blobLocal(
-            on(cx, cy - 1),
-            on(cx + 1, cy),
-            on(cx, cy + 1),
-            on(cx - 1, cy),
-          );
-          const src = tileSrc(GROUPS.path, pathSeason(biome), lx, ly);
-          stamp(src.sx, src.sy, cx, cy);
-        }
-        const deco = (cx * 17 + cy * 31 + biome * 7) % 23;
-        if ((biome === Biome.Plains || biome === Biome.Meadow) && deco === 0) {
-          const d = decoFor(biome, 'flower');
-          stamp(d.sx, d.sy, cx, cy);
-        } else if (biome === Biome.Meadow && deco === 4) {
-          const d = decoFor(biome, 'leaf');
-          stamp(d.sx, d.sy, cx, cy);
-        } else if (
-          (biome === Biome.Hills || biome === Biome.Heath || biome === Biome.Desert) &&
-          deco === 2
-        ) {
-          const d = decoFor(biome, 'pebble');
-          stamp(d.sx, d.sy, cx, cy);
-        } else if (biome === Biome.Water && deco === 5) {
-          const d = decoFor(biome, 'ripple');
-          stamp(d.sx, d.sy, cx, cy);
-        } else if ((biome === Biome.Marsh || biome === Biome.Jungle) && deco === 6) {
-          const d = decoFor(biome, 'lily');
-          stamp(d.sx, d.sy, cx, cy);
-        }
+        for (let k = 0; k < 9; k++) nb[k] = at(cx + (k % 3) - 1, cy + ((k / 3) | 0) - 1);
+        const biome = nb[4] as Biome;
+        const road =
+          coarse.paths[cx + cy * width] && biome !== Biome.Water
+            ? roadMask((ox, oy) => {
+                const y = cy + oy;
+                return y >= 0 && y < height && coarse.paths[wrap(cx + ox) + y * width] === 1;
+              })
+            : -1;
+        ground.paintCell(ctx, nb, road, coarseDeco(biome, cx, cy), cx * TILE, cy * TILE, TILE);
       }
     }
-    this.worldBake = canvas;
-  }
-
-  private bakeWorldTileset(world: WorldData, step: number, stamp: number): void {
-    const cellsX = Math.ceil(world.width / step);
-    const cellsY = Math.ceil(world.height / step);
-    const cellBiomes = new Uint8Array(cellsX * cellsY);
-    const cellPaths = new Uint8Array(cellsX * cellsY);
-    const counts = new Array<number>(BIOME_COUNT).fill(0);
-
-    for (let cy = 0; cy < cellsY; cy++) {
-      for (let cx = 0; cx < cellsX; cx++) {
-        counts.fill(0);
-        let pathN = 0;
-        let landN = 0;
-        const x0 = cx * step;
-        const y0 = cy * step;
-        const x1 = Math.min(world.width, x0 + step);
-        const y1 = Math.min(world.height, y0 + step);
-        for (let y = y0; y < y1; y++) {
-          for (let x = x0; x < x1; x++) {
-            const biome = world.biomes[x + y * world.width] ?? 0;
-            counts[biome] = (counts[biome] ?? 0) + 1;
-            if (biome !== Biome.Water) {
-              landN++;
-              if (world.paths[x + y * world.width]) pathN++;
-            }
-          }
-        }
-        let best = Biome.Water;
-        let bestN = -1;
-        for (let b = 0; b < counts.length; b++) {
-          if (counts[b]! > bestN) {
-            bestN = counts[b]!;
-            best = b;
-          }
-        }
-        const area = Math.max(1, (x1 - x0) * (y1 - y0));
-        const waterN = counts[Biome.Water] ?? 0;
-        if (waterN / area >= 0.22) best = Biome.Water;
-        const i = cx + cy * cellsX;
-        cellBiomes[i] = best;
-        cellPaths[i] = landN && pathN / Math.max(1, landN) > 0.08 ? 1 : 0;
-      }
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = cellsX * stamp;
-    canvas.height = cellsY * stamp;
-    const ctx = canvas.getContext('2d')!;
-    ctx.imageSmoothingEnabled = false;
-    const g = this.assets.grasslands;
-    const stampTile = (sx: number, sy: number, cx: number, cy: number) => {
-      ctx.drawImage(g, sx, sy, TILE, TILE, cx * stamp, cy * stamp, stamp, stamp);
-    };
-    const cellAt = (cx: number, cy: number): Biome => {
-      if (cy < 0 || cy >= cellsY) return Biome.Water;
-      const wx = ((cx % cellsX) + cellsX) % cellsX;
-      return cellBiomes[wx + cy * cellsX] as Biome;
-    };
-
-    for (let cy = 0; cy < cellsY; cy++) {
-      for (let cx = 0; cx < cellsX; cx++) {
-        const biome = cellBiomes[cx + cy * cellsX] as Biome;
-        const grass = grassSrc(biome);
-        stampTile(grass.sx, grass.sy, cx, cy);
-
-        const group = overlayGroup(biome);
-        if (group !== null) {
-          const n = cellAt(cx, cy - 1) === biome;
-          const e = cellAt(cx + 1, cy) === biome;
-          const s = cellAt(cx, cy + 1) === biome;
-          const w = cellAt(cx - 1, cy) === biome;
-          const [lx, ly] = blobLocal(n, e, s, w);
-          const src = tileSrc(group, biomeSeason(biome), lx, ly);
-          stampTile(src.sx, src.sy, cx, cy);
-        }
-
-        if (cellPaths[cx + cy * cellsX] && biome !== Biome.Water) {
-          const wrap = (ix: number) => ((ix % cellsX) + cellsX) % cellsX;
-          const pn = cy > 0 && !!cellPaths[cx + (cy - 1) * cellsX];
-          const pe = !!cellPaths[wrap(cx + 1) + cy * cellsX];
-          const ps = cy + 1 < cellsY && !!cellPaths[cx + (cy + 1) * cellsX];
-          const pw = !!cellPaths[wrap(cx - 1) + cy * cellsX];
-          const [lx, ly] = blobLocal(pn, pe, ps, pw);
-          const src = tileSrc(GROUPS.path, pathSeason(biome), lx, ly);
-          stampTile(src.sx, src.sy, cx, cy);
-        }
-
-        const deco = (cx * 17 + cy * 31 + biome * 7) % 23;
-        if ((biome === Biome.Plains || biome === Biome.Meadow) && deco === 0) {
-          const d = decoFor(biome, 'flower');
-          stampTile(d.sx, d.sy, cx, cy);
-        } else if (biome === Biome.Meadow && deco === 4) {
-          const d = decoFor(biome, 'leaf');
-          stampTile(d.sx, d.sy, cx, cy);
-        } else if (
-          (biome === Biome.Hills || biome === Biome.Heath || biome === Biome.Desert) &&
-          deco === 2
-        ) {
-          const d = decoFor(biome, 'pebble');
-          stampTile(d.sx, d.sy, cx, cy);
-        } else if (biome === Biome.Water && deco === 5) {
-          const d = decoFor(biome, 'ripple');
-          stampTile(d.sx, d.sy, cx, cy);
-        } else if ((biome === Biome.Marsh || biome === Biome.Jungle) && deco === 6) {
-          const d = decoFor(biome, 'lily');
-          stampTile(d.sx, d.sy, cx, cy);
-        }
-      }
-    }
-
     this.worldBake = canvas;
   }
 
@@ -1101,7 +973,6 @@ export class WorldRenderer {
     canvas.height = chunk.size * TILE;
     const ctx = canvas.getContext('2d')!;
     ctx.imageSmoothingEnabled = false;
-    const g = this.assets.grasslands;
     const floors = this.assets.floors;
     const street = FLOORS[chunk.streetFloor] ?? FLOORS[0]!;
     const plaza = FLOORS[chunk.plazaFloor] ?? FLOORS[4]!;
@@ -1158,36 +1029,23 @@ export class WorldRenderer {
       return !!world.paths[wx + wy * world.width];
     };
 
+    const ground = this.assets.ground;
+    const nb = new Uint8Array(9);
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const biome = chunk.tiles[x + y * size] as Biome;
-        const grass = grassSrc(biome);
-        drawTile(ctx, g, grass.sx, grass.sy, x * TILE, y * TILE);
-        const group = overlayGroup(biome);
-        if (group !== null) {
-          const n = tileAt(x, y - 1) === biome;
-          const e = tileAt(x + 1, y) === biome;
-          const s = tileAt(x, y + 1) === biome;
-          const w = tileAt(x - 1, y) === biome;
-          const [lx, ly] = blobLocal(n, e, s, w);
-          const src = tileSrc(group, biomeSeason(biome), lx, ly);
-          drawTile(ctx, g, src.sx, src.sy, x * TILE, y * TILE);
-        }
         const floor = chunk.cobble[x + y * size];
+        const onRoad = !floor && !!chunk.paths[x + y * size] && biome !== Biome.Water;
+        if (ground) {
+          for (let k = 0; k < 9; k++) nb[k] = tileAt(x + (k % 3) - 1, y + ((k / 3) | 0) - 1);
+          const road = onRoad ? roadMask((ox, oy) => pathAt(x + ox, y + oy)) : -1;
+          ground.paintCell(ctx, nb, road, null, x * TILE, y * TILE, TILE);
+        }
         if (floor === 3 && biome !== Biome.Water) {
           paintYard(ctx, x * TILE, y * TILE, chunk.wx * size + x, chunk.wy * size + y);
         } else if (floor && biome !== Biome.Water) {
           const src = floor === 2 ? plaza : street;
           drawTile(ctx, floors, src.sx, src.sy, x * TILE, y * TILE);
-        } else if (chunk.paths[x + y * size] && biome !== Biome.Water) {
-          const [lx, ly] = blobLocal(
-            pathAt(x, y - 1),
-            pathAt(x + 1, y),
-            pathAt(x, y + 1),
-            pathAt(x - 1, y),
-          );
-          const src = tileSrc(GROUPS.path, biomeSeason(biome), lx, ly);
-          drawTile(ctx, g, src.sx, src.sy, x * TILE, y * TILE);
         }
       }
     }
@@ -1302,9 +1160,15 @@ export class WorldRenderer {
     const ground = new Uint8Array(BIOME_COUNT * 3);
     for (let biome = 0; biome < BIOME_COUNT; biome++) {
       const kind = biome as Biome;
-      const group = overlayGroup(kind);
-      const src = group !== null ? tileSrc(group, biomeSeason(kind), 1, 1) : grassSrc(kind);
-      const [r, g, b] = averageTileColor(img, src.sx, src.sy, TILE, TILE);
+      const group = featureGroup(kind);
+      let rgb: readonly [number, number, number];
+      if (group !== null || !this.assets.ground) {
+        const src = tileSrc(group ?? GROUPS.plateau, biomeSeason(kind), 1, 1);
+        rgb = averageTileColor(img, src.sx, src.sy, TILE, TILE);
+      } else {
+        rgb = this.assets.ground.fillRgb(kind);
+      }
+      const [r, g, b] = rgb;
       ground[biome * 3] = r;
       ground[biome * 3 + 1] = g;
       ground[biome * 3 + 2] = b;
@@ -1344,6 +1208,8 @@ export class WorldRenderer {
     }
   }
 
+  private readonly classicNb = new Uint8Array(9);
+
   private paintClassicTile(
     ctx: CanvasRenderingContext2D,
     world: WorldData,
@@ -1353,34 +1219,26 @@ export class WorldRenderer {
     dy: number,
     stamp: number,
   ): void {
-    const g = this.assets.grasslands;
-    const biome = (world.biomes[x + y * world.width] ?? Biome.Plains) as Biome;
-    const grass = grassSrc(biome);
-    ctx.drawImage(g, grass.sx, grass.sy, TILE, TILE, dx, dy, stamp, stamp);
-    const group = overlayGroup(biome);
-    const same = (ox: number, oy: number): boolean => {
-      const nx = x + ox;
-      const ny = y + oy;
-      if (ny < 0 || ny >= world.height) return biome === Biome.Water;
-      const wx = ((nx % world.width) + world.width) % world.width;
-      return (world.biomes[wx + ny * world.width] ?? 0) === biome;
-    };
-    if (group !== null) {
-      const [lx, ly] = blobLocal(same(0, -1), same(1, 0), same(0, 1), same(-1, 0));
-      const src = tileSrc(group, biomeSeason(biome), lx, ly);
-      ctx.drawImage(g, src.sx, src.sy, TILE, TILE, dx, dy, stamp, stamp);
+    const ground = this.assets.ground;
+    if (!ground) return;
+    const { width, height, biomes, paths } = world;
+    const nb = this.classicNb;
+    for (let k = 0; k < 9; k++) {
+      const ny = y + ((k / 3) | 0) - 1;
+      const nx = (((x + (k % 3) - 1) % width) + width) % width;
+      nb[k] = ny < 0 || ny >= height ? Biome.Water : (biomes[nx + ny * width] ?? Biome.Plains);
     }
-    if ((world.paths[x + y * world.width] ?? 0) > 0 && biome !== Biome.Water) {
-      const path = (ox: number, oy: number): boolean => {
-        const nx = x + ox;
-        const ny = y + oy;
-        if (nx < 0 || ny < 0 || nx >= world.width || ny >= world.height) return false;
-        return (world.paths[nx + ny * world.width] ?? 0) > 0;
-      };
-      const [lx, ly] = blobLocal(path(0, -1), path(1, 0), path(0, 1), path(-1, 0));
-      const src = tileSrc(GROUPS.path, biomeSeason(biome), lx, ly);
-      ctx.drawImage(g, src.sx, src.sy, TILE, TILE, dx, dy, stamp, stamp);
-    }
+    const biome = nb[4] as Biome;
+    const road =
+      (paths[x + y * width] ?? 0) > 0 && biome !== Biome.Water
+        ? roadMask((ox, oy) => {
+            const nx = x + ox;
+            const ny = y + oy;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) return false;
+            return (paths[nx + ny * width] ?? 0) > 0;
+          })
+        : -1;
+    ground.paintCell(ctx, nb, road, null, dx, dy, stamp);
   }
 
   private drawClassicBlocks(

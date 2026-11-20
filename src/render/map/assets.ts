@@ -1,3 +1,5 @@
+import { ClassicGround } from './classic-ground';
+
 export const TILESET_URLS = {
   grasslands: 'assets/map/classic/tilesets/grasslands.png',
   floors: 'assets/map/classic/tilesets/floors.png',
@@ -189,6 +191,8 @@ export class AssetLibrary {
   grasslands!: HTMLImageElement;
   floors!: HTMLImageElement;
   levelMap!: HTMLImageElement;
+  /** Classic overworld grounds and transitions, from `ground-transitions.json`. */
+  ground: ClassicGround | null = null;
   sprites = new Map<string, HTMLImageElement>();
   sheets = new Map<string, CharSheet>();
   player!: HTMLCanvasElement;
@@ -203,6 +207,7 @@ export class AssetLibrary {
     this.grasslands = grasslands;
     this.floors = floors;
     this.levelMap = levelMap;
+    this.ground = await ClassicGround.load(base, grasslands, loadImage);
     const entries = await Promise.all(
       Object.entries(SPRITE_URLS).map(async ([key, path]) => {
         const img = await loadImage(url(path));
