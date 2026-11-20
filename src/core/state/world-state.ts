@@ -958,8 +958,12 @@ function copyAvatar(avatar: PlayerAvatar | undefined, name: string): PlayerAvata
     recipeHash: avatar.recipeHash,
     race: avatar.race,
     gender: avatar.gender,
+    engine: avatar.engine === 'cf2' ? 'cf2' : 'cf1',
     recipe: avatar.recipe
       ? (JSON.parse(JSON.stringify(avatar.recipe)) as PlayerAvatar['recipe'])
+      : undefined,
+    legacyRecipe: avatar.legacyRecipe
+      ? (JSON.parse(JSON.stringify(avatar.legacyRecipe)) as PlayerAvatar['legacyRecipe'])
       : undefined,
   };
 }

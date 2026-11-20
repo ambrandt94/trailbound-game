@@ -5,6 +5,7 @@ import {
   choicesFromAvatar,
   defaultChoices,
   defaultPlayerAvatar,
+  isPlayerAvatar,
   isRegaliaId,
   playableIds,
   profileEntryFromChoices,
@@ -99,6 +100,7 @@ test('the world saves an avatar and continue restores it', () => {
     gender: 'f',
     recipeHash: 'aabbccddeeff0011',
     generatorVersion: 1,
+    engine: 'cf1',
   });
   expect(packed.player.avatar?.profileEntry.ages).toEqual({ adult: 1 });
   expect(packed.player.avatar?.profileEntry.races).toEqual({ goliath: 1 });
@@ -118,6 +120,19 @@ test('the world saves an avatar and continue restores it', () => {
 
 test('a fresh avatar is an adult human traveller until the creator confirms', () => {
   const avatar = defaultPlayerAvatar();
-  expect(avatar).toMatchObject({ name: 'Traveller', race: 'human', gender: 'm', recipeHash: '' });
+  expect(avatar).toMatchObject({
+    name: 'Traveller',
+    race: 'human',
+    gender: 'm',
+    recipeHash: '',
+    engine: 'cf1',
+  });
   expect(avatar.profileEntry.ages).toEqual({ adult: 1 });
+  expect(avatar.legacyRecipe).toBeUndefined();
+  const badEngine: unknown = { ...avatar, engine: 'cf3' };
+  const badLegacy: unknown = { ...avatar, legacyRecipe: 'kept' };
+  expect(isPlayerAvatar(badEngine)).toBe(false);
+  expect(isPlayerAvatar(badLegacy)).toBe(false);
+  const { engine: _engine, ...schema4 } = avatar;
+  expect(isPlayerAvatar(schema4)).toBe(true);
 });

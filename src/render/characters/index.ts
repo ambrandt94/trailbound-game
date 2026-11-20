@@ -1,11 +1,13 @@
 /**
- * Character Forge lives in `forge.ts`. The town falls back to the block rig
- * in `pawns.ts` when no forge body has been adopted.
+ * Character Forge is reached through `forge.ts`. The v1 runtime lives in
+ * `backends/v1.ts`. The town falls back to the block rig in `pawns.ts` when
+ * no forge body has been adopted.
  */
 export {
   adoptPlayerBody,
   aimForgeSun,
   buildAvatar,
+  characterEngine,
   forgeBuildError,
   forgeCatalog,
   forgeEditCatalog,

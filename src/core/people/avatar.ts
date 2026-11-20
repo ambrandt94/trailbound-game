@@ -10,6 +10,8 @@ export const AVATAR_HISTORY_LIMIT = 12;
 export const GENERATOR_VERSION = 1;
 
 export type AvatarGender = 'm' | 'f';
+/** `cf1` is Character Forge 1.x. `cf2` is reserved for Character Forge 2. */
+export type AvatarEngine = 'cf1' | 'cf2';
 export type SlotMode = 'include' | 'exclude';
 
 export interface SlotRule {
@@ -37,10 +39,21 @@ export interface PlayerAvatar {
   race: string;
   gender: AvatarGender;
   /**
+   * Which runtime produced `recipe`. Schema 5. Missing on a schema 4 save
+   * until migration. New avatars are `cf1` while that runtime is the pin.
+   */
+  engine?: AvatarEngine;
+  /**
    * Opaque Character Forge recipe. Once a look is generated or edited, this
    * is what reload builds, so dye and slider edits survive a new seed roll.
    */
   recipe?: Readonly<Record<string, unknown>>;
+  /**
+   * Original v1 recipe, kept verbatim for a later lossy move to `cf2`.
+   * The schema 4 → 5 migration copies `recipe` here. Omitted when there is
+   * no stored recipe.
+   */
+  legacyRecipe?: Readonly<Record<string, unknown>>;
 }
 
 export interface SlotChoice {
@@ -109,6 +122,7 @@ export function defaultPlayerAvatar(name = 'Traveller'): PlayerAvatar {
     recipeHash: '',
     race: choices.race,
     gender: choices.gender,
+    engine: 'cf1',
   };
 }
 
@@ -168,6 +182,7 @@ export function avatarFromChoices(
     recipeHash,
     race: choices.race,
     gender: choices.gender,
+    engine: 'cf1',
   };
 }
 
@@ -289,6 +304,10 @@ export function isPlayerAvatar(value: unknown): value is PlayerAvatar {
   }
   if (typeof value.recipeHash !== 'string') return false;
   if ('recipe' in value && value.recipe != null && !isRecord(value.recipe)) return false;
+  if ('legacyRecipe' in value && value.legacyRecipe != null && !isRecord(value.legacyRecipe)) {
+    return false;
+  }
+  if (value.engine !== undefined && value.engine !== 'cf1' && value.engine !== 'cf2') return false;
   if (typeof value.race !== 'string' || value.race.length === 0) return false;
   if (value.gender !== 'm' && value.gender !== 'f') return false;
   return true;

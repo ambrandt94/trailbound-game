@@ -23,6 +23,7 @@ export {
 } from './avatar';
 export type {
   AvatarChoices,
+  AvatarEngine,
   AvatarGender,
   AvatarLocks,
   ChoiceHistory,

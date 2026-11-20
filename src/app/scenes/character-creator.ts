@@ -464,6 +464,7 @@ export class CharacterCreatorScene implements Scene {
       recipeHash: recipeHashOf(this.recipe),
       race: this.race,
       gender: this.gender,
+      engine: 'cf1',
       recipe: engine,
     };
     if (this.working) {

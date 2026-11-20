@@ -4,8 +4,10 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import { readWardrobeCatalog } from '../../src/app/wardrobe-edit';
+import { createCharacterBackend } from '../../src/render/characters/backends/select';
 import { characterForgePaths } from '../../src/render/characters/cf-pin';
 import {
+  characterEngine,
   checkRecipeEdit,
   describeRecipe,
   editRecipe,
@@ -24,8 +26,59 @@ import {
 const vendor = path.resolve('public', characterForgePaths().base);
 const profile = JSON.parse(readFileSync('content/characters/trailbound.json', 'utf8')) as unknown;
 
+test('?cf=2 is reserved and falls back to v1, and ?cf=0 still disables', async () => {
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    warnings.push(args.map((item) => String(item)).join(' '));
+  };
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  const setSearch = (search: string) => {
+    Object.defineProperty(globalThis, 'location', {
+      configurable: true,
+      writable: true,
+      value: { search, href: 'http://trailbound.test/' },
+    });
+  };
+  try {
+    expect(createCharacterBackend('?cf=2').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=v2').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=cf2').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=1').id).toBe('cf1');
+    expect(createCharacterBackend('').id).toBe('cf1');
+    const warned = warnings.join('\n');
+    expect(warned).toMatch(/v2/);
+    expect(warned).toMatch(/v1 backend/);
+    const warnedCount = warnings.length;
+    expect(createCharacterBackend('?cf=1').id).toBe('cf1');
+    expect(warnings).toHaveLength(warnedCount);
+
+    setSearch('?cf=0');
+    const disabled = await initForge({ force: true, enabled: true });
+    expect(disabled.ok).toBe(false);
+    expect(disabled.reason).toBe('cf=0');
+    expect(characterEngine()).toBeNull();
+
+    const before = warnings.length;
+    setSearch('?cf=2');
+    const fallback = await initForge({
+      force: true,
+      enabled: true,
+      runtimeUrl: 'data:text/javascript,export default {}',
+      baseUrl: 'http://cf-test/',
+    });
+    expect(fallback.ok).toBe(false);
+    expect(characterEngine()).toBeNull();
+    expect(warnings.slice(before).join('\n')).toMatch(/v1 backend/);
+  } finally {
+    console.warn = originalWarn;
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
+  }
+});
+
 test('a disabled forge returns a placeholder pawn', async () => {
-  const status = await initForge({ enabled: false });
+  const status = await initForge({ force: true, enabled: false });
   expect(status.ok).toBe(false);
   expect(status.reason).toBe('cf=0');
   const body = placeholderAvatar(4);
@@ -49,6 +102,7 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
       profile,
     });
     expect(status.ok, status.reason).toBe(true);
+    expect(characterEngine()).toBe('cf1');
     expect(status.initMs).toBeGreaterThan(0);
 
     const report = validateGameProfile(profile);
