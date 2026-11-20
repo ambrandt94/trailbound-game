@@ -5,6 +5,7 @@ import type { ChunkData } from '../core/world/models';
 import type { Keyboard } from '../input/keyboard';
 import type { MinigameHost } from '../minigames/host';
 import type { MapDrawState } from '../render/map/map-renderer';
+import type { PlanetGlobe } from '../render/globe/planet-globe';
 import type { SceneStack } from './scene-stack';
 
 /** Where the hero comes back to the map from a convoy area. */
@@ -26,6 +27,8 @@ export interface GameHost {
   readonly saves: SaveBackend;
   readonly areaCanvas: HTMLCanvasElement;
   readonly mapCanvas: HTMLCanvasElement;
+  /** Static planet globe shown when the map zooms out past its furthest flat zoom. */
+  readonly globe: PlanetGlobe;
   world: WorldState;
   place: PlaceContent | null;
   readonly view: 'map' | 'area';
