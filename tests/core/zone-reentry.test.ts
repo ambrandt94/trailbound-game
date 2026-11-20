@@ -1,4 +1,7 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+
+// Full world generation runs past the 5 s default on the Windows CI runner.
+vi.setConfig({ testTimeout: 120_000 });
 import { AREA_WINDOW_TILES } from '../../src/core/area/area-window';
 import { ZONE_HISTORY_MAX } from '../../src/core/area/zone-history';
 import { createCaravan, setRoute } from '../../src/core/sim/caravan';
