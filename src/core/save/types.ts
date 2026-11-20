@@ -1,4 +1,5 @@
 import type { PlayerAvatar } from '../people/avatar';
+import type { ZoneRecord } from '../area/zone-history';
 import type { CaravanSave } from '../sim/caravan';
 
 /**
@@ -50,6 +51,8 @@ export interface PackedWorld {
   party?: PartySave;
   /** Caravan position, route, and role. Missing on older saves; it starts on the hero. */
   caravan?: CaravanSave;
+  /** The last zones entered, newest first. Missing on older saves; the history starts empty. */
+  zones?: ZoneRecord[];
   gameVersion: string;
   cfPin: CfPin;
 }

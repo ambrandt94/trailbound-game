@@ -674,10 +674,37 @@ export interface MapCaravanDraw {
   heroApart: boolean;
 }
 
+/** A zone block to outline: world tiles (`x1`/`y1` exclusive) and its drawn strength, 0..1. */
+export interface MapZoneBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  alpha: number;
+}
+
+/**
+ * Zone outlines for one frame. `history` is newest first (the first is the
+ * zone just left); `preview` is the block a zoom-in would open now.
+ */
+export interface MapZonesDraw {
+  history: MapZoneBox[];
+  preview: MapZoneBox | null;
+}
+
+/** Warm parchment for remembered zones, a little more gold for the preview. */
+const ZONE_LIGHT = '255, 241, 210';
+const ZONE_PREVIEW = '255, 220, 130';
+const ZONE_EDGE = '58, 36, 20';
+/** Below this on-screen side (px) a zone shows as a corner marker rather than its true outline. */
+const ZONE_MARKER_PX = 30;
+
 export class WorldRenderer {
   worldBake: CanvasImageSource | null = null;
   /** Caravan for this frame. Set at the top of `draw`. */
   private caravanDraw: MapCaravanDraw | null = null;
+  /** Zone outlines for this frame. Set at the top of `draw`. */
+  private zonesDraw: MapZonesDraw | null = null;
   /** Fine tiles per map tile. The sheet is this many times coarser than the world. */
   mapStep = 1;
   private mapWidth = 0;
@@ -1446,11 +1473,14 @@ export class WorldRenderer {
       heroYaw?: number;
       /** The caravan: wagon at its real position, plus its route and pins. */
       caravan?: MapCaravanDraw | null;
+      /** Remembered zones and the zoom-in preview. Omit to draw none. */
+      zones?: MapZonesDraw | null;
       /** Settlement outlines, names, and pins. Off for the dive's bare terrain frames. */
       markers?: boolean;
     },
   ): void {
     this.caravanDraw = opts.caravan ?? null;
+    this.zonesDraw = opts.zones ?? null;
     this.drawMarkers = opts.markers ?? true;
     this.chunkDestPx = Math.max(1, camera.scale * TILE);
     this.tagScreenPx = NAMETAG_BASE_PX * clamp(opts.nametagScale ?? 2, 0.5, 4.5);
@@ -1700,6 +1730,7 @@ export class WorldRenderer {
     for (const shift of wrapShifts) {
       ctx.save();
       ctx.translate(shift * TILE, 0);
+      if (this.zonesDraw) this.drawZones(ctx, this.zonesDraw, camera.scale);
       this.drawEntities(
         ctx,
         opts.entities,
@@ -2880,6 +2911,101 @@ export class WorldRenderer {
         screenPx: this.tagScreenPx,
       });
     }
+  }
+
+  /**
+   * Zone outlines. Remembered zones: a parchment line on a thin dark edge (so
+   * it reads on grass, sand and snow alike), strongest on the newest. The
+   * preview: dashed, a little more gold, and gently pulsing. Line widths are
+   * screen pixels, and a block too small to read on screen fades out.
+   */
+  private drawZones(ctx: CanvasRenderingContext2D, zones: MapZonesDraw, scale: number): void {
+    const k = 1 / Math.max(scale, 1e-4);
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 420);
+    const box = (b: MapZoneBox) => {
+      const x = this.toMap(b.x0) * TILE;
+      const y = this.toMap(b.y0) * TILE;
+      const w = this.toMap(b.x1) * TILE - x;
+      const h = this.toMap(b.y1) * TILE - y;
+      const px = w * scale;
+      if (px >= ZONE_MARKER_PX) return { x, y, w, h, marker: false, fade: 1 };
+      // Zoomed far out the true block is a few pixels: draw a corner marker at its centre instead.
+      const side = ZONE_MARKER_PX * k;
+      return {
+        x: x + w / 2 - side / 2,
+        y: y + h / 2 - side / 2,
+        w: side,
+        h: side,
+        marker: true,
+        fade: smoothstep(4, 10, px),
+      };
+    };
+    const corners = (
+      r: { x: number; y: number; w: number; h: number },
+      len: number,
+      width: number,
+      style: string,
+    ) => {
+      ctx.setLineDash([]);
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      for (const [cx, cy, dx, dy] of [
+        [r.x, r.y, 1, 1],
+        [r.x + r.w, r.y, -1, 1],
+        [r.x, r.y + r.h, 1, -1],
+        [r.x + r.w, r.y + r.h, -1, -1],
+      ] as const) {
+        ctx.moveTo(cx + dx * len, cy);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx, cy + dy * len);
+      }
+      ctx.stroke();
+    };
+    ctx.save();
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    // Oldest first, so the newest sits on top where blocks overlap.
+    for (let i = zones.history.length - 1; i >= 0; i--) {
+      const z = zones.history[i]!;
+      const r = box(z);
+      const a = z.alpha * r.fade;
+      if (a < 0.01) continue;
+      ctx.setLineDash([]);
+      if (r.marker) {
+        corners(r, r.w * 0.3, 5 * k, `rgba(${ZONE_EDGE}, ${a * 0.6})`);
+        corners(r, r.w * 0.3, 2.5 * k, `rgba(${ZONE_LIGHT}, ${a})`);
+        continue;
+      }
+      ctx.fillStyle = `rgba(${ZONE_LIGHT}, ${(i === 0 ? 0.14 : 0.07) * (a / Math.max(z.alpha, 0.01))})`;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = `rgba(${ZONE_EDGE}, ${a * 0.55})`;
+      ctx.lineWidth = 5 * k;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = `rgba(${ZONE_LIGHT}, ${a})`;
+      ctx.lineWidth = 3 * k;
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      if (i === 0) corners(r, Math.min(12 * k, r.w * 0.2), 4 * k, `rgba(${ZONE_LIGHT}, ${a})`);
+    }
+    const p = zones.preview;
+    if (p) {
+      const r = box(p);
+      const a = p.alpha * r.fade * (0.7 + 0.3 * pulse);
+      if (a >= 0.01 && r.marker) {
+        corners(r, r.w * 0.3, 6 * k, `rgba(${ZONE_EDGE}, ${a * 0.6})`);
+        corners(r, r.w * 0.3, 3 * k, `rgba(${ZONE_PREVIEW}, ${a})`);
+      } else if (a >= 0.01) {
+        ctx.strokeStyle = `rgba(${ZONE_EDGE}, ${a * 0.65})`;
+        ctx.lineWidth = 6 * k;
+        ctx.setLineDash([10 * k, 6 * k]);
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        ctx.strokeStyle = `rgba(${ZONE_PREVIEW}, ${a})`;
+        ctx.lineWidth = 3 * k;
+        ctx.strokeRect(r.x, r.y, r.w, r.h);
+        corners(r, Math.min(14 * k, r.w * 0.22), 4 * k, `rgba(${ZONE_PREVIEW}, ${a})`);
+      }
+    }
+    ctx.restore();
   }
 
   /** Pixel cart at the caravan's map position. 16 px tile language, sized in screen pixels. */

@@ -9,9 +9,9 @@ import {
 import type { MapSkinId } from '../../core/state/settings';
 import { AssetLibrary } from './assets';
 import { loadTrailbound, type RegionBake, type TrailboundTiles } from './trailbound-bake';
-import { WorldRenderer, type MapCaravanDraw } from './wm-renderer';
+import { WorldRenderer, type MapCaravanDraw, type MapZonesDraw } from './wm-renderer';
 
-export type { MapCaravanDraw };
+export type { MapCaravanDraw, MapZonesDraw };
 
 export interface MapDrawState {
   seed: number;
@@ -28,6 +28,8 @@ export interface MapDrawState {
   chunks?: Map<string, ChunkData>;
   /** Caravan wagon, route, and pins. Omit to draw no wagon. */
   caravan?: MapCaravanDraw | null;
+  /** Remembered zones and the zoom-in preview. Omit to draw none. */
+  zones?: MapZonesDraw | null;
   /** Terrain only (no labels, pins, hero, or wagon) while the dive magnifies the map. */
   bare?: boolean;
 }
@@ -137,6 +139,7 @@ export class MapRenderer {
       cloudAmt: 0,
       heroYaw: state.heroYaw,
       caravan: state.bare ? null : (state.caravan ?? null),
+      zones: state.bare ? null : (state.zones ?? null),
       markers: !state.bare,
     });
     const paintMs = performance.now() - paintStarted;
