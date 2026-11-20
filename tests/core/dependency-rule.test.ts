@@ -2,7 +2,10 @@ import { ESLint } from 'eslint';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+
+// ESLint and the TS compiler can pass the 5 s default on a busy CI runner.
+vi.setConfig({ testTimeout: 60_000 });
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 

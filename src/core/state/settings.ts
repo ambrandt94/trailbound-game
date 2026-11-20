@@ -49,6 +49,8 @@ export interface GameSettings {
   mapSpeed: MapSpeed;
   /** Map only: hero's on-foot pace as a multiple of the wagon's map pace, 1.0–2.0. */
   onFootSpeed: number;
+  /** Map only: outline the last zones entered, and preview the zone a zoom-in would open. Default on. */
+  zoneOutlines: boolean;
   /** 3D area look, camera, and controller feel. Lives with the other preferences. */
   look: AreaLook;
   /** Collapsible HUD panels. */
@@ -66,6 +68,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   timeOnlyWhenMoving: DEFAULT_TIME_ONLY_WHEN_MOVING,
   mapSpeed: DEFAULT_MAP_SPEED,
   onFootSpeed: DEFAULT_ON_FOOT_SPEED,
+  zoneOutlines: true,
   look: DEFAULT_AREA_LOOK,
   hud: DEFAULT_HUD_PREFS,
 };
@@ -96,6 +99,10 @@ export function normalizeSettings(value: unknown): GameSettings {
         : DEFAULT_SETTINGS.timeOnlyWhenMoving,
     mapSpeed: normalizeMapSpeed(record.mapSpeed),
     onFootSpeed: normalizeOnFootSpeed(record.onFootSpeed),
+    zoneOutlines:
+      typeof record.zoneOutlines === 'boolean'
+        ? record.zoneOutlines
+        : DEFAULT_SETTINGS.zoneOutlines,
     look: normalizeAreaLook(record.look),
     hud: normalizeHudPrefs(record.hud),
   };

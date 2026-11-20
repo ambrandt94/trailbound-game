@@ -5,6 +5,7 @@
  * The window seed mixes the world seed with that origin.
  */
 import { tierForKind } from '../world/settlement-tiers';
+import type { ZoneRect } from './zone-history';
 import { NEAR_POI_TILES } from '../world/map-grid';
 import {
   BIOME_LABELS,
@@ -174,21 +175,79 @@ export function cutConvoyWindow(
 ): AreaWindow {
   const span = Math.max(1, Math.min(AREA_WINDOW_TILES, world.width, world.height));
   const { x0, y0 } = convoyWindowOrigin({ x, y }, ahead, span, world.width, world.height);
-  const x1 = x0 + span;
-  const y1 = y0 + span;
+  return cutWindowAt(world, x0, y0);
+}
+
+/**
+ * The window with this exact origin (clamped to the world): how a remembered
+ * zone is rebuilt. The same origin always gives the same biome and seed, so
+ * going back to a zone rebuilds the zone that was there.
+ */
+export function cutWindowAt(world: WorldData, x0: number, y0: number): AreaWindow {
+  const span = Math.max(1, Math.min(AREA_WINDOW_TILES, world.width, world.height));
+  const ox = Math.min(world.width - span, Math.max(0, Math.round(x0)));
+  const oy = Math.min(world.height - span, Math.max(0, Math.round(y0)));
+  const x1 = ox + span;
+  const y1 = oy + span;
   const tiles: Vec2[] = [];
-  for (let yy = y0; yy < y1; yy++) {
-    for (let xx = x0; xx < x1; xx++) tiles.push({ x: xx, y: yy });
+  for (let yy = oy; yy < y1; yy++) {
+    for (let xx = ox; xx < x1; xx++) tiles.push({ x: xx, y: yy });
   }
   return {
-    id: `convoy-${x0}-${y0}`,
-    x0,
-    y0,
+    id: `convoy-${ox}-${oy}`,
+    x0: ox,
+    y0: oy,
     x1,
     y1,
     tiles,
     biome: dominantLandBiome(world, tiles),
-    seed: windowSeed(world.seed, x0, y0),
+    seed: windowSeed(world.seed, ox, oy),
+  };
+}
+
+/** The rectangle `cutConvoyWindow` would cut, without building its tiles. */
+export function convoyWindowRect(
+  world: WorldData,
+  x: number,
+  y: number,
+  ahead?: Vec2 | null,
+): ZoneRect {
+  const span = Math.max(1, Math.min(AREA_WINDOW_TILES, world.width, world.height));
+  const { x0, y0 } = convoyWindowOrigin({ x, y }, ahead, span, world.width, world.height);
+  return { x0, y0, x1: x0 + span, y1: y0 + span };
+}
+
+/** The rectangle `cutAreaWindow` would cut, without building its tiles. */
+export function gridWindowRect(world: WorldData, x: number, y: number): ZoneRect {
+  const span = Math.max(1, Math.min(AREA_WINDOW_TILES, world.width, world.height));
+  const tx = Math.floor(wrapX(x, world.width));
+  const ty = Math.min(world.height - 1, Math.max(0, Math.floor(y)));
+  let x0 = Math.floor(tx / span) * span;
+  let y0 = Math.floor(ty / span) * span;
+  if (x0 + span > world.width) x0 = world.width - span;
+  if (y0 + span > world.height) y0 = world.height - span;
+  return { x0, y0, x1: x0 + span, y1: y0 + span };
+}
+
+/** Land to stand on at a point (shore water clamps to land), or null on deep water. */
+export function landStandAt(
+  world: WorldData,
+  x: number,
+  y: number,
+): { x: number; y: number; clamped: boolean } | null {
+  return landStand(world, x, y);
+}
+
+/** Convoy area for a window with this exact origin. */
+export function resolveConvoyWindowAt(world: WorldData, x0: number, y0: number): ResolvedArea {
+  const window = cutWindowAt(world, x0, y0);
+  return {
+    node: nodeFromWindow(window),
+    cacheKey: `convoy:${window.x0}:${window.y0}`,
+    minX: window.x0,
+    minY: window.y0,
+    maxX: window.x1 - 1,
+    maxY: window.y1 - 1,
   };
 }
 

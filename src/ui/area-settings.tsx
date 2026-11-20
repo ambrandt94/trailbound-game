@@ -245,6 +245,18 @@ export function SettingsPanel(props: { dock?: boolean }) {
           />
           Map: time moves only when I move
         </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            aria-label="Zone outlines on the map"
+            checked={current.zoneOutlines}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) change({ zoneOutlines: target.checked });
+            }}
+          />
+          Map: outline the zones I have visited, and preview the next
+        </label>
         <label class="field">
           Map speed
           <select

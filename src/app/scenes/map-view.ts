@@ -22,7 +22,8 @@ import { hasRoute, splitRoute } from '../../core/sim/caravan';
 import { leaderToggleHalt } from '../leader-halt';
 import { travelHudFor, travelHudKey } from '../travel-hud';
 import { MAP_ZOOM_CAP, TILE } from '../../core/world/models';
-import type { MapCaravanDraw } from '../../render/map/map-renderer';
+import type { MapCaravanDraw, MapZonesDraw } from '../../render/map/map-renderer';
+import { zoneDistance, zoneOutlineAlpha } from '../../core/area/zone-history';
 import { attachRouteClicks, resolveRouteTarget, routeFrame } from '../map-route';
 import {
   canEnter,
@@ -231,6 +232,7 @@ export class MapView implements Scene {
       entities: world.entities,
       chunks: world.chunks,
       caravan: this.caravanDraw(),
+      zones: this.zonesDraw(),
       bare: this.bare,
     });
   }
@@ -238,6 +240,30 @@ export class MapView implements Scene {
   /** Terrain-only frames while the dive magnifies the map. */
   setBare(bare: boolean): void {
     this.bare = bare;
+  }
+
+  /**
+   * Remembered zones (faded by age and by distance from the hero) and the
+   * block a zoom-in would open. Null with the map setting off.
+   */
+  private zonesDraw(): MapZonesDraw | null {
+    if (!settings.value.zoneOutlines) return null;
+    const world = this.host.world;
+    const data = world.data;
+    if (!data) return null;
+    const hero = world.hero;
+    const history = world.zones.map((zone, rank) => ({
+      x0: zone.x0,
+      y0: zone.y0,
+      x1: zone.x1,
+      y1: zone.y1,
+      alpha: zoneOutlineAlpha(rank, zoneDistance(zone, hero.x, hero.y, data.width)),
+    }));
+    const choice = world.zoneChoice();
+    return {
+      history,
+      preview: choice ? { ...choice.rect, alpha: 0.9 } : null,
+    };
   }
 
   /** Caravan wagon, route halves, and pins for the renderer. */

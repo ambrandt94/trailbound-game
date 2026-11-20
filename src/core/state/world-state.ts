@@ -1,5 +1,22 @@
 import { buildAreaExport, type AreaExport } from '../area/build-area';
-import { AREA_WINDOW_TILES, resolveAreaAt, resolveConvoyArea } from '../area/area-window';
+import {
+  AREA_WINDOW_TILES,
+  convoyWindowRect,
+  gridWindowRect,
+  landStandAt,
+  resolveAreaAt,
+  resolveConvoyArea,
+  resolveConvoyWindowAt,
+} from '../area/area-window';
+import {
+  ZONE_REENTRY_MARGIN_TILES,
+  normalizeZones,
+  rememberZone,
+  zoneContaining,
+  zonesSave,
+  type ZoneRecord,
+  type ZoneRect,
+} from '../area/zone-history';
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import type { CfPin, PackedWorld, PlayerSave, PartySave } from '../save/types';
@@ -125,6 +142,19 @@ export interface ConvoyHandoff {
   bounds: ConvoyBounds;
   /** The place the window stands for. `adoptConvoyHandoff` makes it the current one. */
   town: { id: string; name: string; x: number; y: number };
+  /** The wilderness window in world tiles. Adopting it files it in the zone history. */
+  zone?: ZoneRect & { name: string };
+}
+
+/** Where a zoom-in would open: the window, and why that one. */
+export interface ZoneChoice {
+  rect: ZoneRect;
+  /**
+   * `remembered`: the traveller is inside a zone they have been in, so that exact
+   * block again. `lean`: a fresh cut leaning down the road. `grid`: the snapped
+   * window (no route).
+   */
+  source: 'remembered' | 'lean' | 'grid';
 }
 
 /**
@@ -182,6 +212,11 @@ export class WorldState {
   areaHold = false;
   /** Arrivals and stops since the scene last read them. */
   readonly caravanEvents: CaravanEvent[] = [];
+  /**
+   * The last zones entered, newest first (`ZONE_HISTORY_MAX`). The map outlines
+   * them, and a zoom-in from inside one re-enters that exact block. Saved.
+   */
+  zones: ZoneRecord[] = [];
   /** Where the hero stood when the current area was entered. */
   private entryPose: HeroPose | null = null;
   private readonly areaCache = new Map<string, AreaExport>();
@@ -195,6 +230,7 @@ export class WorldState {
   ): void {
     this.seed = seed;
     this.entryPose = null;
+    this.zones = [];
     this.areaCache.clear();
     const settings =
       options?.settings ?? clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
@@ -345,16 +381,20 @@ export class WorldState {
    * the window moves with the wagons. Null in a settlement or on water.
    * Pass `ahead` (see `convoyAhead`) to lean the window down the road so the
    * point sits near the edge it came from; without it the window is centred.
+   * Pass `fixed` to rebuild a remembered zone: that exact block, not a new cut.
    */
   buildConvoyHandoff(
     x = this.caravan.x,
     y = this.caravan.y,
     adopt = true,
     ahead: { x: number; y: number } | null = null,
+    fixed: ZoneRect | null = null,
   ): AreaHandoff | null {
     const world = this.data;
     if (!world || !hasRoute(this.caravan)) return null;
-    const resolved = resolveConvoyArea(world, x, y, ahead);
+    const resolved = fixed
+      ? resolveConvoyWindowAt(world, fixed.x0, fixed.y0)
+      : resolveConvoyArea(world, x, y, ahead);
     if (!resolved) return null;
     const node = resolved.node;
     const town = { id: node.id, name: node.name, x: node.cx, y: node.cy };
@@ -371,7 +411,18 @@ export class WorldState {
     const handoff: AreaHandoff = {
       areaExport,
       entry: { placeId: node.id, placeName: node.name, tier: tierForKind(node.kind) },
-      convoy: { frame, bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z }, town },
+      convoy: {
+        frame,
+        bounds: { minX: min.x, maxX: max.x, minZ: min.z, maxZ: max.z },
+        town,
+        zone: {
+          x0: resolved.minX,
+          y0: resolved.minY,
+          x1: resolved.maxX + 1,
+          y1: resolved.maxY + 1,
+          name: node.name,
+        },
+      },
     };
     if (adopt && handoff.convoy) this.adoptConvoyHandoff(handoff.convoy);
     return handoff;
@@ -418,9 +469,12 @@ export class WorldState {
   zoomInPlan(): { handoff: AreaHandoff | null; entry: ZoomEntry } {
     const aboard = this.heroAboard;
     const at = aboard ? this.caravan : this.hero;
+    // Inside a zone already visited, the same block opens again.
+    const choice = this.zoneChoice();
+    const known = choice?.source === 'remembered' ? choice.rect : null;
     if (hasRoute(this.caravan)) {
       const handoff =
-        this.buildConvoyHandoff(at.x, at.y, true, aboard ? this.convoyAhead() : null) ??
+        this.buildConvoyHandoff(at.x, at.y, true, aboard ? this.convoyAhead() : null, known) ??
         this.buildSettlementConvoyHandoff(at.x, at.y);
       if (handoff?.convoy) {
         if (aboard) return { handoff, entry: { convoyMode: 'walk' } };
@@ -442,7 +496,11 @@ export class WorldState {
         };
       }
     }
-    const handoff = this.buildHandoffHere(at.x, at.y);
+    const handoff = known ? this.buildZoneHandoff(known) : this.buildHandoffHere(at.x, at.y);
+    // Convoy zones are filed when adopted; the no-route window is filed here.
+    if (handoff && choice && choice.source !== 'lean') {
+      this.noteZoneEntered({ ...choice.rect, name: handoff.entry.placeName });
+    }
     if (!handoff || aboard) return { handoff, entry: {} };
     const frame: AreaFrame = {
       innerOrigin: { ...handoff.areaExport.area.innerOrigin },
@@ -452,11 +510,54 @@ export class WorldState {
   }
 
   /**
+   * The zone a zoom-in would open right now, without opening it: the block the
+   * map previews. It follows `zoomInPlan`: where the zoom lands (the caravan
+   * when riding, the hero on foot), a zone already visited if the traveller is
+   * well inside one, else a fresh cut (down the road with a route, snapped
+   * without). Null in a settlement, which opens whole, and on deep water.
+   */
+  zoneChoice(): ZoneChoice | null {
+    const world = this.data;
+    if (!world) return null;
+    const aboard = this.heroAboard;
+    const at = aboard ? this.caravan : this.hero;
+    if (this.settlementAt(at.x, at.y)) return null;
+    const stand = landStandAt(world, at.x, at.y);
+    if (!stand) return null;
+    const known = zoneContaining(this.zones, at.x, at.y, ZONE_REENTRY_MARGIN_TILES, world.width);
+    if (known) {
+      return {
+        rect: { x0: known.x0, y0: known.y0, x1: known.x1, y1: known.y1 },
+        source: 'remembered',
+      };
+    }
+    if (hasRoute(this.caravan)) {
+      const ahead = aboard ? this.convoyAhead() : null;
+      return { rect: convoyWindowRect(world, at.x, at.y, ahead), source: 'lean' };
+    }
+    return { rect: gridWindowRect(world, stand.x, stand.y), source: 'grid' };
+  }
+
+  /** File a zone the party just entered as the newest. Repeats move to the front. */
+  noteZoneEntered(zone: ZoneRect & { name: string }): void {
+    this.zones = rememberZone(this.zones, zone, this.clockHours);
+  }
+
+  /** A remembered zone baked whole and cached, with no road through it (no route). */
+  private buildZoneHandoff(rect: ZoneRect): AreaHandoff | null {
+    const world = this.data;
+    if (!world) return null;
+    const resolved = resolveConvoyWindowAt(world, rect.x0, rect.y0);
+    return this.bakeArea(world, resolved.node, resolved.cacheKey);
+  }
+
+  /**
    * Make a convoy window the current place. A window cut ahead of time
    * (`adopt` false) must not move the town or exit pose while the old window
    * is still on screen; the swap adopts it.
    */
   adoptConvoyHandoff(convoy: ConvoyHandoff): void {
+    if (convoy.zone) this.noteZoneEntered(convoy.zone);
     this.entryPose = { x: this.caravan.x, y: this.caravan.y, yaw: this.caravan.yaw };
     this.footprint = null;
     this.town = { ...convoy.town };
@@ -573,6 +674,10 @@ export class WorldState {
         yaw: this.hero.yaw,
       };
     }
+    this.zones = normalizeZones(
+      core.zones,
+      this.data ? { width: this.data.width, height: this.data.height } : undefined,
+    );
     const loaded = loadCaravan(core.caravan, this.hero);
     this.caravan = loaded.caravan;
     // A hero saved away from the wagons is scouting, whatever the flag says.
@@ -603,6 +708,7 @@ export class WorldState {
       player,
       party: partySave(this.party),
       caravan: caravanSave(this.caravan, this.heroAboard),
+      zones: zonesSave(this.zones),
       gameVersion: meta.gameVersion,
       cfPin: { ...meta.cfPin },
     };
