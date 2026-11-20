@@ -5,7 +5,7 @@
  * The window seed mixes the world seed with that origin.
  */
 import { tierForKind } from '../world/settlement-tiers';
-import type { ZoneRect } from './zone-history';
+import { TOWN_OUTSKIRTS_TILES, type ZoneRect } from './zone-history';
 import { NEAR_POI_TILES } from '../world/map-grid';
 import {
   BIOME_LABELS,
@@ -202,6 +202,22 @@ export function cutWindowAt(world: WorldData, x0: number, y0: number): AreaWindo
     tiles,
     biome: dominantLandBiome(world, tiles),
     seed: windowSeed(world.seed, ox, oy),
+  };
+}
+
+/**
+ * The box a settlement's zone fills on the map: the footprint the 3D town
+ * export plays on (`boundsFromTiles` of its tiles), plus the ring of outskirts
+ * the export draws around it, clamped to the world.
+ */
+export function settlementZoneRect(world: WorldData, node: MapNode): ZoneRect {
+  const b = boundsFromTiles(node.tiles ?? []);
+  const m = TOWN_OUTSKIRTS_TILES;
+  return {
+    x0: Math.max(0, b.x0 - m),
+    y0: Math.max(0, b.y0 - m),
+    x1: Math.min(world.width, b.x1 + m),
+    y1: Math.min(world.height, b.y1 + m),
   };
 }
 

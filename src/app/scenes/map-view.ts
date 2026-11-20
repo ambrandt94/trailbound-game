@@ -244,22 +244,23 @@ export class MapView implements Scene {
 
   /**
    * Remembered zones (faded by age and by distance from the hero) and the
-   * block a zoom-in would open. Null with the map setting off.
+   * block a zoom-in would open, each behind its own map setting. Null with both off.
    */
   private zonesDraw(): MapZonesDraw | null {
-    if (!settings.value.zoneOutlines) return null;
+    const { zoneOutlines, zonePreview } = settings.value;
+    if (!zoneOutlines && !zonePreview) return null;
     const world = this.host.world;
     const data = world.data;
     if (!data) return null;
     const hero = world.hero;
-    const history = world.zones.map((zone, rank) => ({
+    const history = (zoneOutlines ? world.zones : []).map((zone, rank) => ({
       x0: zone.x0,
       y0: zone.y0,
       x1: zone.x1,
       y1: zone.y1,
       alpha: zoneOutlineAlpha(rank, zoneDistance(zone, hero.x, hero.y, data.width)),
     }));
-    const choice = world.zoneChoice();
+    const choice = zonePreview ? world.zoneChoice() : null;
     return {
       history,
       preview: choice ? { ...choice.rect, alpha: 0.9 } : null,

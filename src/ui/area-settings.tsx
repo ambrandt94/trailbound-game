@@ -255,7 +255,19 @@ export function SettingsPanel(props: { dock?: boolean }) {
               if (target instanceof HTMLInputElement) change({ zoneOutlines: target.checked });
             }}
           />
-          Map: outline the zones I have visited, and preview the next
+          Map: outline the zones I have visited
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            aria-label="Preview the next zone on the map"
+            checked={current.zonePreview}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) change({ zonePreview: target.checked });
+            }}
+          />
+          Map: preview the next zone
         </label>
         <label class="field">
           Map speed

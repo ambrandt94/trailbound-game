@@ -698,6 +698,8 @@ const ZONE_PREVIEW = '255, 220, 130';
 const ZONE_EDGE = '58, 36, 20';
 /** Below this on-screen side (px) a zone shows as a corner marker rather than its true outline. */
 const ZONE_MARKER_PX = 30;
+/** On-screen side of that marker: a little larger, so it peeks out from behind the wagon and town icons. */
+const ZONE_MARKER_SIDE_PX = 40;
 
 export class WorldRenderer {
   worldBake: CanvasImageSource | null = null;
@@ -2930,7 +2932,7 @@ export class WorldRenderer {
       const px = w * scale;
       if (px >= ZONE_MARKER_PX) return { x, y, w, h, marker: false, fade: 1 };
       // Zoomed far out the true block is a few pixels: draw a corner marker at its centre instead.
-      const side = ZONE_MARKER_PX * k;
+      const side = ZONE_MARKER_SIDE_PX * k;
       return {
         x: x + w / 2 - side / 2,
         y: y + h / 2 - side / 2,
