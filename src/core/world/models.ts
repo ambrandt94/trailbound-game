@@ -1,3 +1,5 @@
+import { DEFAULT_PLANET_PRESET, isPlanetPreset, type PlanetPreset } from '../planet/presets';
+
 export const TILE = 16;
 export const WORLD_BASE = 192;
 /**
@@ -292,6 +294,11 @@ export interface WorldSettings {
   avgPerHouse: number;
   /** People in the place when `residentsMode` is `perPlace`. */
   avgPerPlace: number;
+  /**
+   * Planet this world sits on (`core/planet`). The world is the home chunk; the
+   * planet only feeds the globe view for now. Older saves read `standard`.
+   */
+  planet: PlanetPreset;
 }
 
 /** Side length of `WorldSettings.landSketch`. */
@@ -361,6 +368,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   residentsMode: 'perPlace',
   avgPerHouse: DEFAULT_AVG_PER_HOUSE,
   avgPerPlace: DEFAULT_AVG_PER_PLACE,
+  planet: DEFAULT_PLANET_PRESET,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -497,6 +505,7 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
     residentsMode: raw.residentsMode === 'perHouse' ? 'perHouse' : 'perPlace',
     avgPerHouse: clampAvg(raw.avgPerHouse, DEFAULT_AVG_PER_HOUSE, 0, 20),
     avgPerPlace: clampAvg(raw.avgPerPlace, DEFAULT_AVG_PER_PLACE, 0, 500),
+    planet: isPlanetPreset(raw.planet) ? raw.planet : DEFAULT_PLANET_PRESET,
   };
 }
 
