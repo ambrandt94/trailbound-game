@@ -7,6 +7,7 @@ import {
 import {
   adoptPlayerBody,
   buildAvatar,
+  characterEngine,
   checkRecipeEdit,
   cloneRecipe,
   describeRecipe,
@@ -19,7 +20,7 @@ import {
   initForge,
   optionsFor,
   placeholderAvatar,
-  recipeFromStored,
+  recipeForAvatar,
   recipeHashOf,
   type CharacterRecipe,
   type EditOptions,
@@ -151,7 +152,7 @@ export class CharacterCreatorScene implements Scene {
           ? 'Forge is off (?cf=0). Showing a stand-in.'
           : `Forge did not start (${ready.reason}). Showing a stand-in.`;
     } else {
-      this.restoreOrGenerate(this.optionsIn.initial.recipe);
+      this.restoreOrGenerate();
     }
     this.dirty = true;
     this.wait = DEBOUNCE_SECONDS;
@@ -284,10 +285,18 @@ export class CharacterCreatorScene implements Scene {
     };
   }
 
-  private restoreOrGenerate(stored: PlayerAvatar['recipe']): void {
-    if (stored && forgeReady().ok) {
+  private restoreOrGenerate(): void {
+    const initial = this.optionsIn.initial;
+    if ((initial.recipe || initial.legacyRecipe) && forgeReady().ok) {
       try {
-        this.recipe = recipeFromStored(stored, this.seed);
+        const playable = recipeForAvatar({
+          engine: initial.engine,
+          recipe: initial.recipe,
+          legacyRecipe: initial.legacyRecipe,
+          seed: this.seed,
+        });
+        if (!playable) throw new Error('stored recipe is missing');
+        this.recipe = playable;
         this.snap = describeRecipe(this.recipe);
         this.race = this.snap.race || this.race;
         this.gender = this.snap.gender;
@@ -320,8 +329,10 @@ export class CharacterCreatorScene implements Scene {
         gender: this.gender,
         generatorVersion: 1,
       });
-      this.options = optionsFor(this.race, this.gender, 'adult');
       this.snap = describeRecipe(this.recipe);
+      if (this.snap.race) this.race = this.snap.race;
+      this.gender = this.snap.gender;
+      this.options = optionsFor(this.race, this.gender, 'adult');
       this.errors = [];
       this.warnings = [];
       this.notice = '';
@@ -456,6 +467,7 @@ export class CharacterCreatorScene implements Scene {
     await this.enqueue(this.generation);
     if (this.closed || !this.recipe) return;
     const engine = JSON.parse(JSON.stringify(this.recipe.engine)) as Record<string, unknown>;
+    const engineId = characterEngine() === 'cf2' ? 'cf2' : 'cf1';
     const avatar: PlayerAvatar = {
       name: this.name.trim() || 'Traveller',
       seed: this.seed >>> 0,
@@ -464,9 +476,19 @@ export class CharacterCreatorScene implements Scene {
       recipeHash: recipeHashOf(this.recipe),
       race: this.race,
       gender: this.gender,
-      engine: 'cf1',
+      engine: engineId,
       recipe: engine,
     };
+    const initial = this.optionsIn.initial;
+    if (initial.legacyRecipe) {
+      avatar.legacyRecipe = JSON.parse(
+        JSON.stringify(initial.legacyRecipe),
+      ) as PlayerAvatar['legacyRecipe'];
+    } else if (engineId === 'cf2' && initial.engine !== 'cf2' && initial.recipe) {
+      avatar.legacyRecipe = JSON.parse(
+        JSON.stringify(initial.recipe),
+      ) as PlayerAvatar['legacyRecipe'];
+    }
     if (this.working) {
       adoptPlayerBody(this.working);
       this.handedOff = true;
@@ -492,7 +514,7 @@ export class CharacterCreatorScene implements Scene {
       const body =
         !forgeReady().ok || !this.recipe
           ? placeholderAvatar(this.seed)
-          : await buildAvatar(this.recipe, { budgetMs: 8 });
+          : await buildAvatar(this.recipe);
       if (generation !== this.generation || this.closed) {
         body.dispose();
         return;

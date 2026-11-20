@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { expect, test } from 'vitest';
 import { readWardrobeCatalog } from '../../src/app/wardrobe-edit';
 import { createCharacterBackend } from '../../src/render/characters/backends/select';
-import { characterForgePaths } from '../../src/render/characters/cf-pin';
+import { createV2Backend } from '../../src/render/characters/backends/v2';
+import { characterForgePaths, characterForgeV2Paths } from '../../src/render/characters/cf-pin';
 import {
   characterEngine,
   checkRecipeEdit,
@@ -18,15 +19,17 @@ import {
   optionsFor,
   packsForRecipe,
   placeholderAvatar,
+  recipeForAvatar,
   recipeFromStored,
   recipeHashOf,
   validateGameProfile,
 } from '../../src/render/characters/forge';
+import { forgePresentation } from '../../src/render/characters/forge';
 
 const vendor = path.resolve('public', characterForgePaths().base);
 const profile = JSON.parse(readFileSync('content/characters/trailbound.json', 'utf8')) as unknown;
 
-test('?cf=2 is reserved and falls back to v1, and ?cf=0 still disables', async () => {
+test('?cf=2 selects the v2 backend, the default stays v1, and ?cf=0 still disables', async () => {
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
@@ -41,14 +44,12 @@ test('?cf=2 is reserved and falls back to v1, and ?cf=0 still disables', async (
     });
   };
   try {
-    expect(createCharacterBackend('?cf=2').id).toBe('cf1');
-    expect(createCharacterBackend('?cf=v2').id).toBe('cf1');
-    expect(createCharacterBackend('?cf=cf2').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=2').id).toBe('cf2');
+    expect(createCharacterBackend('?cf=v2').id).toBe('cf2');
+    expect(createCharacterBackend('?cf=cf2').id).toBe('cf2');
     expect(createCharacterBackend('?cf=1').id).toBe('cf1');
     expect(createCharacterBackend('').id).toBe('cf1');
-    const warned = warnings.join('\n');
-    expect(warned).toMatch(/v2/);
-    expect(warned).toMatch(/v1 backend/);
+    expect(warnings).toEqual([]);
     const warnedCount = warnings.length;
     expect(createCharacterBackend('?cf=1').id).toBe('cf1');
     expect(warnings).toHaveLength(warnedCount);
@@ -61,15 +62,16 @@ test('?cf=2 is reserved and falls back to v1, and ?cf=0 still disables', async (
 
     const before = warnings.length;
     setSearch('?cf=2');
-    const fallback = await initForge({
+    const rejected = await initForge({
       force: true,
       enabled: true,
       runtimeUrl: 'data:text/javascript,export default {}',
       baseUrl: 'http://cf-test/',
     });
-    expect(fallback.ok).toBe(false);
+    expect(rejected.ok).toBe(false);
+    expect(rejected.reason).toMatch(/api mismatch/);
     expect(characterEngine()).toBeNull();
-    expect(warnings.slice(before).join('\n')).toMatch(/v1 backend/);
+    expect(warnings.slice(before)).toEqual([]);
   } finally {
     console.warn = originalWarn;
     if (previous) Object.defineProperty(globalThis, 'location', previous);
@@ -257,6 +259,186 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
   }
 }, 180_000);
 
+test('a v1 body keeps the old scale rule, and v2 metrics scale toward the 1.4 m hero', () => {
+  expect(forgePresentation(null, 0)).toEqual({ scale: 1, timeScale: 1 });
+  expect(forgePresentation(null, 1.4)).toEqual({ scale: 1, timeScale: 1 });
+  expect(forgePresentation(null, 2.8)).toEqual({ scale: 1, timeScale: 2 });
+  const human = forgePresentation({ heightM: 0.946, strideM: 0.539, walkDuration: 1.375 }, 1.6);
+  expect(human.scale).toBeCloseTo(1.4 / 0.946, 5);
+  expect(human.timeScale).toBeGreaterThan(0.2);
+  expect(human.timeScale).not.toBe(Math.max(0.6, 1.6 / 1.4));
+});
+
+test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unless asked', async () => {
+  installHeadlessShims();
+  const vendor2 = path.resolve('public', characterForgeV2Paths().base);
+  const fetched: string[] = [];
+  const restoreFetch = installFetch(vendor2, 'cf2-test/', fetched);
+  const backend = createV2Backend();
+  try {
+    await backend.init({
+      runtimeUrl: pathToFileURL(path.join(vendor2, 'cf-runtime.mjs')).href,
+      baseUrl: 'http://cf2-test/',
+    });
+    const catalog = backend.catalog();
+    expect(catalog?.version).toBe('2.1.0');
+    expect(catalog?.raceMetrics?.human).toMatchObject({ heightM: 0.946, strideM: 0.539 });
+    expect(catalog?.raceMetrics?.human?.walkDuration).toBeCloseTo(1.375, 3);
+    expect(catalog?.flyerRaces).toEqual(expect.arrayContaining(['pixie', 'imp']));
+
+    const first = backend.generate({
+      seed: 1234,
+      profileEntry: { ages: { adult: 1 } },
+      race: 'dwarf',
+      role: 'smith',
+      tier: 'town',
+    }) as { race?: string };
+    const second = backend.generate({
+      seed: 1234,
+      profileEntry: { ages: { adult: 1 } },
+      race: 'dwarf',
+      role: 'smith',
+      tier: 'town',
+    });
+    const other = backend.generate({
+      seed: 1235,
+      profileEntry: { ages: { adult: 1 } },
+      race: 'dwarf',
+      role: 'smith',
+      tier: 'town',
+    });
+    expect(first.race).toBe('dwarf');
+    expect(backend.recipeHash(first)).toBe('1e131891b205bb7f');
+    expect(backend.recipeHash(second)).toBe(backend.recipeHash(first));
+    expect(backend.recipeHash(other)).not.toBe(backend.recipeHash(first));
+
+    const notes: string[] = [];
+    const originalInfo = console.info;
+    console.info = (...args: unknown[]) => {
+      notes.push(args.map((item) => String(item)).join(' '));
+    };
+    let mapped: { race?: string };
+    try {
+      mapped = backend.generate({
+        seed: 3,
+        profileEntry: { ages: { adult: 1 }, races: { djinn: 1 } },
+        race: 'djinn',
+        gender: 'm',
+      }) as { race?: string };
+    } finally {
+      console.info = originalInfo;
+    }
+    expect(mapped.race).toBe('human');
+    expect(notes.join('\n')).toMatch(/djinn/);
+    expect(notes.join('\n')).toMatch(/human/);
+
+    const fixtures = JSON.parse(
+      readFileSync('tests/fixtures/cf-1.2.0-recipes.json', 'utf8'),
+    ) as Record<string, { hash: string; engine: { preset?: string } }>;
+    const elfBefore = JSON.stringify(fixtures.elfMage?.engine);
+    const humanBefore = JSON.stringify(fixtures.human?.engine);
+    const elf = backend.migrateRecipe?.(fixtures.elfMage?.engine) as { race?: string; v?: number };
+    const human = backend.migrateRecipe?.(fixtures.human?.engine) as { race?: string; v?: number };
+    expect(JSON.stringify(fixtures.elfMage?.engine)).toBe(elfBefore);
+    expect(JSON.stringify(fixtures.human?.engine)).toBe(humanBefore);
+    expect(elf).toMatchObject({ race: 'wood_elf', v: 2 });
+    expect(human).toMatchObject({ race: 'human', v: 2 });
+    expect(backend.recipeHash(elf)).toBe('68144ce461f48dda');
+    expect(backend.recipeHash(human)).toBe('eb9fba9697f19f92');
+    expect(backend.recipeHash(backend.migrateRecipe?.(elf))).toBe(backend.recipeHash(elf));
+
+    const built = await backend.build(first, {});
+    expect(built.info?.budgetMs).toBe(6);
+    expect(built.info?.heightM).toBeCloseTo(0.762, 3);
+    expect(built.object3D).toBeTruthy();
+    expect(built.clips?.Idle).toBeTruthy();
+    expect(built.clips?.Walk?.duration).toBeCloseTo(1.375, 3);
+    expect(built.object3D.userData.cfMetrics).toMatchObject({
+      heightM: expect.closeTo(0.762, 3),
+      strideM: expect.any(Number),
+      walkDuration: expect.closeTo(1.375, 3),
+    });
+    built.play('Walk');
+    built.mixer.update(0.05);
+    expect(built.socket?.('head')).toBeTruthy();
+    built.dispose();
+    expect(
+      fetched.some((url) => url.toLowerCase().includes('ki_') || url.includes('ki_manifest')),
+    ).toBe(false);
+
+    const opted = createV2Backend();
+    const privateFetches: string[] = [];
+    const restorePrivate = installFetch(vendor2, 'cf2-private/', privateFetches);
+    try {
+      await opted.init({
+        runtimeUrl: pathToFileURL(path.join(vendor2, 'cf-runtime.mjs')).href,
+        baseUrl: 'http://cf2-private/',
+        privateAnimBaseUrl: 'http://cf2-private/private-ki/',
+      });
+      const recipe = opted.generate({
+        seed: 9,
+        profileEntry: { ages: { adult: 1 } },
+        race: 'human',
+      });
+      await expect(opted.build(recipe, { budgetMs: 0 })).rejects.toThrow(
+        /private|ki_manifest|HTTP/i,
+      );
+      expect(privateFetches.some((url) => url.includes('ki_manifest.json'))).toBe(true);
+    } finally {
+      restorePrivate();
+      opted.dispose();
+    }
+  } finally {
+    restoreFetch();
+    backend.dispose();
+  }
+}, 180_000);
+
+test('loading a cf1 avatar on v2 migrates a copy and leaves the save alone', async () => {
+  installHeadlessShims();
+  const vendor2 = path.resolve('public', characterForgeV2Paths().base);
+  const restoreFetch = installFetch(vendor2, 'cf2-load/', []);
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    writable: true,
+    value: { search: '?cf=2', href: 'http://trailbound.test/?cf=2' },
+  });
+  try {
+    const fixtures = JSON.parse(
+      readFileSync('tests/fixtures/cf-1.2.0-recipes.json', 'utf8'),
+    ) as Record<string, { engine: Record<string, unknown> }>;
+    const saved = {
+      engine: 'cf1' as const,
+      recipe: fixtures.elfMage?.engine,
+      legacyRecipe: undefined,
+      seed: 7741,
+    };
+    const before = JSON.stringify(saved);
+    const ready = await initForge({
+      force: true,
+      enabled: true,
+      runtimeUrl: pathToFileURL(path.join(vendor2, 'cf-runtime.mjs')).href,
+      baseUrl: 'http://cf2-load/',
+    });
+    expect(ready.ok, ready.reason).toBe(true);
+    expect(characterEngine()).toBe('cf2');
+    const playable = recipeForAvatar(saved);
+    expect(JSON.stringify(saved)).toBe(before);
+    expect(saved.engine).toBe('cf1');
+    expect(playable?.engine && (playable.engine as { race?: string; v?: number }).race).toBe(
+      'wood_elf',
+    );
+    expect((playable?.engine as { v?: number }).v).toBe(2);
+    const untouched = recipeFromStored(fixtures.human?.engine, 1);
+    expect(recipeHashOf(untouched)).not.toBe(recipeHashOf(playable!));
+  } finally {
+    restoreFetch();
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
+  }
+}, 180_000);
+
 function installFileFetch(): () => void {
   const original = globalThis.fetch.bind(globalThis);
   globalThis.fetch = async (input, init) => {
@@ -323,4 +505,128 @@ function installCanvasShim(): void {
     }
   }
   Object.assign(globalThis, { OffscreenCanvas: CanvasShim });
+}
+
+function installHeadlessShims(): void {
+  class CanvasShim {
+    width: number;
+    height: number;
+    constructor(width = 4, height = 4) {
+      this.width = width;
+      this.height = height;
+    }
+    getContext(): unknown {
+      return {
+        canvas: this,
+        fillStyle: '',
+        globalCompositeOperation: 'source-over',
+        imageSmoothingEnabled: false,
+        fillRect() {
+          return;
+        },
+        clearRect() {
+          return;
+        },
+        drawImage() {
+          return;
+        },
+        getImageData(_x: number, _y: number, w = 1, h = 1) {
+          return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+        },
+        putImageData() {
+          return;
+        },
+        createImageData(w = 1, h = 1) {
+          return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+        },
+        createPattern() {
+          return {};
+        },
+        measureText() {
+          return { width: 0 };
+        },
+        fillText() {
+          return;
+        },
+        save() {
+          return;
+        },
+        restore() {
+          return;
+        },
+        translate() {
+          return;
+        },
+        scale() {
+          return;
+        },
+        beginPath() {
+          return;
+        },
+        rect() {
+          return;
+        },
+        clip() {
+          return;
+        },
+        setTransform() {
+          return;
+        },
+        resetTransform() {
+          return;
+        },
+      };
+    }
+  }
+  class ImageShim {
+    width = 8;
+    height = 8;
+    onload: (() => void) | null = null;
+    set src(_value: string) {
+      queueMicrotask(() => this.onload?.());
+    }
+    decode(): Promise<void> {
+      return Promise.resolve();
+    }
+  }
+  (globalThis as unknown as { self: unknown }).self = globalThis;
+  (globalThis as unknown as { window: unknown }).window = globalThis;
+  const globals = globalThis;
+  globals.OffscreenCanvas = CanvasShim as unknown as typeof OffscreenCanvas;
+  globals.createImageBitmap = async () =>
+    ({
+      width: 8,
+      height: 8,
+      close() {
+        return;
+      },
+    }) as ImageBitmap;
+  globals.document = {
+    createElement(tag: string) {
+      if (tag === 'canvas') return new CanvasShim(32, 32) as unknown as HTMLCanvasElement;
+      return { style: {} } as HTMLElement;
+    },
+  } as Document;
+  globals.Image = ImageShim as unknown as typeof Image;
+}
+
+function installFetch(root: string, marker: string, seen: string[]): () => void {
+  const original = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    seen.push(url);
+    const at = url.indexOf(marker);
+    if (at < 0) return original(input, init);
+    const rel = decodeURIComponent(url.slice(at + marker.length).split('?')[0] ?? '');
+    if (rel.startsWith('private-ki/')) return new Response('missing', { status: 404 });
+    const file = path.resolve(root, rel);
+    if (file !== root && !file.startsWith(`${root}${path.sep}`) && !file.startsWith(root)) {
+      throw new Error(`forge test fetch escaped: ${rel}`);
+    }
+    const data = await readFile(file);
+    return new Response(data);
+  };
+  return () => {
+    globalThis.fetch = original;
+  };
 }

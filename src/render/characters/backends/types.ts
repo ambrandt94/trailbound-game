@@ -21,7 +21,7 @@
  *
  * Stage contract for every backend: feet at y = 0, +Z forward, metres.
  * Sockets, when `build` exposes them: hand_l, hand_r, back, belt, head.
- * v2 is not implemented. `?cf=2` selects this seam and falls back to v1.
+ * `?cf=2` (also `v2` / `cf2`) selects `backends/v2.ts`. Anything else is v1.
  */
 import type { AnimationClip, AnimationMixer, Camera, Object3D } from 'three';
 import type { AvatarEngine, PlayerProfileEntry } from '../../../core/people/avatar';
@@ -30,10 +30,16 @@ import type { EditIssue, EditPatch, ForgeCatalog, ProfileReport } from '../forge
 export type { AvatarEngine };
 
 export interface CharacterBackendInit {
-  /** Vendored module URL. v1 dynamic-imports this. A v2 backend may ignore it. */
+  /** Vendored module URL. Each backend dynamic-imports this. */
   runtimeUrl: string;
   baseUrl: string;
   profile?: unknown;
+  /**
+   * Opt-in base URL for a privately hosted animation pack.
+   * Unset in the public game. v2 registers it and switches to `cf+ki`.
+   * v1 ignores it.
+   */
+  privateAnimBaseUrl?: string;
 }
 
 /** v1 `generate` input, plus the fields v2 `randomRecipe` takes. */
@@ -76,7 +82,15 @@ export interface BuiltCharacter {
   /** v2 live recipe swap. */
   setRecipe?(recipe: unknown): void;
   dispose(): void;
-  info?: { ms?: number; hash?: string; clipMap?: Record<string, string> };
+  info?: {
+    ms?: number;
+    hash?: string;
+    clipMap?: Record<string, string>;
+    /** v2 cooperative step budget. Default 6. */
+    budgetMs?: number;
+    /** v2 catalog height of the built body, in metres. */
+    heightM?: number;
+  };
 }
 
 export interface CharacterEditReport {
@@ -149,4 +163,9 @@ export interface CharacterBackend {
   dye?(recipe: unknown, colors: unknown): CharacterEquipResult;
   /** v2 `migrate`. Save schema migration is separate and lives in core. */
   migrateRecipe?(recipe: unknown): unknown;
+  /**
+   * Warm the runtime and the race assets during the loading screen.
+   * v1 has no equivalent. v2 calls `CF.preload`.
+   */
+  preload?(): Promise<void>;
 }

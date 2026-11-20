@@ -8,6 +8,10 @@
  *
  * CF_DIST is the directory that contains bundle.json and cf-runtime.mjs
  * (the unpacked dist/<version>/ folder, not the tarball root).
+ *
+ * A 1.x dist updates the active pin, current.json. A 2.x dist is copied the
+ * same way but leaves that pin alone and writes current-v2.json instead, so
+ * v1 stays the runtime the game loads by default.
  */
 import {
   cpSync,
@@ -27,8 +31,8 @@ export const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
  * @param {string} dist
- * @param {{ destRoot?: string, maxBytes?: number }} [options]
- * @returns {{ version: string, generatorVersion: number, dest: string, files: number }}
+ * @param {{ destRoot?: string, maxBytes?: number, pinFile?: string }} [options]
+ * @returns {{ version: string, generatorVersion: number, dest: string, files: number, pinFile: string }}
  */
 export function syncCharacterBundle(dist, options = {}) {
   const source = resolve(dist);
@@ -65,9 +69,11 @@ export function syncCharacterBundle(dist, options = {}) {
     throw new Error(`Refusing to vendor files over ${maxBytes} bytes:\n${tooBig.join('\n')}`);
   }
 
+  const major = Number(version.split('.')[0]);
+  const pinFile = options.pinFile ?? (major === 2 ? 'current-v2.json' : 'current.json');
   const pin = { version, generatorVersion };
-  writeFileSync(join(destRoot, 'current.json'), `${JSON.stringify(pin, null, 2)}\n`);
-  return { version, generatorVersion, dest, files };
+  writeFileSync(join(destRoot, pinFile), `${JSON.stringify(pin, null, 2)}\n`);
+  return { version, generatorVersion, dest, files, pinFile };
 }
 
 /**

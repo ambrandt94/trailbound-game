@@ -1,5 +1,6 @@
 import { parsePlace } from '../../core/content/parse';
 import { createWorld } from '../../core/state/world-state';
+import { preloadForge } from '../../render/characters/forge';
 import { bootError, bootMessage, canContinue } from '../../ui/state';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
@@ -15,7 +16,7 @@ export class BootScene implements Scene {
     bootMessage.value = 'Loading the road…';
     bootError.value = null;
     try {
-      const index = await this.host.content.loadIndex();
+      const [index] = await Promise.all([this.host.content.loadIndex(), preloadForge()]);
       if (!index.entries.some((entry) => entry.id === 'places/waystead')) {
         throw new Error('content index is missing places/waystead');
       }
