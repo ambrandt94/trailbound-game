@@ -7,6 +7,11 @@ import {
   formatOnFootSpeed,
   normalizeMapSpeed,
   normalizeOnFootSpeed,
+  normalizeZoneWagonSpeed,
+  formatZoneWagonSpeed,
+  ZONE_WAGON_MAX,
+  ZONE_WAGON_MIN,
+  ZONE_WAGON_STEP,
 } from '../core/sim/map-pace';
 import type { GameSettings, MapSkinId } from '../core/state/settings';
 import {
@@ -269,47 +274,76 @@ export function SettingsPanel(props: { dock?: boolean }) {
           />
           Map: preview the next zone
         </label>
-        <label class="field">
-          Map speed
-          <select
-            aria-label="Overworld speed"
-            value={String(current.mapSpeed)}
-            onChange={(event) => {
-              const target = event.currentTarget;
-              if (!(target instanceof HTMLSelectElement)) return;
-              change({ mapSpeed: normalizeMapSpeed(target.value) });
-            }}
-          >
-            {MAP_SPEEDS.map((speed) => (
-              <option key={speed} value={String(speed)}>
-                {formatMapSpeed(speed)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label class="slider">
-          <span>On-foot speed (map)</span>
-          <input
-            type="range"
-            min={ON_FOOT_MIN}
-            max={ON_FOOT_MAX}
-            step={ON_FOOT_STEP}
-            value={current.onFootSpeed}
-            aria-label="On-foot speed (map)"
-            onInput={(event) => {
-              const target = event.currentTarget;
-              if (target instanceof HTMLInputElement) {
-                change({ onFootSpeed: normalizeOnFootSpeed(target.value) });
-              }
-            }}
-          />
-          <span class="value">{formatOnFootSpeed(current.onFootSpeed)}</span>
-        </label>
-        <p class="lede tight">
-          {skinText(
-            'These three apply on the overworld map only. In 3D the wagon rolls at 1x and the clock runs on its own, whatever you do. Map speed scales the hero, the caravan, everyone else on the map, and the clock together. On-foot speed is how much faster than the wagon you walk when scouting alone (1.00x matches it).',
-          )}
-        </p>
+        <details class="look-group" open>
+          <summary>Map speed</summary>
+          <label class="field">
+            Map speed
+            <select
+              aria-label="Overworld speed"
+              value={String(current.mapSpeed)}
+              onChange={(event) => {
+                const target = event.currentTarget;
+                if (!(target instanceof HTMLSelectElement)) return;
+                change({ mapSpeed: normalizeMapSpeed(target.value) });
+              }}
+            >
+              {MAP_SPEEDS.map((speed) => (
+                <option key={speed} value={String(speed)}>
+                  {formatMapSpeed(speed)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label class="slider">
+            <span>On-foot speed (map)</span>
+            <input
+              type="range"
+              min={ON_FOOT_MIN}
+              max={ON_FOOT_MAX}
+              step={ON_FOOT_STEP}
+              value={current.onFootSpeed}
+              aria-label="On-foot speed (map)"
+              onInput={(event) => {
+                const target = event.currentTarget;
+                if (target instanceof HTMLInputElement) {
+                  change({ onFootSpeed: normalizeOnFootSpeed(target.value) });
+                }
+              }}
+            />
+            <span class="value">{formatOnFootSpeed(current.onFootSpeed)}</span>
+          </label>
+          <p class="lede tight">
+            {skinText(
+              'Overworld map only. Map speed scales the hero, the caravan, everyone else on the map, and the clock together. On-foot speed is how much faster than the wagon you walk when scouting alone (1.00x matches it).',
+            )}
+          </p>
+        </details>
+        <details class="look-group" open>
+          <summary>Zone (3D) wagon speed</summary>
+          <label class="slider">
+            <span>Zone wagon speed</span>
+            <input
+              type="range"
+              min={ZONE_WAGON_MIN}
+              max={ZONE_WAGON_MAX}
+              step={ZONE_WAGON_STEP}
+              value={current.zoneWagonSpeed}
+              aria-label="Zone wagon speed (3D)"
+              onInput={(event) => {
+                const target = event.currentTarget;
+                if (target instanceof HTMLInputElement) {
+                  change({ zoneWagonSpeed: normalizeZoneWagonSpeed(target.value) });
+                }
+              }}
+            />
+            <span class="value">{formatZoneWagonSpeed(current.zoneWagonSpeed)}</span>
+          </label>
+          <p class="lede tight">
+            {skinText(
+              'How fast the wagon rolls when you are walking a zone in 3D, in metres per second (2.50 is the default). Separate from map speed: neither slider changes the other. Hills and roads still slow or speed it, and the clock still pays by distance, so a slower wagon takes longer for the same road. Applies live.',
+            )}
+          </p>
+        </details>
         <p class="lede tight">
           {skinText(
             'The 3D view uses the same look, camera, and feel as the controller demo. Fog density also sets how far the town draws. Changes apply immediately.',

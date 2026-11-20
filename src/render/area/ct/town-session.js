@@ -11,6 +11,7 @@ import {
 } from '../../../core/state/area-camera.ts';
 import { visualNumbers } from '../../../core/state/area-look.ts';
 import { AREA_PACE } from '../../../core/state/area-pace.ts';
+import { holdVelocityAtEdge } from '../../../core/area/edge-leave.ts';
 import { forgeClip, locomotionSample } from '../locomotion.ts';
 import { stepMotor, takeSimSteps } from '../motor.ts';
 import {
@@ -36,6 +37,7 @@ import {
 } from '../party-wagon.ts';
 import {
   CONVOY_BENCH,
+  AUTO_JOG_MPS,
   CONVOY_EDGE_HOLD_M,
   LEASH_HINT_M,
   convoyBench,
@@ -407,6 +409,8 @@ export async function createTownSession(canvas, hooks) {
       clips: ['Idle', 'Walk'],
       durations: { Walk: metrics ? metrics.walkDuration : AREA_PACE.forgeWalkDuration },
       strides: { Walk: metrics ? metrics.strideM : AREA_PACE.forgeWalkStride },
+      // Foot-locked beside the wagon: a walk at wagon pace is quicker than a stroll, so lift the walk cap.
+      maxRate: p.autoWalk ? AREA_PACE.fastPlaybackCap : undefined,
     });
     const clip = forgeClip(sample, forgePawn.clip === 'Walk' ? 'Walk' : 'Idle');
     const pose = {
@@ -773,7 +777,9 @@ export async function createTownSession(canvas, hooks) {
     if (p.x > hi.x - m && vx > 0) vx = 0;
     if (p.z < lo.z + m && vz < 0) vz = 0;
     if (p.z > hi.z - m && vz > 0) vz = 0;
-    return { ...want, vx, vz };
+    // The playable ground can end well inside the zone rectangle (a shore, the world's edge): hold there too.
+    const held = holdVelocityAtEdge(vx, vz, window.TBArea && TBArea.edgeInfo ? TBArea.edgeInfo(p.x, p.z) : null, m);
+    return { ...want, vx: held.vx, vz: held.vz };
   }
   function convoyLeash() {
     if (!convoyFrame) return 'ok';
@@ -815,10 +821,12 @@ export async function createTownSession(canvas, hooks) {
       },
       dt,
     );
-    if (auto && p.st === 'walk' && Math.hypot(p.vx, p.vz) > 2.2) {
+    // The auto-walk walks beside a wagon at its default pace and jogs only to catch up or keep a fast one.
+    if (auto && p.st === 'walk' && Math.hypot(p.vx, p.vz) > AUTO_JOG_MPS) {
       p.st = 'run';
       p.gear = 'run';
     }
+    p.autoWalk = !!auto;
     if (p.y < -10 && window.TBArea && TBArea.active()) {
       const s = TBArea.spawn();
       p.x = s.x + (p.n ? 1.2 : 0);

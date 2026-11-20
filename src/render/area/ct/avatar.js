@@ -3,6 +3,7 @@
    three r187: colorSpace, colorspace_fragment, per-fragment Lambert cel, asset root.
 */
 import { locomotionSample } from '../locomotion.ts';
+import { AREA_PACE } from '../../../core/state/area-pace.ts';
 import { THREE } from './three-runtime.js';
 /* Player (and the talkative meadow NPC) visuals.
    Movement stays on the existing rig; this only swaps the cubes for a hero GLB
@@ -77,7 +78,8 @@ scale:rig.size*rig.root.scale.x,
 clips:names,
 durations:durations,
 strides:g?g.stride:undefined,
-gaitRate:g?g.rate:1
+gaitRate:g?g.rate:1,
+maxRate:p.autoWalk?AREA_PACE.fastPlaybackCap:undefined
 });
 if(sample.clip)play(rig,sample.clip);
 rig.mixer.timeScale=sample.timeScale;

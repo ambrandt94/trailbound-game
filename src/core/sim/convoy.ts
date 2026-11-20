@@ -7,21 +7,29 @@
  *
  * Pace. On the map the caravan covers about 1 unit (32 m) per TU. At the
  * 0.33× area clock that is `convoyClockMps` = 5.9 m/s: clock-true, but a
- * gallop a walking hero cannot hold. The wagon rolls at `CONVOY_MPS` ×
- * speedMod instead (5 m/s, a brisk cart trot that a jogging hero keeps up
- * with), so it is 85% of clock-true, and the map caravan advances by exactly
+ * gallop a walking hero cannot hold. The wagon rolls at the zone wagon speed
+ * × speedMod instead: `CONVOY_MPS` (2.5 m/s, an ox-cart walk a hero strolls
+ * beside) by default, or whatever the "Zone (3D) wagon speed" setting says
+ * (`zoneWagonSpeed`, 1–6 m/s, read live). The map caravan advances by exactly
  * the metres the wagon covers: the wagon on screen and the caravan on the map
  * never disagree. The 3D clock is then paid by distance while the wagon rolls
- * (`convoyClockHours`), so a unit of road costs the same TU as on the map.
- * 3D always runs at 1x whatever the overworld speed setting says.
+ * (`convoyClockHours`), so a unit of road costs the same TU as on the map; a
+ * slower wagon just takes longer, in real seconds, to cover it.
+ * 3D never reads the overworld map speed setting, and the zone wagon speed
+ * never touches the map.
  */
+import { EDGE_WARN_OFF_M } from '../area/edge-leave';
 import { METERS_PER_WORLD_TILE, ZONE_SCALE } from '../world/models';
 import { AREA_TIME_SCALE, HOURS_PER_TU } from './time';
 import { GAME_HOURS_PER_REAL_SECOND } from './clock';
 import { CARAVAN_METERS_PER_UNIT, CARAVAN_UNITS_PER_TU, pointAlong } from './caravan';
 
-/** Wagon pace in 3D, metres per real second at speedMod 1. Clock-true is 5.9. */
-export const CONVOY_MPS = 5;
+/**
+ * Default wagon pace in 3D, metres per real second at speedMod 1: an ox-cart
+ * walk. It was 5, which read about twice too fast. The "Zone (3D) wagon speed"
+ * setting overrides it live. Clock-true is 5.9.
+ */
+export const CONVOY_MPS = 2.5;
 /** The hero walks this far off the wagon's left side. */
 export const CONVOY_SIDE_M = 2.5;
 /** …and this far ahead of the wheelbase centre, beside the front wheel. */
@@ -36,17 +44,26 @@ export const RELATCH_IDLE_SEC = 0.8;
 /** Spring that pulls the hero onto the slot, per second. */
 export const FOLLOW_GAIN = 1.4;
 /**
- * Auto-walk jogs at most this fast. The wagon tops out near 5.5 m/s
- * (speedMod 1.1), so a jog beside it still has room to close the gap.
+ * Auto-walk's floor for its speed cap. The wagon tops out near 2.75 m/s at
+ * the default pace (speedMod 1.1), so this leaves room to close a gap without
+ * breaking into a run. The cap rises with a faster wagon (`followCap`).
  */
-export const FOLLOW_RUN_MPS = 6.5;
+export const FOLLOW_RUN_MPS = 3.5;
+/** Headroom over the wagon's own speed that the auto-walk may use to catch up, m/s. */
+export const FOLLOW_CATCHUP_MPS = 1;
+/**
+ * Auto-walk faster than this plays as a jog; at or under it, a walk. Sits
+ * above the wagon's default pace (2.5, 2.75 on a good road), so the hero walks
+ * beside it, and below the catch-up cap.
+ */
+export const AUTO_JOG_MPS = 3.2;
 /** Far behind (the leash pull), the hero may sprint. */
 export const FOLLOW_SPRINT_MPS = 8.5;
 /** Re-cut the area when the wagon gets this close to the playable edge. */
 export const CONVOY_RECUT_EDGE_M = 16;
 /**
  * Start cutting the next window this much sooner than the re-cut itself, so
- * the build is done before the wagon needs it. At 5 m/s that is about 4 s.
+ * the build is done before the wagon needs it. About 8 s at the default 2.5 m/s, 3 s at the 6 m/s slider top.
  */
 export const CONVOY_PRECUT_LEAD_M = 20;
 /**
@@ -58,8 +75,13 @@ export const CONVOY_PRECUT_LEAD_M = 20;
 export const CONVOY_STREAM_RECUT = false;
 /** The wagon has left the zone once it is this far past the playable edge, metres. */
 export const CONVOY_GONE_M = 6;
-/** The hero's auto-walk beside the wagon stops this far inside the zone edge: they stay while the wagon rolls on. */
-export const CONVOY_EDGE_HOLD_M = 2.5;
+/**
+ * The hero's auto-walk beside the wagon stops this far inside the zone edge:
+ * they stay while the wagon rolls on. It sits outside the "leaving" warning
+ * band (`EDGE_WARN_OFF_M`) so a parked hero never shows the leave warning or
+ * counts toward an exit: only walking out on purpose does.
+ */
+export const CONVOY_EDGE_HOLD_M = EDGE_WARN_OFF_M + 1;
 /** A zone hop centres the new zone this far toward the wagon from the exit point, at most. */
 export const CONVOY_HOP_SHIFT_M = 34;
 /** A re-cut centres the new window this far ahead of the wagon along the route. */
@@ -80,10 +102,15 @@ export interface ConvoyPose {
   speed: number;
 }
 
-/** 3D wagon speed in metres per real second. */
-export function convoyMps(speedMod: number): number {
+/**
+ * 3D wagon speed in metres per real second. `baseMps` is the zone wagon speed
+ * setting (a bad value falls back to `CONVOY_MPS`); the terrain `speedMod`
+ * multiplies on top.
+ */
+export function convoyMps(speedMod: number, baseMps: number = CONVOY_MPS): number {
   const mod = Number.isFinite(speedMod) && speedMod > 0 ? speedMod : 1;
-  return CONVOY_MPS * mod;
+  const base = Number.isFinite(baseMps) && baseMps > 0 ? baseMps : CONVOY_MPS;
+  return base * mod;
 }
 
 /**
@@ -94,10 +121,12 @@ export function convoyRollMetres(input: {
   rolling: boolean;
   paused: boolean;
   speedMod: number;
+  /** Zone wagon speed setting, m/s. Default `CONVOY_MPS`. */
+  baseMps?: number;
   dt: number;
 }): number {
   if (!input.rolling || input.paused || !(input.dt > 0)) return 0;
-  return convoyMps(input.speedMod) * input.dt;
+  return convoyMps(input.speedMod, input.baseMps) * input.dt;
 }
 
 /**
@@ -192,6 +221,17 @@ export function convoyBench(
 }
 
 /**
+ * The fastest the auto-walk goes: a walk-plus-catch-up beside the wagon, or a
+ * sprint past the leash. Both rise with a fast wagon so a high zone speed
+ * never leaves the hero behind.
+ */
+export function followCap(wagonSpeed: number, slotDist: number): number {
+  const speed = Number.isFinite(wagonSpeed) ? Math.max(0, wagonSpeed) : 0;
+  if (slotDist > LEASH_HINT_M) return Math.max(FOLLOW_SPRINT_MPS, speed + 3);
+  return Math.max(FOLLOW_RUN_MPS, speed + FOLLOW_CATCHUP_MPS);
+}
+
+/**
  * Velocity that walks the hero onto the slot: the wagon's own velocity plus a
  * spring toward the slot, capped at a run (a sprint past the leash).
  */
@@ -207,7 +247,7 @@ export function followVelocity(
   if (slotDist < 0.2 && speed < 0.05) return { vx: 0, vz: 0, slotDist };
   let vx = Math.sin(wagon.yaw) * speed + ex * FOLLOW_GAIN;
   let vz = Math.cos(wagon.yaw) * speed + ez * FOLLOW_GAIN;
-  const cap = slotDist > LEASH_HINT_M ? FOLLOW_SPRINT_MPS : FOLLOW_RUN_MPS;
+  const cap = followCap(speed, slotDist);
   const len = Math.hypot(vx, vz);
   if (len > cap) {
     vx = (vx / len) * cap;
