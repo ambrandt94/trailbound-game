@@ -4,7 +4,7 @@
  * The stored grid is one sample per world tile (8 m). Area export adds
  * detail noise seeded by world coordinates on top of a bicubic read.
  */
-import { Biome, type MapStyle } from './models';
+import { Biome, WORLD_TILE_METRES, type MapStyle } from './models';
 import { fbm, Rng, valueNoise2 } from './noise';
 
 /** Metres. Trenches sit near this floor; the field is clamped here. */
@@ -28,7 +28,7 @@ export const NORMALIZED_SEA_LEVEL = 0.36;
  * It is not fitted per area.
  */
 export const VERTICAL_EXAGGERATION = 0.1;
-export const TILE_M = 8;
+export const TILE_M = WORLD_TILE_METRES;
 
 const PEAK_CLAMP_M = 3200;
 

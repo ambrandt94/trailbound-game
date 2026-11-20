@@ -1,6 +1,17 @@
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
+import { clampSettings, DEFAULT_WORLD_SETTINGS, type WorldSettings } from '../world/models';
 import type { PackedWorld, PlayerSave, SaveManifest } from './types';
+
+/**
+ * World generation settings a save was made with. Saves before `worldSettings`
+ * existed always loaded the default world, so they keep doing that.
+ */
+export function savedWorldSettings(core: PackedWorld): WorldSettings {
+  const raw = core.worldSettings;
+  if (!raw || typeof raw !== 'object') return clampSettings({ ...DEFAULT_WORLD_SETTINGS });
+  return clampSettings({ ...DEFAULT_WORLD_SETTINGS, ...raw });
+}
 
 export function assertPackedWorld(value: PackedWorld): PackedWorld {
   if (!Number.isFinite(value.clockHours) || !Number.isFinite(value.worldSeed)) {

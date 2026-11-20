@@ -198,6 +198,27 @@ export function resolveLandStyle(style: LandStyle, seed: number): Exclude<MapSty
 }
 
 /**
+ * True when a generated world's settings (`have`, land already resolved)
+ * match what the new-world screen asks for. Random land compares by the style
+ * the seed resolves to, so an unchanged choice does not regenerate.
+ */
+export function sameWorldSettings(have: WorldSettings, want: WorldSettings, seed: number): boolean {
+  const wantStyle = want.mapStyle === 'random' ? resolveLandStyle('random', seed) : want.mapStyle;
+  if (wantStyle === 'custom' || have.mapStyle === 'custom') return false;
+  return (
+    have.mapStyle === wantStyle &&
+    have.worldScale === want.worldScale &&
+    have.poiCount === want.poiCount &&
+    have.wanderers === want.wanderers &&
+    have.caravans === want.caravans &&
+    have.armies === want.armies &&
+    have.residentsMode === want.residentsMode &&
+    have.avgPerHouse === want.avgPerHouse &&
+    have.avgPerPlace === want.avgPerPlace
+  );
+}
+
+/**
  * Seeded continent silhouette. Several lobes, a rotated stretch, and a strong
  * warp, so two seeds are not the same disc. Land stays off a 6% ocean margin.
  */

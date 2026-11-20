@@ -1,11 +1,22 @@
 import type { AvatarGender } from '../core/people/avatar';
-import { LAND_CHOICES, LAND_CHOICE_LABELS, type LandStyle } from '../core/world/models';
+import {
+  EXPERIMENTAL_WORLD_SCALES,
+  LAND_CHOICES,
+  LAND_CHOICE_LABELS,
+  WORLD_SCALES,
+  worldSizeKm,
+  type LandStyle,
+  type WorldScale,
+} from '../core/world/models';
 import {
   creatorBusy,
   creatorCommands,
   creatorSource,
   creatorView,
+  newWorldGen,
   newWorldLand,
+  setNewWorldGen,
+  type NewWorldGen,
   type PartView,
   type SliderView,
   type SwatchView,
@@ -77,6 +88,111 @@ function SliderRow(props: { slider: SliderView; onChange: (id: string, value: nu
         onBlur={() => creatorCommands.endGesture()}
       />
     </label>
+  );
+}
+
+function worldScaleLabel(scale: WorldScale): string {
+  const km = worldSizeKm(scale);
+  const size = `${scale}× · ${km < 10 ? km.toFixed(1) : Math.round(km)} km`;
+  return EXPERIMENTAL_WORLD_SCALES.includes(scale) ? `${size} (experimental)` : size;
+}
+
+type CountKey = 'poiCount' | 'wanderers' | 'caravans' | 'armies' | 'avgPerHouse' | 'avgPerPlace';
+
+function WorldCount(props: {
+  id: CountKey;
+  label: string;
+  min: number;
+  max: number;
+  step?: number;
+}) {
+  const value = newWorldGen.value[props.id];
+  const step = props.step ?? 1;
+  return (
+    <label class="field">
+      <span>
+        {props.label} {step < 1 ? value.toFixed(1) : value}
+      </span>
+      <input
+        type="range"
+        min={props.min}
+        max={props.max}
+        step={step}
+        value={value}
+        aria-label={props.label}
+        onInput={(event) => {
+          const target = event.currentTarget;
+          if (target instanceof HTMLInputElement) {
+            setNewWorldGen({ [props.id]: Number(target.value) } as Partial<NewWorldGen>);
+          }
+        }}
+      />
+    </label>
+  );
+}
+
+/** New-world generation choices. Ranges match `clampSettings`. */
+function WorldControls() {
+  const gen = newWorldGen.value;
+  return (
+    <>
+      <label class="field">
+        <span>World size</span>
+        <select
+          aria-label="World size"
+          value={String(gen.worldScale)}
+          onChange={(event) => {
+            const target = event.currentTarget;
+            if (!(target instanceof HTMLSelectElement)) return;
+            const next = Number(target.value);
+            if ((WORLD_SCALES as readonly number[]).includes(next)) {
+              setNewWorldGen({ worldScale: next as WorldScale });
+            }
+          }}
+        >
+          {WORLD_SCALES.map((scale) => (
+            <option key={scale} value={String(scale)}>
+              {worldScaleLabel(scale)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {EXPERIMENTAL_WORLD_SCALES.includes(gen.worldScale) ? (
+        <p class="note">
+          Experimental: about four times the terrain memory of 16× (377 MB vs 94 MB) and a slower
+          first load.
+        </p>
+      ) : null}
+      <details class="shape-details world-details">
+        <summary class="tb-heading">World population</summary>
+        <WorldCount id="poiCount" label="Places" min={0} max={400} />
+        <WorldCount id="wanderers" label="Wanderers" min={0} max={200} />
+        <WorldCount id="caravans" label="Caravans" min={0} max={40} />
+        <WorldCount id="armies" label="Armies" min={0} max={20} />
+        <label class="field">
+          <span>Residents</span>
+          <select
+            aria-label="Residents"
+            value={gen.residentsMode}
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (!(target instanceof HTMLSelectElement)) return;
+              setNewWorldGen({
+                residentsMode: target.value === 'perHouse' ? 'perHouse' : 'perPlace',
+              });
+            }}
+          >
+            <option value="perPlace">Per place</option>
+            <option value="perHouse">Per house</option>
+          </select>
+        </label>
+        {gen.residentsMode === 'perHouse' ? (
+          <WorldCount id="avgPerHouse" label="People per house" min={0} max={20} step={0.5} />
+        ) : (
+          <WorldCount id="avgPerPlace" label="People per place" min={0} max={500} />
+        )}
+      </details>
+    </>
   );
 }
 
@@ -405,27 +521,30 @@ export function CreatorScreen() {
       </div>
 
       {view.intent === 'new' ? (
-        <label class="field">
-          <span>Land</span>
-          <select
-            aria-label="Land"
-            value={newWorldLand.value}
-            onChange={(event) => {
-              const target = event.currentTarget;
-              if (!(target instanceof HTMLSelectElement)) return;
-              const next = target.value;
-              if ((LAND_CHOICES as readonly string[]).includes(next)) {
-                newWorldLand.value = next as LandStyle;
-              }
-            }}
-          >
-            {LAND_CHOICES.map((choice) => (
-              <option key={choice} value={choice}>
-                {LAND_CHOICE_LABELS[choice]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label class="field">
+            <span>Land</span>
+            <select
+              aria-label="Land"
+              value={newWorldLand.value}
+              onChange={(event) => {
+                const target = event.currentTarget;
+                if (!(target instanceof HTMLSelectElement)) return;
+                const next = target.value;
+                if ((LAND_CHOICES as readonly string[]).includes(next)) {
+                  newWorldLand.value = next as LandStyle;
+                }
+              }}
+            >
+              {LAND_CHOICES.map((choice) => (
+                <option key={choice} value={choice}>
+                  {LAND_CHOICE_LABELS[choice]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <WorldControls />
+        </>
       ) : null}
 
       {view.note ? <p class="note">{skinText(view.note)}</p> : null}
