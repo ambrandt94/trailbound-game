@@ -21,7 +21,7 @@
  *
  * Stage contract for every backend: feet at y = 0, +Z forward, metres.
  * Sockets, when `build` exposes them: hand_l, hand_r, back, belt, head.
- * `?cf=2` (also `v2` / `cf2`) selects `backends/v2.ts`. Anything else is v1.
+ * `?cf=1` (also `v1` / `cf1`) selects the legacy `backends/v1.ts`. Anything else is v2.
  */
 import type { AnimationClip, AnimationMixer, Camera, Object3D } from 'three';
 import type { AvatarEngine, PlayerProfileEntry } from '../../../core/people/avatar';

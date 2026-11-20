@@ -209,8 +209,7 @@ interface InitOptions {
   runtimeUrl?: string;
   /**
    * Pass false to force the placeholder path. `?cf=0` does the same.
-   * `?cf=2` (also `v2` / `cf2`) selects the Character Forge 2 backend.
-   * Anything else is v1. v1 stays the default.
+   * Character Forge 2 is the default backend; `?cf=1` (also `v1` / `cf1`) selects v1.
    */
   enabled?: boolean;
   profile?: unknown;

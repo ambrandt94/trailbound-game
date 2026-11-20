@@ -29,7 +29,7 @@ import { forgePresentation } from '../../src/render/characters/forge';
 const vendor = path.resolve('public', characterForgePaths().base);
 const profile = JSON.parse(readFileSync('content/characters/trailbound.json', 'utf8')) as unknown;
 
-test('?cf=2 selects the v2 backend, the default stays v1, and ?cf=0 still disables', async () => {
+test('v2 is the default backend, ?cf=1 selects the legacy v1, and ?cf=0 still disables', async () => {
   const warnings: string[] = [];
   const originalWarn = console.warn;
   console.warn = (...args: unknown[]) => {
@@ -48,7 +48,9 @@ test('?cf=2 selects the v2 backend, the default stays v1, and ?cf=0 still disabl
     expect(createCharacterBackend('?cf=v2').id).toBe('cf2');
     expect(createCharacterBackend('?cf=cf2').id).toBe('cf2');
     expect(createCharacterBackend('?cf=1').id).toBe('cf1');
-    expect(createCharacterBackend('').id).toBe('cf1');
+    expect(createCharacterBackend('').id).toBe('cf2');
+    expect(createCharacterBackend('?cf=v1').id).toBe('cf1');
+    expect(createCharacterBackend('?cf=cf1').id).toBe('cf1');
     expect(warnings).toEqual([]);
     const warnedCount = warnings.length;
     expect(createCharacterBackend('?cf=1').id).toBe('cf1');
@@ -92,6 +94,8 @@ test('a disabled forge returns a placeholder pawn', async () => {
 });
 
 test('the trailbound profile validates, and the same seed and entry hash the same recipe', async () => {
+  // This test loads the v1 runtime and checks v1 recipes, so it pins the legacy backend.
+  const restoreSearch = pinSearch('?cf=1');
   const restoreFetch = installFileFetch();
   installCanvasShim();
   installBitmapShim();
@@ -256,6 +260,7 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
     }
   } finally {
     restoreFetch();
+    restoreSearch();
   }
 }, 180_000);
 
@@ -394,16 +399,12 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
   }
 }, 180_000);
 
-test('loading a cf1 avatar on v2 migrates a copy and leaves the save alone', async () => {
+test('loading a cf1 avatar on the default v2 backend migrates a copy and leaves the save alone', async () => {
   installHeadlessShims();
   const vendor2 = path.resolve('public', characterForgeV2Paths().base);
   const restoreFetch = installFetch(vendor2, 'cf2-load/', []);
-  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
-  Object.defineProperty(globalThis, 'location', {
-    configurable: true,
-    writable: true,
-    value: { search: '?cf=2', href: 'http://trailbound.test/?cf=2' },
-  });
+  // No `?cf=`: the default backend is v2.
+  const restoreSearch = pinSearch('');
   try {
     const fixtures = JSON.parse(
       readFileSync('tests/fixtures/cf-1.2.0-recipes.json', 'utf8'),
@@ -434,10 +435,23 @@ test('loading a cf1 avatar on v2 migrates a copy and leaves the save alone', asy
     expect(recipeHashOf(untouched)).not.toBe(recipeHashOf(playable!));
   } finally {
     restoreFetch();
-    if (previous) Object.defineProperty(globalThis, 'location', previous);
-    else Reflect.deleteProperty(globalThis, 'location');
+    restoreSearch();
   }
 }, 180_000);
+
+/** Point `location.search` at `search` for backend selection. Returns the undo. */
+function pinSearch(search: string): () => void {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'location');
+  Object.defineProperty(globalThis, 'location', {
+    configurable: true,
+    writable: true,
+    value: { search, href: `http://trailbound.test/${search}` },
+  });
+  return () => {
+    if (previous) Object.defineProperty(globalThis, 'location', previous);
+    else Reflect.deleteProperty(globalThis, 'location');
+  };
+}
 
 function installFileFetch(): () => void {
   const original = globalThis.fetch.bind(globalThis);

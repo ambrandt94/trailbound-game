@@ -39,6 +39,9 @@ vi.mock('../../src/render/characters/forge', async (importOriginal) => {
 });
 
 beforeAll(() => {
+  // These sessions drive the v1 paperdoll against the vendored v1 runtime,
+  // so they pin the legacy backend. v2 is the default.
+  window.history.replaceState(null, '', `${window.location.pathname}?cf=1`);
   installCanvasShim();
   installBitmapShim();
   installFetch();

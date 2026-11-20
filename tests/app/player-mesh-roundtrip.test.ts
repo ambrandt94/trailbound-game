@@ -160,6 +160,7 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
       matrixWorld?: unknown;
       updateWorldMatrix?: (parents: boolean, children: boolean) => void;
       getObjectByName?: (name: string) => Node | null;
+      traverse?: (visit: (node: Node) => void) => void;
     };
     const host = globalThis as {
       __tb?: {
@@ -214,7 +215,20 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
     tb?.session?.frame?.();
     const scene = tb?.session?.worldView?.().scene;
     const avatar = scene?.getObjectByName?.('CF_avatar') ?? null;
-    const body = scene?.getObjectByName?.('CF_body') ?? null;
+    // v1 names its one skinned body `CF_body`. v2 is a glTF scene with one
+    // skinned mesh per part, so the body is the visible skinned mesh with the most verts.
+    let body: Node | null = scene?.getObjectByName?.('CF_body') ?? null;
+    if (body && !body.isSkinnedMesh) body = null;
+    if (!body && avatar) {
+      let most = 0;
+      avatar.traverse?.((node) => {
+        const count = node.geometry?.attributes?.position?.count ?? 0;
+        if (node.isSkinnedMesh && node.visible !== false && count > most) {
+          most = count;
+          body = node;
+        }
+      });
+    }
     const bones = body?.skeleton?.bones ?? [];
     let inScene = false;
     for (let parent: Node | null | undefined = avatar; parent; parent = parent.parent) {
