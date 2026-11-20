@@ -7,6 +7,7 @@ import {
   resolveAreaAt,
   resolveConvoyArea,
   resolveConvoyWindowAt,
+  settlementZoneRect,
 } from '../area/area-window';
 import {
   ZONE_REENTRY_MARGIN_TILES,
@@ -14,6 +15,7 @@ import {
   rememberZone,
   zoneContaining,
   zonesSave,
+  type ZoneKind,
   type ZoneRecord,
   type ZoneRect,
 } from '../area/zone-history';
@@ -152,9 +154,10 @@ export interface ZoneChoice {
   /**
    * `remembered`: the traveller is inside a zone they have been in, so that exact
    * block again. `lean`: a fresh cut leaning down the road. `grid`: the snapped
-   * window (no route).
+   * window (no route). `town`: a settlement, which opens whole; the rect is its
+   * footprint plus outskirts.
    */
-  source: 'remembered' | 'lean' | 'grid';
+  source: 'remembered' | 'lean' | 'grid' | 'town';
 }
 
 /**
@@ -477,6 +480,8 @@ export class WorldState {
         this.buildConvoyHandoff(at.x, at.y, true, aboard ? this.convoyAhead() : null, known) ??
         this.buildSettlementConvoyHandoff(at.x, at.y);
       if (handoff?.convoy) {
+        // A wild convoy zone is filed when adopted; a town is filed here.
+        if (choice?.source === 'town') this.noteTownEntered(choice.rect, handoff.entry.placeName);
         if (aboard) return { handoff, entry: { convoyMode: 'walk' } };
         const { frame, bounds } = handoff.convoy;
         const pos = tileToLocal(frame, this.hero.x, this.hero.y);
@@ -499,7 +504,8 @@ export class WorldState {
     const handoff = known ? this.buildZoneHandoff(known) : this.buildHandoffHere(at.x, at.y);
     // Convoy zones are filed when adopted; the no-route window is filed here.
     if (handoff && choice && choice.source !== 'lean') {
-      this.noteZoneEntered({ ...choice.rect, name: handoff.entry.placeName });
+      if (choice.source === 'town') this.noteTownEntered(choice.rect, handoff.entry.placeName);
+      else this.noteZoneEntered({ ...choice.rect, name: handoff.entry.placeName });
     }
     if (!handoff || aboard) return { handoff, entry: {} };
     const frame: AreaFrame = {
@@ -514,14 +520,15 @@ export class WorldState {
    * map previews. It follows `zoomInPlan`: where the zoom lands (the caravan
    * when riding, the hero on foot), a zone already visited if the traveller is
    * well inside one, else a fresh cut (down the road with a route, snapped
-   * without). Null in a settlement, which opens whole, and on deep water.
+   * without). A settlement previews its whole box (footprint plus outskirts). Null on deep water.
    */
   zoneChoice(): ZoneChoice | null {
     const world = this.data;
     if (!world) return null;
     const aboard = this.heroAboard;
     const at = aboard ? this.caravan : this.hero;
-    if (this.settlementAt(at.x, at.y)) return null;
+    const town = this.settlementAt(at.x, at.y);
+    if (town) return { rect: settlementZoneRect(world, town), source: 'town' };
     const stand = landStandAt(world, at.x, at.y);
     if (!stand) return null;
     const known = zoneContaining(this.zones, at.x, at.y, ZONE_REENTRY_MARGIN_TILES, world.width);
@@ -538,8 +545,13 @@ export class WorldState {
     return { rect: gridWindowRect(world, stand.x, stand.y), source: 'grid' };
   }
 
+  /** File a town the party just entered as the newest zone. */
+  private noteTownEntered(rect: ZoneRect, name: string): void {
+    this.noteZoneEntered({ ...rect, name, kind: 'town' });
+  }
+
   /** File a zone the party just entered as the newest. Repeats move to the front. */
-  noteZoneEntered(zone: ZoneRect & { name: string }): void {
+  noteZoneEntered(zone: ZoneRect & { name: string; kind?: ZoneKind }): void {
     this.zones = rememberZone(this.zones, zone, this.clockHours);
   }
 

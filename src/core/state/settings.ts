@@ -49,8 +49,10 @@ export interface GameSettings {
   mapSpeed: MapSpeed;
   /** Map only: hero's on-foot pace as a multiple of the wagon's map pace, 1.0–2.0. */
   onFootSpeed: number;
-  /** Map only: outline the last zones entered, and preview the zone a zoom-in would open. Default on. */
+  /** Map only: outline the last zones entered (wild blocks and towns). Default on. */
   zoneOutlines: boolean;
+  /** Map only: dashed preview of the zone a zoom-in would open. Default on. */
+  zonePreview: boolean;
   /** 3D area look, camera, and controller feel. Lives with the other preferences. */
   look: AreaLook;
   /** Collapsible HUD panels. */
@@ -69,6 +71,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   mapSpeed: DEFAULT_MAP_SPEED,
   onFootSpeed: DEFAULT_ON_FOOT_SPEED,
   zoneOutlines: true,
+  zonePreview: true,
   look: DEFAULT_AREA_LOOK,
   hud: DEFAULT_HUD_PREFS,
 };
@@ -84,6 +87,8 @@ function clampPercent(value: unknown, fallback: number): number {
 
 export function normalizeSettings(value: unknown): GameSettings {
   const record = isRecord(value) ? value : {};
+  const outlines =
+    typeof record.zoneOutlines === 'boolean' ? record.zoneOutlines : DEFAULT_SETTINGS.zoneOutlines;
   return {
     master: clampPercent(record.master, DEFAULT_SETTINGS.master),
     music: clampPercent(record.music, DEFAULT_SETTINGS.music),
@@ -99,10 +104,14 @@ export function normalizeSettings(value: unknown): GameSettings {
         : DEFAULT_SETTINGS.timeOnlyWhenMoving,
     mapSpeed: normalizeMapSpeed(record.mapSpeed),
     onFootSpeed: normalizeOnFootSpeed(record.onFootSpeed),
-    zoneOutlines:
-      typeof record.zoneOutlines === 'boolean'
-        ? record.zoneOutlines
-        : DEFAULT_SETTINGS.zoneOutlines,
+    zoneOutlines: outlines,
+    // Saves from before the split had one `zoneOutlines` switch for both.
+    zonePreview:
+      typeof record.zonePreview === 'boolean'
+        ? record.zonePreview
+        : typeof record.zoneOutlines === 'boolean'
+          ? record.zoneOutlines
+          : DEFAULT_SETTINGS.zonePreview,
     look: normalizeAreaLook(record.look),
     hud: normalizeHudPrefs(record.hud),
   };

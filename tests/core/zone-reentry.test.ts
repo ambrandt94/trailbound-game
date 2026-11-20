@@ -210,12 +210,14 @@ test('a new world starts with no zones', () => {
   expect(world.zones).toEqual([]);
 });
 
-test('the zone outline setting defaults on and survives junk', () => {
+test('the zone outline settings default on and survive junk', () => {
   expect(DEFAULT_SETTINGS.zoneOutlines).toBe(true);
+  expect(DEFAULT_SETTINGS.zonePreview).toBe(true);
   expect(normalizeSettings({}).zoneOutlines).toBe(true);
   expect(normalizeSettings({ zoneOutlines: false }).zoneOutlines).toBe(false);
   expect(normalizeSettings({ zoneOutlines: 'no' }).zoneOutlines).toBe(true);
   expect(normalizeSettings(null).zoneOutlines).toBe(true);
+  expect(normalizeSettings(null).zonePreview).toBe(true);
 });
 
 test('a zone hop files the next zone only when it is adopted, not when it is cut ahead of time', () => {
@@ -231,12 +233,3 @@ test('a zone hop files the next zone only when it is adopted, not when it is cut
     y0: cut!.convoy!.zone!.y0,
   });
 });
-
-test('a settlement is not a zone to outline: no preview in town, none filed', () => {
-  const world = new WorldState();
-  world.beginGeneratedWorld();
-  expect(world.settlementAt(world.caravan.x, world.caravan.y)).not.toBeNull();
-  expect(world.zoneChoice()).toBeNull();
-  world.zoomInPlan();
-  expect(world.zones).toEqual([]);
-}, 60_000);

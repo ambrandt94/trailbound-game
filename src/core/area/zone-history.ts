@@ -25,8 +25,20 @@ export interface ZoneRect {
   y1: number;
 }
 
+/**
+ * Tiles of outskirts a town's box takes in around its footprint: the 3D town
+ * export draws a ring of terrain this wide around the playable tiles
+ * (`BORDER_WORLD_TILES`, checked in the tests), so the outline matches
+ * everything you see when you walk round the town.
+ */
+export const TOWN_OUTSKIRTS_TILES = 4;
+
+/** A wilderness block, or a settlement opened whole (its footprint plus outskirts). */
+export type ZoneKind = 'wild' | 'town';
+
 export interface ZoneRecord extends ZoneRect {
   name: string;
+  kind: ZoneKind;
   /** Entry order, 1-based and rising. The newest zone has the highest. */
   seq: number;
   /** Game clock (`clockHours`) when the zone was last entered. */
@@ -43,7 +55,7 @@ export function sameZone(a: ZoneRect, b: ZoneRect): boolean {
  */
 export function rememberZone(
   history: readonly ZoneRecord[],
-  zone: ZoneRect & { name: string },
+  zone: ZoneRect & { name: string; kind?: ZoneKind },
   hours: number,
 ): ZoneRecord[] {
   const seq = history.reduce((top, z) => Math.max(top, z.seq), 0) + 1;
@@ -53,6 +65,7 @@ export function rememberZone(
     x1: zone.x1,
     y1: zone.y1,
     name: zone.name,
+    kind: zone.kind ?? 'wild',
     seq,
     hours,
   };
@@ -80,6 +93,8 @@ export function zoneContaining(
   let best: ZoneRecord | null = null;
   let bestMargin = -Infinity;
   for (const zone of history) {
+    // A town is not re-cut as a wild block: it keeps opening whole (see `WorldState.zoneChoice`).
+    if (zone.kind === 'town') continue;
     const m = zoneMargin(zone, x, y, worldWidth);
     if (m < margin) continue;
     if (m > bestMargin || (m === bestMargin && best && zone.seq > best.seq)) {
@@ -152,6 +167,7 @@ export function normalizeZones(
       x1: z.x1,
       y1: z.y1,
       name: typeof z.name === 'string' ? z.name : 'Wilderness',
+      kind: z.kind === 'town' ? 'town' : 'wild',
       seq: finite(z.seq) ? Math.max(1, Math.floor(z.seq)) : 1,
       hours: finite(z.hours) ? z.hours : 0,
     });
