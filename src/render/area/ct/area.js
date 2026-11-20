@@ -8,6 +8,8 @@ import {
   freshEdgeLeave,
   stepEdgeLeave,
   clampClearance,
+  nearestOutside,
+  edgeOutward,
 } from '../../../core/area/edge-leave.ts';
 import { useOakBiome, useOakSeed } from '../oak-batch.ts';
 import { captureBuildingOccluders } from '../occlusion-view.ts';
@@ -2272,6 +2274,16 @@ function edgeProbe(x,z,mask,w,h,m){
 m=m||1;
 if(!mask||!w||!h)return {dist:99,ox:0,oz:1,side:"S",inside:true};
 const inside=maskSample(mask,w,h,x,z,m)===1;
+if(inside){
+const hit=nearestOutside(mask,w,h,m,x,z,16);
+if(!hit)return {dist:16.1,ox:0,oz:1,side:"S",inside:true};
+const len=Math.hypot(hit.dx,hit.dz);
+let ox,oz;
+if(len>1e-6){ox=hit.dx/len;oz=hit.dz/len;}
+else{ox=0;oz=1;}
+const side=Math.abs(ox)>Math.abs(oz)?(ox>0?"E":"W"):(oz>0?"S":"N");
+return {dist:hit.d,ox:ox,oz:oz,side:side,inside:true};
+}
 const e=Math.max(0.45,m*0.5);
 let gx=maskSmooth(mask,w,h,x+e,z,m)-maskSmooth(mask,w,h,x-e,z,m);
 let gz=maskSmooth(mask,w,h,x,z+e,m)-maskSmooth(mask,w,h,x,z-e,m);
@@ -2293,13 +2305,7 @@ gx=tx-x;gz=tz-z;len=Math.hypot(gx,gz)||1;
 const ix=gx/len,iz=gz/len,ox=-ix,oz=-iz;
 const step=Math.max(0.35,m*0.35);
 let px=x,pz=z,dist=0;
-if(inside){
-for(let i=0;i<48;i++){
-px+=ox*step;pz+=oz*step;dist+=step;
-if(px<0||pz<0||px>=w*m||pz>=h*m||!maskSample(mask,w,h,px,pz,m))break;
-if(dist>16)break;
-}
-}else{
+{
 for(let i=0;i<48;i++){
 px+=ix*step;pz+=iz*step;dist+=step;
 if(maskSample(mask,w,h,px,pz,m))break;
@@ -2364,7 +2370,7 @@ el.style.opacity=String(Math.max(0,Math.min(1,amount)));
 function startLeave(hit){
 if(leaveBegun)return;
 leaveBegun=true;
-edgeLeave={hold:edgeLeave.hold,fired:true};
+edgeLeave=Object.assign({},edgeLeave,{fired:true});
 const gen=++fadeGen;
 const t0=typeof performance!=="undefined"?performance.now():Date.now();
 function step(now){
@@ -2390,7 +2396,7 @@ const p=ps[i];
 if(!p||!isFinite(p.x)||!isFinite(p.z))continue;
 if(window.TBInteriors&&TBInteriors.contains&&TBInteriors.contains(p.x,p.z))continue;
 const info=edgeProbe(p.x-gridOffX,p.z-gridOffZ,placeMask,gw,gh,meters);
-const outward=(p.vx||0)*info.ox+(p.vz||0)*info.oz;
+const outward=edgeOutward(p.vx,p.vz,info.ox,info.oz,!!p.autoWalk);
 const room=clampClearance(p.x,p.z,gridOffX,gridOffZ,Math.max(0,gw)*meters,Math.max(0,gh)*meters);
 const dist=Math.min(info.dist,room);
 if(!worst||dist<worst.dist)worst={p:p,info:info,outward:outward,dist:dist};
@@ -2403,6 +2409,13 @@ const dist=worst.dist;
 const vig=dist>=8?0:dist<=0?0.82:Math.max(0,(8-dist)/8*0.7);
 setLeaveVig(vig);
 if(step.startFade)startLeave(worst);
+}
+/* Distance to the playable edge and the way out, for the convoy auto-walk's hold. Null with no mask. */
+function edgeInfoAt(x,z){
+if(!active||!placeMask)return null;
+const info=edgeProbe(x-gridOffX,z-gridOffZ,placeMask,gw,gh,meters);
+const room=clampClearance(x,z,gridOffX,gridOffZ,Math.max(0,gw)*meters,Math.max(0,gh)*meters);
+return {dist:Math.min(info.dist,room),ox:info.ox,oz:info.oz};
 }
 function spawn(){return {x:spawnPos.x,z:spawnPos.z,y:spawnPos.y,yaw:spawnPos.yaw};}
 function readyMessage(){
@@ -2492,7 +2505,7 @@ window.TBArea={
 attach:attach,receive:receive,groundY:groundY,active:function(){return active;},
 players:function(){return ctx?ctx.players:[];},
 setView:function(i){if(ctx&&typeof ctx.goView==="function")ctx.goView(i);},
-walkClamp:walkClamp,spawn:spawn,groundName:function(x,z){return groundNameAt(x,z);},name:function(){return areaName;},requested:requested,heightSpan:function(){return heightSpan;},
+walkClamp:walkClamp,edgeInfo:edgeInfoAt,spawn:spawn,groundName:function(x,z){return groundNameAt(x,z);},name:function(){return areaName;},requested:requested,heightSpan:function(){return heightSpan;},
 ownsExit:true,edgeProbe:edgeProbe,edgeFrame:edgeFrame,
 decodeU8:decodeU8,prepare:prepare,validate:validate,payloadHash:payloadHash,sampleGrid:sampleGrid,maskClamp:maskClamp,readyWanted:readyWanted,ribbonCover:ribbonCover,roadCover:roadCover,isDryBiome:isDryBiome,ringDressFor:ringDressFor,readHooks:readHooks,
 minigameSlots:function(){return minigameSlots;},respawnAnchor:function(){return respawnAnchor;},settlement:function(){return settlementInfo;},

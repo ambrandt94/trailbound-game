@@ -1,9 +1,11 @@
 import {
   DEFAULT_MAP_SPEED,
   DEFAULT_ON_FOOT_SPEED,
+  DEFAULT_ZONE_WAGON_SPEED,
   DEFAULT_TIME_ONLY_WHEN_MOVING,
   normalizeMapSpeed,
   normalizeOnFootSpeed,
+  normalizeZoneWagonSpeed,
   type MapSpeed,
 } from '../sim/map-pace';
 import { DEFAULT_AREA_LOOK, normalizeAreaLook, type AreaLook } from './area-look';
@@ -45,10 +47,12 @@ export interface GameSettings {
   lockTimeOfDay: boolean;
   /** Map only: the clock and caravan wait until the hero moves. Default on. */
   timeOnlyWhenMoving: boolean;
-  /** Map only: 1x/2x/4x/8x on the hero, caravan, other movers, and the clock. 3D stays 1x. */
+  /** Map only: 1x/2x/4x/8x on the hero, caravan, other movers, and the clock. 3D wagon has `zoneWagonSpeed`. */
   mapSpeed: MapSpeed;
   /** Map only: hero's on-foot pace as a multiple of the wagon's map pace, 1.0–2.0. */
   onFootSpeed: number;
+  /** 3D only: the wagon's pace in a zone, metres per second, 1.0–6.0. Independent of `mapSpeed`. */
+  zoneWagonSpeed: number;
   /** Map only: outline the last zones entered (wild blocks and towns). Default on. */
   zoneOutlines: boolean;
   /** Map only: dashed preview of the zone a zoom-in would open. Default on. */
@@ -70,6 +74,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   timeOnlyWhenMoving: DEFAULT_TIME_ONLY_WHEN_MOVING,
   mapSpeed: DEFAULT_MAP_SPEED,
   onFootSpeed: DEFAULT_ON_FOOT_SPEED,
+  zoneWagonSpeed: DEFAULT_ZONE_WAGON_SPEED,
   zoneOutlines: true,
   zonePreview: true,
   look: DEFAULT_AREA_LOOK,
@@ -104,6 +109,8 @@ export function normalizeSettings(value: unknown): GameSettings {
         : DEFAULT_SETTINGS.timeOnlyWhenMoving,
     mapSpeed: normalizeMapSpeed(record.mapSpeed),
     onFootSpeed: normalizeOnFootSpeed(record.onFootSpeed),
+    // Saves from before this setting get the 2.5 m/s default.
+    zoneWagonSpeed: normalizeZoneWagonSpeed(record.zoneWagonSpeed),
     zoneOutlines: outlines,
     // Saves from before the split had one `zoneOutlines` switch for both.
     zonePreview:

@@ -7,11 +7,13 @@
  * - Map speed (1x/2x/4x/8x): scales the hero's walk, the caravan, every other
  *   map mover, and the map clock together.
  *
- * 3D areas ignore both. They always run at 1x and the clock keeps going.
+ * 3D areas ignore both. Their wagon has its own zone speed (below) and the
+ * clock keeps going.
  *
  * On-foot speed is a third map-only knob: the hero's own pace as a multiple of
  * the wagon's map pace, so a scout is only a little quicker than the caravan.
  */
+import { CONVOY_MPS } from './convoy';
 import {
   CARAVAN_METERS_PER_UNIT,
   CARAVAN_UNITS_PER_TU,
@@ -102,6 +104,30 @@ export function normalizeOnFootSpeed(value: unknown): number {
 
 export function formatOnFootSpeed(speed: number): string {
   return `${normalizeOnFootSpeed(speed).toFixed(2)}x`;
+}
+
+/**
+ * Zone (3D) wagon speed, metres per real second at an even mood. Its own
+ * knob: the map speed and on-foot sliders never change it, and it never
+ * changes the map. Terrain still multiplies on top.
+ */
+export const ZONE_WAGON_MIN = 1;
+export const ZONE_WAGON_MAX = 6;
+export const ZONE_WAGON_STEP = 0.25;
+export const DEFAULT_ZONE_WAGON_SPEED = CONVOY_MPS;
+
+/** Clamp to 1.0–6.0 m/s and snap to 0.25. Anything that is not a number falls back to 2.5. */
+export function normalizeZoneWagonSpeed(value: unknown): number {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return DEFAULT_ZONE_WAGON_SPEED;
+  const clamped = Math.min(ZONE_WAGON_MAX, Math.max(ZONE_WAGON_MIN, n));
+  return Math.round(Math.round(clamped / ZONE_WAGON_STEP) * ZONE_WAGON_STEP * 100) / 100;
+}
+
+/** "2.50 m/s (1.00x)": the speed, and how it compares with the default. */
+export function formatZoneWagonSpeed(speed: number): string {
+  const mps = normalizeZoneWagonSpeed(speed);
+  return `${mps.toFixed(2)} m/s (${(mps / DEFAULT_ZONE_WAGON_SPEED).toFixed(2)}x)`;
 }
 
 /**

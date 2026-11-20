@@ -391,7 +391,12 @@ export class Game implements GameHost {
     if (!handoff?.convoy) return null;
     this.world.adoptConvoyHandoff(handoff.convoy);
     // Recuts are zone hops now: the hero followed the wagon off the last zone.
-    const driver = new ConvoyDriver(() => this.world, handoff.convoy, true);
+    const driver = new ConvoyDriver(
+      () => this.world,
+      handoff.convoy,
+      true,
+      () => settings.value.zoneWagonSpeed,
+    );
     const renderer = this.makeRenderer(driver);
     try {
       await renderer.start(handoff.areaExport, entry(driver));
@@ -543,7 +548,14 @@ export class Game implements GameHost {
           : null;
       if (!areaExport) throw new Error('Open water. Walk ashore to enter.');
       const convoy = this.pendingArea?.convoy;
-      const driver = convoy ? new ConvoyDriver(() => this.world, convoy) : null;
+      const driver = convoy
+        ? new ConvoyDriver(
+            () => this.world,
+            convoy,
+            false,
+            () => settings.value.zoneWagonSpeed,
+          )
+        : null;
       const renderer = this.makeRenderer(driver);
       // Under a dive the 3D canvas starts hidden (the dive set it) and the map
       // stays magnified; the dive cross-fades it in. Otherwise show it.

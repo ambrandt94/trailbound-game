@@ -20,7 +20,10 @@ import {
   CONVOY_BENCH,
   CONVOY_RECUT_EDGE_M,
   CONVOY_SIDE_M,
+  AUTO_JOG_MPS,
+  CONVOY_MPS,
   FOLLOW_RUN_MPS,
+  followCap,
   FOLLOW_SPRINT_MPS,
   LEASH_HINT_M,
   LEASH_PULL_M,
@@ -103,15 +106,17 @@ test('rolling by tiles matches rolling by clock and stops at the end', () => {
   expect(advanceCaravanTiles({ ...straight(2), halted: true }, 4, even).units).toBe(0);
 });
 
-test('convoy pace: a brisk trot in 3D, close to the clock-true map pace', () => {
-  expect(convoyMps(1)).toBeCloseTo(5, 6);
-  expect(convoyMps(0.8)).toBeCloseTo(4, 6);
-  // Within reach of a jog: the wagon's top pace stays under the auto-walk jog.
+test('convoy pace: an ox-cart walk in 3D by default, well under the clock-true map pace', () => {
+  expect(CONVOY_MPS).toBe(2.5);
+  expect(convoyMps(1)).toBeCloseTo(2.5, 6);
+  expect(convoyMps(0.8)).toBeCloseTo(2, 6);
+  // The wagon's top pace at the default stays under the auto-walk's run floor and the jog line.
   expect(convoyMps(1.1)).toBeLessThan(FOLLOW_RUN_MPS);
-  // 85% of clock-true, so a 3D trip is the same order of time as on the map.
-  expect(convoyMps(1) / convoyClockMps(1)).toBeGreaterThan(0.8);
-  expect(convoyMps(1) / convoyClockMps(1)).toBeLessThan(1);
-  expect(convoyMps(Number.NaN)).toBeCloseTo(5, 6);
+  expect(convoyMps(1.1)).toBeLessThan(AUTO_JOG_MPS);
+  // Half the old 5 m/s trot, so a 3D trip takes about twice as long in real time as it did.
+  expect(convoyMps(1) / convoyClockMps(1)).toBeGreaterThan(0.3);
+  expect(convoyMps(1) / convoyClockMps(1)).toBeLessThan(0.5);
+  expect(convoyMps(Number.NaN)).toBeCloseTo(2.5, 6);
   expect(convoyClockMps(1)).toBeGreaterThan(5.5);
   expect(convoyClockMps(1)).toBeLessThan(6.2);
   expect(metresToTiles(32)).toBeCloseTo(4, 6);
@@ -149,16 +154,17 @@ test('the walking slot sits on the wagon left, the bench up front', () => {
 });
 
 test('follow keeps pace on the slot, catches up at a run, sprints past the leash', () => {
-  const wagon = { x: 0, z: 0, yaw: 0, speed: 5 };
+  const wagon = { x: 0, z: 0, yaw: 0, speed: CONVOY_MPS };
   const slot = convoySlot(wagon);
   const on = followVelocity(slot, wagon);
   expect(on.vx).toBeCloseTo(0, 6);
-  expect(on.vz).toBeCloseTo(5, 6);
+  expect(on.vz).toBeCloseTo(CONVOY_MPS, 6);
   const parked = followVelocity(slot, { ...wagon, speed: 0 });
   expect(Math.hypot(parked.vx, parked.vz)).toBe(0);
   const behind = followVelocity({ x: slot.x, z: slot.z - 10 }, wagon);
-  expect(Math.hypot(behind.vx, behind.vz)).toBeCloseTo(FOLLOW_RUN_MPS, 6);
-  expect(FOLLOW_RUN_MPS).toBeGreaterThan(convoyMps(1.1));
+  expect(Math.hypot(behind.vx, behind.vz)).toBeCloseTo(followCap(wagon.speed, 10), 6);
+  expect(followCap(wagon.speed, 10)).toBeGreaterThan(convoyMps(1.1));
+  expect(followCap(wagon.speed, 10)).toBeGreaterThanOrEqual(FOLLOW_RUN_MPS);
   const far = followVelocity({ x: slot.x, z: slot.z - 60 }, wagon);
   expect(Math.hypot(far.vx, far.vz)).toBeCloseTo(FOLLOW_SPRINT_MPS, 6);
   expect(far.vz).toBeGreaterThan(0);

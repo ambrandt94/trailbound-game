@@ -1,6 +1,7 @@
 import { hasRoute, isRolling, pointAlong } from '../core/sim/caravan';
 import {
   CONVOY_LOOKAHEAD_M,
+  CONVOY_MPS,
   convoyClockHours,
   convoyLeftZone,
   convoyRollMetres,
@@ -52,6 +53,8 @@ export class ConvoyDriver {
     private readonly world: () => WorldState,
     readonly handoff: ConvoyHandoff,
     readonly chasing = false,
+    /** The zone wagon speed setting, m/s. Read every step, so a slider change is live. */
+    private readonly baseMps: () => number = () => CONVOY_MPS,
   ) {}
 
   /** Advance the caravan for `dt` real seconds of 3D time. */
@@ -63,6 +66,7 @@ export class ConvoyDriver {
       rolling: isRolling(world.caravan),
       paused: false,
       speedMod: world.caravanSpeedAt(),
+      baseMps: this.baseMps(),
       dt,
     });
     if (!(metres > 0)) return world.takeCaravanEvents();

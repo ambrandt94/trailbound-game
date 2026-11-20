@@ -140,8 +140,9 @@ export async function mountPartyWagon(mount: WagonMount): Promise<WagonCandidate
       phase: 0,
       yaw: spot.yaw,
     };
-    // PullWalk is authored at 0.32 m/s; let it play fast enough for a trotting wagon.
-    setPackOxPlaybackCap(6);
+    // PullWalk is authored at 0.32 m/s; foot-lock it up to a 3 m/s wagon (the 2.5 m/s default
+    // plus a downhill bonus). A faster zone-speed slider tops the legs out here rather than blur.
+    setPackOxPlaybackCap(10);
   }
   return spot;
 }
@@ -235,7 +236,8 @@ export function driveConvoyWagon(
   const pitch = Math.atan2(front - back, 3.2);
   const moving = pose.speed > 0.05;
   // The bed bob tops out near 3.5 Hz: a faster wagon should rumble, not buzz.
-  if (moving) rig.phase += dt * Math.min(1.45, Math.max(0.6, pose.speed)) * 2.4;
+  // Bob cadence follows the wagon's speed (1.45 Hz-ish at 5 m/s), so wheels and body keep pace with the road.
+  if (moving) rig.phase += dt * Math.min(2.2, Math.max(0.3, pose.speed * BOB_PER_MPS)) * 2.4;
   const g = rig.group;
   g.rotation.order = 'YXZ';
   g.position.set(pose.x, y, pose.z);
@@ -277,6 +279,9 @@ export function driveConvoyWagon(
   const posted = globalThis as { __tbWagon?: { x: number; z: number; y: number } };
   posted.__tbWagon = { x: pose.x, z: pose.z, y };
 }
+
+/** Body-bob cycles per metre/second of wagon speed. */
+const BOB_PER_MPS = 0.29;
 
 /** Advance the hitched ox. Stopped wagons idle; a moving wagon uses PullWalk. */
 export function tickPartyWagon(dt: number): void {
