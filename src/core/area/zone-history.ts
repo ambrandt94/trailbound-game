@@ -183,3 +183,11 @@ export function normalizeZones(
 export function zonesSave(history: readonly ZoneRecord[]): ZoneRecord[] {
   return history.map((z) => ({ ...z }));
 }
+
+/**
+ * Whether the map draws the zoom-in preview for a zone choice. Over a town the
+ * town's own outline already marks what opens, so the preview hides there.
+ */
+export function showsZonePreview(source: 'remembered' | 'lean' | 'grid' | 'town'): boolean {
+  return source !== 'town';
+}

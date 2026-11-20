@@ -28,6 +28,7 @@ import {
   CLOSE_MARKER_SCALE,
   NEAR_POI_TILES,
   fineToDisplay,
+  mapPinScreenPx,
   markerDisplay,
 } from '../../core/world/map-grid';
 import { type ChatBubble, peerMarkerColor } from './markers';
@@ -2524,7 +2525,7 @@ export class WorldRenderer {
       }
       const prominent = close || nearHero;
       this.drawMapPin(ctx, px, py, scale, color, prominent);
-      const screen = prominent ? 34 : 22;
+      const screen = mapPinScreenPx(scale, prominent) * (prominent ? 0.85 : 0.8);
       const s = screen / scale;
       const pin = { x: px - s * 1.2, y: py - s * 1.2, w: s * 2.4, h: s * 2.4 };
       if (hovered || isActive || scale >= 0.45 || nearHero) {
@@ -2541,7 +2542,7 @@ export class WorldRenderer {
     }
   }
 
-  /** Diamond pin. `prominent` keeps it readable at the close map zoom. */
+  /** Diamond pin. `prominent` keeps it readable at the close map zoom; both shrink as the map zooms out. */
   private drawMapPin(
     ctx: CanvasRenderingContext2D,
     px: number,
@@ -2551,14 +2552,16 @@ export class WorldRenderer {
     prominent: boolean,
   ): void {
     const ui = readUiScale();
-    const screen = (prominent ? 40 : 28) * ui;
+    const full = prominent ? 40 : 28;
+    const px0 = mapPinScreenPx(scale, prominent);
+    const screen = px0 * ui;
     const s = screen / scale;
     ctx.save();
     ctx.translate(px, py);
     ctx.rotate(Math.PI / 4);
     ctx.fillStyle = '#fff1d2';
     ctx.strokeStyle = '#3a2418';
-    ctx.lineWidth = (prominent ? 3 : 2) / scale;
+    ctx.lineWidth = Math.max(1, ((prominent ? 3 : 2) * px0) / full) / scale;
     ctx.fillRect(-s * 0.62, -s * 0.62, s * 1.24, s * 1.24);
     ctx.strokeRect(-s * 0.62, -s * 0.62, s * 1.24, s * 1.24);
     ctx.fillStyle = color;

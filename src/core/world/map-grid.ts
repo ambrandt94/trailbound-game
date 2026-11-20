@@ -8,6 +8,31 @@
 import { TILE, WORLD_BASE } from './models';
 
 export const CLOSE_MARKER_SCALE = 1.2;
+
+/** Map pin sizes in screen px (before the UI scale): a place, and a prominent pin (town, close zoom, near the hero). */
+export const MAP_PIN_PX = 28;
+export const MAP_PIN_PROMINENT_PX = 40;
+/** Smallest a pin shrinks to when fully zoomed out, so towns and sites don't bury the map. */
+export const MAP_PIN_MIN_PX = 10;
+export const MAP_PIN_MIN_PROMINENT_PX = 13;
+/** At or above this scale pins are full size; at or below `MAP_PIN_SHRINK_SCALE` they are at the minimum. */
+export const MAP_PIN_FULL_SCALE = CLOSE_MARKER_SCALE;
+export const MAP_PIN_SHRINK_SCALE = 0.12;
+
+/**
+ * On-screen pin size at a map scale. Full size from the close zoom in; shrinks
+ * smoothly (log of the scale) as the map zooms out, down to the minimum.
+ */
+export function mapPinScreenPx(scale: number, prominent: boolean): number {
+  const full = prominent ? MAP_PIN_PROMINENT_PX : MAP_PIN_PX;
+  const min = prominent ? MAP_PIN_MIN_PROMINENT_PX : MAP_PIN_MIN_PX;
+  if (!(scale > 0)) return min;
+  const lo = Math.log(MAP_PIN_SHRINK_SCALE);
+  const hi = Math.log(MAP_PIN_FULL_SCALE);
+  const t = Math.min(1, Math.max(0, (Math.log(scale) - lo) / (hi - lo)));
+  const eased = t * t * (3 - 2 * t);
+  return min + (full - min) * eased;
+}
 /** Fine tiles. POIs inside this of the hero always keep a label. */
 export const NEAR_POI_TILES = 48;
 
