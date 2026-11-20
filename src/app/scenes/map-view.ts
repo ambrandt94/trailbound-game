@@ -23,7 +23,7 @@ import { leaderToggleHalt } from '../leader-halt';
 import { travelHudFor, travelHudKey } from '../travel-hud';
 import { MAP_ZOOM_CAP, TILE } from '../../core/world/models';
 import type { MapCaravanDraw, MapZonesDraw } from '../../render/map/map-renderer';
-import { zoneDistance, zoneOutlineAlpha } from '../../core/area/zone-history';
+import { showsZonePreview, zoneDistance, zoneOutlineAlpha } from '../../core/area/zone-history';
 import { attachRouteClicks, resolveRouteTarget, routeFrame } from '../map-route';
 import {
   canEnter,
@@ -364,7 +364,8 @@ export class MapView implements Scene {
     const choice = zonePreview ? world.zoneChoice() : null;
     return {
       history,
-      preview: choice ? { ...choice.rect, alpha: 0.9 } : null,
+      // Over a town the town outline already shows what opens; no preview box.
+      preview: choice && showsZonePreview(choice.source) ? { ...choice.rect, alpha: 0.9 } : null,
     };
   }
 
