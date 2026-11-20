@@ -14,7 +14,12 @@ import { AREA_PACE } from '../../../core/state/area-pace.ts';
 import { holdVelocityAtEdge } from '../../../core/area/edge-leave.ts';
 import { forgeClip, locomotionSample } from '../locomotion.ts';
 import { stepMotor, takeSimSteps } from '../motor.ts';
-import { aimForgeSun, getPlayerBody, tickPlayerBody } from '../../characters/forge.ts';
+import {
+  aimForgeSun,
+  forgePresentation,
+  getPlayerBody,
+  tickPlayerBody,
+} from '../../characters/forge.ts';
 import { createBlockRig } from '../../characters/pawns.ts';
 import { SCREEN_FRAG, SCREEN_VERT } from './screen-shader.js';
 import { THREE } from './three-runtime.js';
@@ -370,20 +375,40 @@ export async function createTownSession(canvas, hooks) {
     RIGS[0].root.visible = false;
   }
 
+  function forgeMetrics(obj) {
+    const raw = obj && obj.userData && obj.userData.cfMetrics;
+    if (!raw) return null;
+    const heightM = raw.heightM;
+    const strideM = raw.strideM;
+    const walkDuration = raw.walkDuration;
+    if (!(heightM > 0) || !(strideM > 0) || !(walkDuration > 0)) return null;
+    const scale = raw.scale;
+    return {
+      heightM,
+      strideM,
+      walkDuration,
+      scale: typeof scale === 'number' && scale > 0 ? scale : 1,
+    };
+  }
+
   function poseForge(p) {
     if (!forgePawn || p.n !== 0) return;
     const obj = forgePawn.object3D;
     obj.position.set(p.x, p.y, p.z);
     obj.rotation.y = p.yaw;
-    obj.scale.setScalar(P.scale);
+    const metrics = forgeMetrics(obj);
     const speed = Math.hypot(p.vx, p.vz);
+    // v2 shares one uniform scale (1.4 / human height). v1 has no metrics and stays at P.scale.
+    const presented = forgePresentation(metrics, speed);
+    const scale = presented.scale * P.scale;
+    obj.scale.setScalar(scale);
     const sample = locomotionSample({
       state: p.st,
       speed,
-      scale: P.scale,
+      scale,
       clips: ['Idle', 'Walk'],
-      durations: { Walk: AREA_PACE.forgeWalkDuration },
-      strides: { Walk: AREA_PACE.forgeWalkStride },
+      durations: { Walk: metrics ? metrics.walkDuration : AREA_PACE.forgeWalkDuration },
+      strides: { Walk: metrics ? metrics.strideM : AREA_PACE.forgeWalkStride },
       // Foot-locked beside the wagon: a walk at wagon pace is quicker than a stroll, so lift the walk cap.
       maxRate: p.autoWalk ? AREA_PACE.fastPlaybackCap : undefined,
     });

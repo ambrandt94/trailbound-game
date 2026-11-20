@@ -1,9 +1,10 @@
 /**
- * Character Forge 2.1 backend. This is the only file that imports the v2
+ * Character Forge 2.1.1 backend. This is the only file that imports the v2
  * runtime or calls `CF.*` for api 2. v1 stays in `backends/v1.ts`.
  */
 import * as THREE from 'three';
 import type { PlayerProfileEntry } from '../../../core/people/avatar';
+import { HERO_HEIGHT_M } from '../../../core/state/area-pace';
 import { CF2_PIN } from '../cf-pin';
 import type { EditPatch, ForgeCatalog, ProfileReport } from '../forge';
 import { notePlaceholderRaces, v2RaceId, V1_TO_V2_RACE } from './race-map';
@@ -77,9 +78,12 @@ interface Cf2Api {
   init(options: {
     THREE: typeof import('three');
     baseUrl: string;
-    policy?: { animationSet: 'cf' | 'cf+ki'; missingRaces: Record<string, string> };
+    /** Sets the policy directly. Registering a pack does not. */
+    animationSet?: 'cf' | 'cf+ki';
+    policy?: { missingRaces: Record<string, string> };
     privateAnimBaseUrl?: string;
-  }): Promise<unknown>;
+    platform?: CharacterBackendInit['platform'];
+  }): Promise<{ notes?: string[] }>;
   setPolicy(policy: { animationSet?: string; missingRaces?: Record<string, string> }): unknown;
   getPolicy(): { animationSet?: string; regaliaMinRichness?: number };
   preload(what: readonly string[], options?: { signal?: AbortSignal }): Promise<void>;
@@ -142,9 +146,10 @@ interface Cf2Api {
     options?: { budgetMs?: number; texSize?: number; signal?: AbortSignal },
   ): Promise<CfBody>;
   setLighting(input: {
-    mode?: string;
+    mode?: 'current' | 'tb' | 'flat' | 'pixel';
     sunDir?: [number, number, number];
     strength?: number;
+    hue?: number;
   }): unknown;
   dispose(): void;
 }
@@ -166,14 +171,14 @@ export function createV2Backend(): CharacterBackend {
       // the map, and a later visit uploads this same body again.
       next.freeCpuGeometry = false;
       const privateUrl = resolvePrivateAnimUrl(options.privateAnimBaseUrl);
+      const animationSet = privateUrl ? 'cf+ki' : 'cf';
       await next.init({
         THREE,
         baseUrl: options.baseUrl,
-        policy: {
-          animationSet: privateUrl ? 'cf+ki' : 'cf',
-          missingRaces: { ...V1_TO_V2_RACE },
-        },
+        animationSet,
+        policy: { missingRaces: { ...V1_TO_V2_RACE } },
         ...(privateUrl ? { privateAnimBaseUrl: privateUrl } : {}),
+        ...(options.platform ? { platform: options.platform } : {}),
       });
       if (
         next.version !== CF2_PIN.version ||
@@ -183,7 +188,7 @@ export function createV2Backend(): CharacterBackend {
           `character runtime ${next.version} generator ${String(next.generatorVersion)} does not match pin ${CF2_PIN.version} generator ${CF2_PIN.generatorVersion}`,
         );
       }
-      if (next.getPolicy().animationSet !== (privateUrl ? 'cf+ki' : 'cf')) {
+      if (next.getPolicy().animationSet !== animationSet) {
         throw new Error('character runtime animation policy mismatch');
       }
       api = next;
@@ -320,10 +325,13 @@ export function createV2Backend(): CharacterBackend {
       const raceId = body.info?.race;
       const metrics = raceId ? catalog?.raceMetrics?.[raceId] : undefined;
       const walk = body.clips?.Walk;
+      const humanM = catalog?.raceMetrics?.human?.heightM;
       body.object3D.userData.cfMetrics = {
         heightM: body.info?.heightM ?? metrics?.heightM ?? 0,
         strideM: metrics?.strideM ?? 0,
         walkDuration: walk?.duration ?? metrics?.walkDuration ?? 0,
+        // One uniform factor for every race, from the human catalog height.
+        scale: humanM && humanM > 0 ? HERO_HEIGHT_M / humanM : 1,
       };
       return {
         object3D: body.object3D,
@@ -359,9 +367,9 @@ export function createV2Backend(): CharacterBackend {
       if (!api) return;
       camera.updateMatrixWorld();
       const view = TRAILBOUND_SUN.clone().transformDirection(camera.matrixWorldInverse);
-      // v2 rewrites mode `pixel` to its trailbound sun. `sunColor` is accepted and unused.
+      // `tb` is the trailbound sun. `pixel` is only an alias of it. `sunColor` throws.
       api.setLighting({
-        mode: 'pixel',
+        mode: 'tb',
         sunDir: [view.x, view.y, view.z],
         strength: 1,
       });
@@ -370,9 +378,18 @@ export function createV2Backend(): CharacterBackend {
     setLighting(input: CharacterLighting): void {
       if (!api) return;
       api.setLighting({
-        mode: input.mode,
-        sunDir: input.sunDir ? [input.sunDir[0], input.sunDir[1], input.sunDir[2]] : undefined,
-        strength: input.strength,
+        ...(input.mode ? { mode: input.mode } : {}),
+        ...(input.sunDir
+          ? {
+              sunDir: [input.sunDir[0], input.sunDir[1], input.sunDir[2]] as [
+                number,
+                number,
+                number,
+              ],
+            }
+          : {}),
+        ...(typeof input.strength === 'number' ? { strength: input.strength } : {}),
+        ...(typeof input.hue === 'number' ? { hue: input.hue } : {}),
       });
     },
 
@@ -620,15 +637,50 @@ function optionsForCreator(value: unknown, gender: 'm' | 'f', age: 'adult' | 'ch
   };
 }
 
+/** Recipe fields plus the aliases CF 2.1.1 accepts. Anything else is rejected. */
+const V2_EDIT_KEYS = new Set([
+  'race',
+  'bodyType',
+  'bodyAmt',
+  'tone',
+  'marks',
+  'hair',
+  'hairColor',
+  'fade',
+  'beard',
+  'beardColor',
+  'ears',
+  'snout',
+  'horns',
+  'hornSize',
+  'hornDye',
+  'wings',
+  'eyes',
+  'brows',
+  'iris',
+  'browColor',
+  'eyeOffset',
+  'style',
+  'seed',
+  'body',
+  'expression',
+  'outfit',
+  'dye',
+  'skin',
+  'skinTone',
+  'hairStyle',
+]);
+
 function toV2Patch(patch: EditPatch): Record<string, unknown> {
-  const next: Record<string, unknown> = { ...patch };
-  if (typeof patch.skin === 'string' && /^\d+$/.test(patch.skin)) {
-    next.tone = Number(patch.skin);
-    delete next.skin;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined || !V2_EDIT_KEYS.has(key)) continue;
+    next[key] = value;
   }
-  if (typeof patch.hairStyle === 'string') {
-    next.hair = patch.hairStyle;
-    delete next.hairStyle;
+  // `skin` / `skinTone` stay under those names. CF aliases them to `tone`.
+  if (typeof next.skin === 'string' && /^\d+$/.test(next.skin)) next.skin = Number(next.skin);
+  if (typeof next.skinTone === 'string' && /^\d+$/.test(next.skinTone)) {
+    next.skinTone = Number(next.skinTone);
   }
   if (isRecord(patch.outfit)) {
     const outfit: Record<string, unknown> = {};
