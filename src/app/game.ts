@@ -39,6 +39,7 @@ import { loadTownFixture, townFixtureId } from '../render/area/area-from-export'
 import { AreaRenderer } from '../render/area/area-renderer';
 import { FrameHold } from '../render/area/frame-hold';
 import { clearAreaLeaveOverlay } from '../render/area/leave-overlay';
+import { PlanetGlobe } from '../render/globe/planet-globe';
 import { MapRenderer, type MapDrawState } from '../render/map/map-renderer';
 import type { SettingsStore } from '../platform/settings';
 import {
@@ -146,6 +147,7 @@ export class Game implements GameHost {
   private readonly options: GameOptions;
   private readonly clockLoop: FrameClock;
   private readonly mapRenderer: MapRenderer;
+  readonly globe: PlanetGlobe;
   private readonly slot: string;
   private mapScene: MapView | null = null;
   private areaScene: AreaView | null = null;
@@ -173,6 +175,7 @@ export class Game implements GameHost {
     this.clockLoop = new FrameClock(options.clock);
     this.world = createWorld({ id: 'waystead', name: 'Waystead', x: 8, y: 8 });
     this.mapRenderer = new MapRenderer(options.mapCanvas);
+    this.globe = new PlanetGlobe(options.root, options.mapCanvas);
     this.frameHold = new FrameHold(options.areaCanvas);
     settings.value = normalizeSettings(options.settings.load());
     this.minigames = new MinigameHost({
@@ -914,6 +917,10 @@ export class Game implements GameHost {
               generating.value = false;
               // The save above still describes the placeholder world. Store this one.
               await this.persist();
+            } else if (current.planet !== wanted.planet) {
+              // The planet only frames the globe around the home world; no rebuild.
+              current.planet = wanted.planet;
+              await this.persist();
             }
             await this.enterMap();
             return;
@@ -1004,6 +1011,7 @@ export class Game implements GameHost {
 
   private applyCanvasVisibility(): void {
     this.options.mapCanvas.style.visibility = this.creatorOpen ? 'hidden' : 'visible';
+    if (this.creatorOpen) this.globe.hide();
     this.options.areaCanvas.style.visibility =
       !this.creatorOpen && this.view === 'area' ? 'visible' : 'hidden';
   }

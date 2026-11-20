@@ -1,4 +1,5 @@
 import type { AvatarGender } from '../core/people/avatar';
+import { isPlanetPreset, PLANET_PRESETS, PLANET_PRESET_SPECS } from '../core/planet/presets';
 import {
   EXPERIMENTAL_WORLD_SCALES,
   LAND_CHOICES,
@@ -153,6 +154,24 @@ function WorldControls() {
           {WORLD_SCALES.map((scale) => (
             <option key={scale} value={String(scale)}>
               {worldScaleLabel(scale)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label class="field">
+        <span>Planet</span>
+        <select
+          aria-label="Planet"
+          value={gen.planet}
+          onChange={(event) => {
+            const target = event.currentTarget;
+            if (!(target instanceof HTMLSelectElement)) return;
+            if (isPlanetPreset(target.value)) setNewWorldGen({ planet: target.value });
+          }}
+        >
+          {PLANET_PRESETS.map((preset) => (
+            <option key={preset} value={preset}>
+              {PLANET_PRESET_SPECS[preset].label}
             </option>
           ))}
         </select>

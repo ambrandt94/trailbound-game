@@ -41,6 +41,20 @@ import {
   travelHud,
 } from '../../ui/state';
 import type { GameHost } from '../host';
+import {
+  PLANET_PRESET_SPECS,
+  chunkToSphere,
+  globeDiameterPx,
+  globeLook,
+  globeTurnWeight,
+  homeChunk,
+  homePatchRgba,
+} from '../../core/planet';
+
+/** Home world texture on the globe, texels per side. */
+const HOME_PATCH_TEXELS = 256;
+/** Wait this long after the map first draws before baking the globe in the background. */
+const GLOBE_PREFETCH_SEC = 1.2;
 import type { Scene } from '../scene-stack';
 
 const MAP_CONTROLS =
@@ -63,6 +77,11 @@ export class MapView implements Scene {
   private walking = false;
   private bare = false;
   private barePainted = false;
+  /** Seconds the map has been up with a world, for the globe prefetch. */
+  private mapAge = 0;
+  /** Player's turn of the globe, radians (latitude, longitude). */
+  private globeTurn = { lat: 0, lon: 0 };
+  private globeRadiusPx = 1;
 
   constructor(private readonly host: GameHost) {}
 
@@ -72,6 +91,13 @@ export class MapView implements Scene {
     this.host.setView('map');
     this.detachInput = attachMapInput(this.host.mapCanvas, {
       pan: (dx, dy) => {
+        if (this.camera.inGlobe()) {
+          // Look-only globe: dragging turns the planet.
+          const r = Math.max(1, this.globeRadiusPx);
+          this.globeTurn.lon -= dx / r;
+          this.globeTurn.lat = Math.max(-1.4, Math.min(1.4, this.globeTurn.lat + dy / r));
+          return;
+        }
         this.camera.panPixels(dx, dy);
       },
       zoom: (sx, sy, factor) => {
@@ -79,6 +105,7 @@ export class MapView implements Scene {
       },
     });
     this.detachClicks = attachRouteClicks(this.host.mapCanvas, (sx, sy, append) => {
+      if (this.camera.inGlobe()) return;
       const canvas = this.host.mapCanvas;
       const at = this.camera.screenToWorld(sx, sy, canvas.clientWidth, canvas.clientHeight);
       const step = this.camera.step;
@@ -95,8 +122,11 @@ export class MapView implements Scene {
     }
     const sprint =
       this.host.keyboard.isDown('ShiftLeft') || this.host.keyboard.isDown('ShiftRight');
-    const move = this.host.keyboard.mapAxis();
-    const motionScale = this.camera.scale / this.camera.step;
+    this.prepareGlobe(dt);
+    const inGlobe = this.camera.inGlobe();
+    // The globe is look-only: no walking under it.
+    const move = inGlobe ? { x: 0, y: 0 } : this.host.keyboard.mapAxis();
+    const motionScale = this.camera.mapScale() / this.camera.step;
     // Map-only pace settings. 3D areas never read these.
     const mapSpeed = settings.value.mapSpeed;
     const onlyWhenMoving = settings.value.timeOnlyWhenMoving;
@@ -150,7 +180,7 @@ export class MapView implements Scene {
     }
     this.entryCooldown = stepEntryCooldown(this.entryCooldown, dt);
     this.camera.update(dt, world.hero.x, world.hero.y);
-    if (this.entryCooldown > 0) {
+    if (this.entryCooldown > 0 || inGlobe) {
       this.host.keyboard.consumePress('Enter');
     } else if (this.host.keyboard.consumePress('Enter')) {
       this.host.enterArea();
@@ -186,6 +216,7 @@ export class MapView implements Scene {
     const world = this.host.world;
     const data = world.data;
     if (this.host.view !== 'map' || !data) {
+      this.host.globe.hide();
       nearTown.value = false;
       canEnter.value = false;
       placeName.value = '';
@@ -200,21 +231,22 @@ export class MapView implements Scene {
       const stand = describeMapStand(data, world.hero.x, world.hero.y);
       nearTown.value = stand.kind !== 'wilderness' && stand.kind !== 'water' && !!stand.tier;
       // The Enter button is live only when Enter would act (not in the cooldown).
-      canEnter.value = stand.canEnter && this.allowEnter();
+      canEnter.value = stand.canEnter && this.allowEnter() && !this.camera.inGlobe();
       placeName.value = stand.name;
       placeTier.value = stand.tier;
       placeKind.value = stand.kind;
       standLine.value = stand.standLine;
       nearestLine.value = stand.nearestLine;
       clockRate.value = formatMapClockRate(
-        this.camera.scale / this.camera.step,
+        this.camera.mapScale() / this.camera.step,
         onFootPaceMps(settings.value.onFootSpeed, false),
       );
       mapNight.value = dayLightAt(world.clockHours).mapNight;
       hint.value = MAP_CONTROLS;
       prompt.value = stand.blockedReason ? 'Open water. Walk ashore to enter.' : '';
     }
-    this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(3);
+    this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(4);
+    if (this.host.view === 'map' && data && this.showGlobe()) return;
     // Under the 3D view the dive holds the map still: keep its last bare frame.
     if (this.bare && this.host.view !== 'map' && this.barePainted) return;
     this.barePainted = this.bare;
@@ -235,6 +267,75 @@ export class MapView implements Scene {
       zones: this.zonesDraw(),
       bare: this.bare,
     });
+  }
+
+  /**
+   * Bake the planet globe in the background once the map has settled. Until it
+   * is ready the camera stops at the flat map's furthest zoom, as before.
+   */
+  private prepareGlobe(dt: number): void {
+    const world = this.host.world;
+    const data = world.data;
+    if (!data || this.host.view !== 'map') {
+      this.camera.setGlobeZoom(false);
+      return;
+    }
+    this.mapAge += dt;
+    const globe = this.host.globe;
+    const preset = data.settings.planet;
+    const spec = PLANET_PRESET_SPECS[preset];
+    const key = `${world.seed}:${preset}:${data.width}`;
+    if (this.mapAge >= GLOBE_PREFETCH_SEC) {
+      if (globe.requestedFor() !== key) {
+        globe.prepare({
+          key,
+          seed: world.seed,
+          n: spec.n,
+          faceTexels: spec.faceTexels,
+          home: homeChunk(spec.n),
+          homePatch: { size: HOME_PATCH_TEXELS, rgba: homePatchRgba(data, HOME_PATCH_TEXELS) },
+        });
+      }
+    }
+    this.camera.setGlobeZoom(globe.ready);
+  }
+
+  /** Draw the globe instead of the map while zoomed out past it. True when the globe is up. */
+  private showGlobe(): boolean {
+    const globe = this.host.globe;
+    const data = this.host.world.data;
+    if (!data || !globe.ready || !this.camera.inGlobe()) {
+      globe.hide();
+      if (!this.camera.inGlobe() && (this.globeTurn.lat !== 0 || this.globeTurn.lon !== 0)) {
+        this.globeTurn = { lat: 0, lon: 0 };
+      }
+      return false;
+    }
+    const canvas = this.host.mapCanvas;
+    const viewW = canvas.clientWidth;
+    const viewH = canvas.clientHeight;
+    const spec = PLANET_PRESET_SPECS[data.settings.planet];
+    const home = homeChunk(spec.n);
+    const hero = this.host.world.hero;
+    const clamp01 = (v: number) => Math.min(0.9999, Math.max(0, v));
+    const pin = chunkToSphere(
+      spec.n,
+      home,
+      clamp01(hero.x / data.width),
+      clamp01(hero.y / data.height),
+    );
+    const scale = this.camera.scale;
+    const diameterPx = globeDiameterPx(scale, this.camera.cellsWide(), spec.n, viewW, viewH);
+    this.globeRadiusPx = diameterPx / 2;
+    const weight = globeTurnWeight(scale, this.camera.globeSwitchScale());
+    globe.show({
+      viewW,
+      viewH,
+      diameterPx,
+      look: globeLook(pin, this.globeTurn.lat, this.globeTurn.lon, weight),
+      pin,
+    });
+    return true;
   }
 
   /** Terrain-only frames while the dive magnifies the map. */
@@ -337,6 +438,7 @@ export class MapView implements Scene {
   }
 
   exit(): void {
+    this.host.globe.hide();
     this.detachInput?.();
     this.detachInput = null;
     this.detachClicks?.();

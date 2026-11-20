@@ -4,6 +4,7 @@ import {
   WORLD_BASE,
   clamp,
   clampLatY,
+  globeMinScaleFor,
   lerpWrapX,
   minScaleFor,
   startScaleFor,
@@ -43,6 +44,8 @@ export class MapCamera {
   step = 1;
   private width = 192;
   private height = 192;
+  /** When the planet globe is ready, zoom may continue out past the flat map. */
+  private globeZoom = false;
   private zoomPivot: {
     wx: number;
     wy: number;
@@ -66,8 +69,43 @@ export class MapCamera {
     this.follow = true;
   }
 
+  /** Let zoom continue past the flat map into the globe band, or pull back to the map. */
+  setGlobeZoom(on: boolean): void {
+    if (this.globeZoom === on) return;
+    this.globeZoom = on;
+    if (!on) {
+      this.targetScale = Math.max(this.targetScale, minScaleFor(this.width));
+      this.scale = Math.max(this.scale, minScaleFor(this.width));
+    }
+  }
+
+  /** Smallest scale the camera allows right now. */
+  minScale(): number {
+    return this.globeZoom ? globeMinScaleFor(this.width) : minScaleFor(this.width);
+  }
+
+  /** Scale where the flat map hands over to the globe (`globeActive` below it). */
+  globeSwitchScale(): number {
+    return minScaleFor(this.width);
+  }
+
+  /** True while zoomed out past the flat map. */
+  inGlobe(): boolean {
+    return this.scale < minScaleFor(this.width) * (1 - 1e-6);
+  }
+
+  /** Scale for map pace and clock: the globe band reads as the furthest flat zoom. */
+  mapScale(): number {
+    return Math.max(this.scale, minScaleFor(this.width));
+  }
+
+  /** Map width in map cells (192 on today's worlds). */
+  cellsWide(): number {
+    return this.width;
+  }
+
   zoomAt(sx: number, sy: number, factor: number, viewW: number, viewH: number): void {
-    const next = clamp(this.targetScale * factor, minScaleFor(this.width), MAP_ZOOM_CAP);
+    const next = clamp(this.targetScale * factor, this.minScale(), MAP_ZOOM_CAP);
     const before = this.follow ? null : this.screenToWorld(sx, sy, viewW, viewH);
     this.targetScale = next;
     this.scale += (next - this.scale) * ZOOM_CATCH;
@@ -92,7 +130,7 @@ export class MapCamera {
 
   /** Ease toward a scale. The current scale catches up in `update`. */
   easeScale(scale: number): void {
-    this.targetScale = clamp(scale, minScaleFor(this.width), MAP_ZOOM_CAP);
+    this.targetScale = clamp(scale, this.minScale(), MAP_ZOOM_CAP);
   }
 
   lookAt(x: number, y: number, scale?: number): void {
@@ -103,7 +141,7 @@ export class MapCamera {
     this.x = this.targetX;
     this.y = this.targetY;
     if (scale) {
-      this.targetScale = clamp(scale, minScaleFor(this.width), MAP_ZOOM_CAP);
+      this.targetScale = clamp(scale, this.minScale(), MAP_ZOOM_CAP);
       this.scale = this.targetScale;
     }
   }
