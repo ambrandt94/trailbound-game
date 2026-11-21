@@ -28,6 +28,7 @@ import {
   type EditSnapshot,
 } from '../../render/characters/index';
 import { AvatarPreview } from '../../render/characters/preview';
+import { eyeColorPatch, paintCreatorSwatch } from '../creator-swatches';
 import {
   bindCreator,
   creatorBusy,
@@ -212,7 +213,7 @@ export class CharacterCreatorScene implements Scene {
       redo: () => this.step(1),
       setSkin: (id) => this.apply({ skin: id }, true),
       setHairColor: (id) => this.apply({ hairColor: id }, true),
-      setEye: (id) => this.apply({ eyeColor: id }, true),
+      setEye: (id) => this.apply(eyeColorPatch(id), true),
       setSclera: (id) => this.apply({ sclera: id }, true),
       setHairStyle: (id) => this.apply({ hairStyle: id }, true),
       setFacialHair: (id) => this.apply({ facialHair: id || null }, true),
@@ -714,8 +715,9 @@ function swatchLabel(item: { id: string; rgb: number[]; name?: string }): {
   rgb: number[];
   label: string;
 } {
-  const label = item.name ? `${item.name}` : pretty(item.id);
-  return { id: item.id, rgb: item.rgb, label };
+  const painted = paintCreatorSwatch(item);
+  const label = painted.name ? `${painted.name}` : pretty(painted.id);
+  return { id: painted.id, rgb: painted.rgb, label };
 }
 
 function lengthSliders(options: EditOptions | null, snap: EditSnapshot | null): SliderView[] {
