@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'preact/hooks';
-import { caravanStatus, haltLabel, mapWaitsForHero } from '../core/sim/map-pace';
+import {
+  caravanStatus,
+  haltLabel,
+  mapWaitsForHero,
+  showTimeOnlyToggle,
+  timeOnlyWhenMovingLabel,
+  timeOnlyWhenMovingTitle,
+} from '../core/sim/map-pace';
 import type { HudPrefs } from '../core/state/settings';
 import { CreatorScreen } from './creator';
 import { skinText } from './glyphs';
@@ -124,18 +131,21 @@ function ToolButton(props: {
   label: string;
   title: string;
   pressed?: boolean;
+  /** Short visible caption next to the icon (the time-waits toggle). */
+  caption?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      class="tool-btn"
+      class={props.caption ? 'tool-btn tool-btn-labeled' : 'tool-btn'}
       aria-label={props.label}
       title={props.title}
       aria-pressed={props.pressed === undefined ? undefined : props.pressed}
       onClick={props.onClick}
     >
       <HudIcon name={props.icon} />
+      {props.caption ? <span class="tool-caption">{skinText(props.caption)}</span> : null}
     </button>
   );
 }
@@ -151,6 +161,20 @@ function Toolbar() {
           label={haltLabel(t.halted)}
           title={t.halted ? 'Roll out the caravan (H)' : 'Halt the caravan (H)'}
           onClick={() => commands.toggleHalt()}
+        />
+      ) : null}
+      {showTimeOnlyToggle(t?.view) ? (
+        <ToolButton
+          icon="clock"
+          label={timeOnlyWhenMovingLabel(settings.value.timeOnlyWhenMoving)}
+          title={timeOnlyWhenMovingTitle(settings.value.timeOnlyWhenMoving)}
+          caption={timeOnlyWhenMovingLabel(settings.value.timeOnlyWhenMoving)}
+          pressed={settings.value.timeOnlyWhenMoving}
+          onClick={() =>
+            commands.changeSettings({
+              timeOnlyWhenMoving: !settings.value.timeOnlyWhenMoving,
+            })
+          }
         />
       ) : null}
       <ToolButton
@@ -272,7 +296,23 @@ function StatusChip() {
           </>
         ) : null}
         {t && mapWaitsForHero(t) ? (
-          <span class="chip-sub" title="Time moves only when you walk (Settings)">
+          <span
+            class="chip-sub chip-action"
+            role="button"
+            tabIndex={0}
+            title="Time waits until you walk. Click or press T to let a rolling caravan run the clock."
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              commands.changeSettings({ timeOnlyWhenMoving: false });
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              event.stopPropagation();
+              commands.changeSettings({ timeOnlyWhenMoving: false });
+            }}
+          >
             {skinText('Time waits for you')}
           </span>
         ) : null}
@@ -319,7 +359,20 @@ function CaravanCard() {
       <p class="travel-line">{skinText(`${caravanStatus(t)} · Pace x${t.speed.toFixed(2)}`)}</p>
       {mapWaitsForHero(t) ? (
         <p class="travel-line travel-wait">
-          {skinText('Time waits until you walk (Settings: time moves only when I move)')}
+          <span
+            class="chip-action"
+            role="button"
+            tabIndex={0}
+            title="Click or press T to let a rolling caravan run the clock."
+            onClick={() => commands.changeSettings({ timeOnlyWhenMoving: false })}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              commands.changeSettings({ timeOnlyWhenMoving: false });
+            }}
+          >
+            {skinText('Time waits until you walk (toolbar or T to let it run)')}
+          </span>
         </p>
       ) : null}
       <p class="travel-line" title="Distance today against the day goal">
@@ -588,7 +641,8 @@ function isTyping(target: EventTarget | null): boolean {
 
 /**
  * HUD shortcuts while playing: U hides or shows every HUD element, I the caravan
- * card, O settings, K the controls. H is the caravan's Halt / Roll out, on the map and in 3D.
+ * card, O settings, K the controls, T the overworld "time waits / time runs"
+ * toggle. H is the caravan's Halt / Roll out, on the map and in 3D.
  */
 function useHudKeys(): void {
   useEffect(() => {
@@ -611,6 +665,13 @@ function useHudKeys(): void {
         case 'KeyK':
           hudHidden.value = false;
           setHudPref('help', !settings.value.hud.help);
+          break;
+        case 'KeyT':
+          // Map only: 3D ignores the setting, so the shortcut stays off there too.
+          if (travelHud.value?.view === 'area') return;
+          commands.changeSettings({
+            timeOnlyWhenMoving: !settings.value.timeOnlyWhenMoving,
+          });
           break;
         default:
       }

@@ -13,6 +13,9 @@ import {
   formatMapSpeed,
   mapTimeRuns,
   normalizeMapSpeed,
+  showTimeOnlyToggle,
+  timeOnlyWhenMovingLabel,
+  timeOnlyWhenMovingTitle,
 } from '../../src/core/sim/map-pace';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../../src/core/state/settings';
 import { WorldState } from '../../src/core/state/world-state';
@@ -189,4 +192,31 @@ test('the sim budget grows with the speed step so a fast frame is not cut short'
   const free = wide.advanceTravel(metres, paceMps(false), 8);
   expect(free).toBeGreaterThan(clipped);
   expect(free / clipped).toBeCloseTo(8, 6);
+});
+
+test('the time-waits toggle labels, visibility, and off-mode rule', () => {
+  expect(timeOnlyWhenMovingLabel(true)).toBe('Time waits');
+  expect(timeOnlyWhenMovingLabel(false)).toBe('Time runs');
+  expect(timeOnlyWhenMovingTitle(true)).toMatch(/\(T\)/);
+  expect(timeOnlyWhenMovingTitle(false)).toMatch(/rolling/);
+  expect(timeOnlyWhenMovingTitle(false)).toMatch(/Halt/);
+  // Map-only: hidden in 3D, shown on the overworld and before a view is set.
+  expect(showTimeOnlyToggle('map')).toBe(true);
+  expect(showTimeOnlyToggle(undefined)).toBe(true);
+  expect(showTimeOnlyToggle(null)).toBe(true);
+  expect(showTimeOnlyToggle('')).toBe(true);
+  expect(showTimeOnlyToggle('area')).toBe(false);
+  // Off still depends on halt/go: a rolling caravan runs the clock, a halt does not.
+  const car = rolling();
+  expect(mapTimeRuns(car, false, false)).toBe(true);
+  expect(mapTimeRuns({ ...car, halted: true }, false, false)).toBe(false);
+  expect(mapTimeRuns({ ...car, halted: true }, true, false)).toBe(true);
+  // Settings persist the same flag the toolbar flips.
+  expect(normalizeSettings({ timeOnlyWhenMoving: false }).timeOnlyWhenMoving).toBe(false);
+  expect(normalizeSettings({ timeOnlyWhenMoving: true }).timeOnlyWhenMoving).toBe(true);
+  const flipped = normalizeSettings({
+    ...DEFAULT_SETTINGS,
+    timeOnlyWhenMoving: !DEFAULT_SETTINGS.timeOnlyWhenMoving,
+  });
+  expect(flipped.timeOnlyWhenMoving).toBe(false);
 });
