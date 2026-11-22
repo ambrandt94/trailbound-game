@@ -4,7 +4,11 @@ import { generateWorld } from '../../src/core/world/world-gen';
 import { BIOME_NAMES, authoredPair } from '../../src/render/map/terrain-pick';
 
 test('seed 7741 lists land biome pairs that have no authored edge set', () => {
-  const world = generateWorld(7741, { ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
+  const world = generateWorld(7741, {
+    ...DEFAULT_WORLD_SETTINGS,
+    worldSource: 'island',
+    worldScale: 16,
+  });
   const seen = new Set<string>();
   const width = world.width;
   for (let y = 0; y < world.height; y++) {

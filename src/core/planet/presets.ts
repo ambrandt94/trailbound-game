@@ -44,3 +44,9 @@ export type WorldSource = (typeof WORLD_SOURCES)[number];
 export function isWorldSource(value: unknown): value is WorldSource {
   return typeof value === 'string' && (WORLD_SOURCES as readonly string[]).includes(value);
 }
+
+export const WORLD_SOURCE_LABELS: Record<WorldSource, string> = {
+  trailbound: 'Trailbound (authored continents)',
+  procedural: 'Procedural planet',
+  island: 'Classic island',
+};

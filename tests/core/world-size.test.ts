@@ -69,6 +69,7 @@ test('saves carry the world settings and older saves load the default world', ()
   world.beginGeneratedWorld(3, {
     settings: clampSettings({
       ...DEFAULT_WORLD_SETTINGS,
+      worldSource: 'island',
       worldScale: 2,
       mapStyle: 'archipelago',
       poiCount: 12,
@@ -95,7 +96,10 @@ test('saves carry the world settings and older saves load the default world', ()
 
   const old = { ...roundTrip };
   delete old.worldSettings;
-  expect(savedWorldSettings(old)).toEqual(clampSettings({ ...DEFAULT_WORLD_SETTINGS }));
+  // Saves from before world sources keep the classic island.
+  expect(savedWorldSettings(old)).toEqual(
+    clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldSource: 'island', homeChunk: null }),
+  );
   const garbage = { ...roundTrip, worldSettings: { worldScale: 5 } as never };
   expect(savedWorldSettings(garbage).worldScale).toBe(16);
 });

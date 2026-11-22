@@ -44,9 +44,16 @@ export function metersToNormalized(metres: number): number {
   return NORMALIZED_SEA_LEVEL + (1 - NORMALIZED_SEA_LEVEL) * t;
 }
 
+/**
+ * Climate "latitude" of a tile row, 0 (polar) … 1 (tropical). The classic map
+ * runs pole to equator from north (y = 0) to south. Planet chunks pass their
+ * own, from the row's real latitude.
+ */
+export type LatAt = (y: number, height: number) => number;
+
 /** North is y = 0. Snowline is low in the north and high in the south. */
-export function snowlineMetres(y: number, height: number): number {
-  const lat = y / Math.max(1, height - 1);
+export function snowlineMetres(y: number, height: number, latAt?: LatAt): number {
+  const lat = latAt ? latAt(y, height) : y / Math.max(1, height - 1);
   return 1750 + lat * 1100;
 }
 
@@ -109,8 +116,12 @@ export function buildTerrain(opts: {
   height: number;
   style: MapStyle;
   landAt: (nx: number, ny: number) => number;
+  /** Planet chunks: the row's climate latitude. Omit for the classic pole-to-pole map. */
+  latAt?: LatAt;
+  /** Stamp the guaranteed main mountain range (classic maps). Default true. */
+  mainRange?: boolean;
 }): TerrainField {
-  const { seed, width, height, style, landAt } = opts;
+  const { seed, width, height, style, landAt, latAt } = opts;
   const stride = coarseStride(width);
   const cw = Math.ceil(width / stride);
   const ch = Math.ceil(height / stride);
@@ -191,7 +202,9 @@ export function buildTerrain(opts: {
     }
   }
 
-  stampMainRange(elev, land, pairOf, distB, cw, ch, cellM, seed, style);
+  if (opts.mainRange !== false) {
+    stampMainRange(elev, land, pairOf, distB, cw, ch, cellM, seed, style);
+  }
   if (style === 'lakes') carveLakes(elev, land, toSea, cw, ch, cellM, seed);
 
   thermalErode(elev, cw, ch, cellM, 4);
@@ -204,7 +217,7 @@ export function buildTerrain(opts: {
     if (elev[i]! < TRENCH_FLOOR_M) elev[i] = TRENCH_FLOOR_M;
   }
 
-  const moist = moistureField(elev, land, cw, ch, seed, height, stride);
+  const moist = moistureField(elev, land, cw, ch, seed, height, stride, latAt);
 
   const heightM = new Float32Array(width * height);
   const heights = new Float32Array(width * height);
@@ -216,8 +229,8 @@ export function buildTerrain(opts: {
     const y1 = y0 + 1 < ch ? y0 + 1 : y0;
     const row0 = y0 * cw;
     const row1 = y1 * cw;
-    const snowline = snowlineMetres(y, height);
-    const lat = y / Math.max(1, height - 1);
+    const snowline = snowlineMetres(y, height, latAt);
+    const lat = latAt ? latAt(y, height) : y / Math.max(1, height - 1);
     for (let x = 0; x < width; x++) {
       const gx = x / stride;
       const x0 = gx | 0;
@@ -254,10 +267,11 @@ export function reinforceClimate(
   heightM: Float32Array,
   w: number,
   h: number,
+  latAt?: LatAt,
 ): void {
   for (let y = 0; y < h; y++) {
-    const snowline = snowlineMetres(y, h);
-    const lat = y / Math.max(1, h - 1);
+    const snowline = snowlineMetres(y, h, latAt);
+    const lat = latAt ? latAt(y, h) : y / Math.max(1, h - 1);
     const row = y * w;
     for (let x = 0; x < w; x++) {
       const i = row + x;
@@ -527,6 +541,7 @@ function moistureField(
   seed: number,
   worldH: number,
   stride: number,
+  latAt?: LatAt,
 ): Float32Array {
   const moist = new Float32Array(cw * ch);
   const shadow = new Float32Array(cw * ch);
@@ -540,7 +555,9 @@ function moistureField(
     }
   }
   for (let y = 0; y < ch; y++) {
-    const lat = ((y + 0.5) * stride) / Math.max(1, worldH);
+    const lat = latAt
+      ? latAt((y + 0.5) * stride, worldH)
+      : ((y + 0.5) * stride) / Math.max(1, worldH);
     for (let x = 0; x < cw; x++) {
       const i = x + y * cw;
       const n = valueNoise2(x * 0.11, y * 0.11, seed + 41);
@@ -732,14 +749,14 @@ function dominant(counts: Map<number, number>): number {
   return best;
 }
 
-function coarseStride(width: number): number {
+export function coarseStride(width: number): number {
   if (width >= 4096) return 8;
   if (width >= 1024) return 4;
   if (width >= 512) return 2;
   return 1;
 }
 
-function landCut(style: MapStyle): number {
+export function landCut(style: MapStyle): number {
   switch (style) {
     case 'archipelago':
       return 0.48;

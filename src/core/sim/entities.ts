@@ -15,7 +15,8 @@ import {
   traversableAt,
   walkableAt,
   waterAt,
-  wrapDeltaX,
+  worldDeltaX,
+  worldX,
   wrapX,
 } from '../world/models';
 import { hash2, Rng } from '../world/noise';
@@ -318,7 +319,7 @@ export function stepEntities(world: WorldData, entities: MapEntity[], dt: number
   if (dt <= 0) return;
   for (const e of entities) {
     if (e.heldBy || e.token) continue;
-    const dist = Math.hypot(wrapDeltaX(e.x, e.destX, world.width), e.destY - e.y);
+    const dist = Math.hypot(worldDeltaX(world, e.x, e.destX), e.destY - e.y);
     if (!e.resident && dist < 1.15) retarget(world, e, rng);
     const step = e.speed * dt * (e.afloat ? 1.15 : 1);
     const moved = moveToward(world, e, step);
@@ -549,7 +550,7 @@ function retarget(world: WorldData, e: MapEntity, rng: Rng): void {
 
 function moveToward(world: WorldData, e: MapEntity, dist: number): number {
   if (dist <= 0) return 0;
-  const dx = wrapDeltaX(e.x, e.destX, world.width);
+  const dx = worldDeltaX(world, e.x, e.destX);
   const dy = e.destY - e.y;
   const remain = Math.hypot(dx, dy);
   if (remain < 0.02) return 0;
@@ -569,10 +570,10 @@ function moveToward(world: WorldData, e: MapEntity, dist: number): number {
   ];
   const look = Math.min(1.15, Math.max(0.45, dist));
   for (const [ox, oy] of dirs) {
-    const nx = wrapX(e.x + ox * look, world.width);
+    const nx = worldX(world, e.x + ox * look);
     const ny = clamp(e.y + oy * look, 0.6, world.height - 0.6);
     if (!traversableAt(world, nx, ny)) continue;
-    let score = -Math.hypot(wrapDeltaX(nx, e.destX, world.width), e.destY - ny);
+    let score = -Math.hypot(worldDeltaX(world, nx, e.destX), e.destY - ny);
     const ix = Math.floor(nx);
     const iy = Math.floor(ny);
     if (
@@ -599,14 +600,14 @@ function moveToward(world: WorldData, e: MapEntity, dist: number): number {
       bestY = ny;
     }
   }
-  const mx = wrapDeltaX(e.x, bestX, world.width);
+  const mx = worldDeltaX(world, e.x, bestX);
   const my = bestY - e.y;
   const md = Math.hypot(mx, my);
   if (md < 0.0001) return 0;
   const use = Math.min(dist, remain, md);
   const ux = (mx / md) * use;
   const uy = (my / md) * use;
-  const nx = wrapX(e.x + ux, world.width);
+  const nx = worldX(world, e.x + ux);
   const ny = clamp(e.y + uy, 0.6, world.height - 0.6);
   if (!traversableAt(world, nx, ny)) return 0;
   e.facing = facingFromDelta(ux, uy);
