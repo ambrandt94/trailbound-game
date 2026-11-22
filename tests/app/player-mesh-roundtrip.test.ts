@@ -38,6 +38,9 @@ test('the player mesh survives map round trips and Slime Arena', async (ctx) => 
     await page.goto(BASE);
     await waitMode(page, 'title');
     await page.getByRole('button', { name: 'New', exact: true }).click();
+    // The World step comes first; its defaults are the Trailbound world and the auto start.
+    await waitMode(page, 'worldgen');
+    await page.getByRole('button', { name: 'Quick start', exact: true }).click();
     await waitMode(page, 'creator', 'forge');
     await page.getByRole('button', { name: 'Take the road', exact: true }).click();
     await waitMode(page, 'map');

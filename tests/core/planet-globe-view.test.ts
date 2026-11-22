@@ -83,5 +83,5 @@ test('saves: the planet preset round-trips and older saves read the default plan
   const tiny = clampSettings({ ...DEFAULT_WORLD_SETTINGS, planet: 'tiny' });
   const back = savedWorldSettings(JSON.parse(JSON.stringify({ ...base, worldSettings: tiny })));
   expect(back.planet).toBe('tiny');
-  expect(clampSettings({ planet: 'huge' as never }).planet).toBe('standard');
+  expect(clampSettings({ planet: 'galactic' as never }).planet).toBe('standard');
 });

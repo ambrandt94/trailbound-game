@@ -17,7 +17,7 @@ export interface AreaLanding {
   aboard: boolean;
 }
 
-export type AppMode = 'boot' | 'title' | 'map' | 'transition' | 'area' | 'creator';
+export type AppMode = 'boot' | 'title' | 'map' | 'transition' | 'area' | 'creator' | 'worldgen';
 
 export interface GameHost {
   readonly stack: SceneStack;

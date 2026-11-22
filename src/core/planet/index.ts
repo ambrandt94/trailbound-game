@@ -9,3 +9,5 @@ export * from './mask';
 export * from './trailbound-layer';
 export * from './start-pick';
 export * from './make-field';
+export * from './world-bake';
+export * from './chunk-raster';

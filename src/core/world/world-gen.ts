@@ -30,6 +30,7 @@ import {
   planetFrame,
   planetLandSampler,
   planetLatAt,
+  CHUNK_MOIST_GAIN,
   type PlanetFrame,
 } from './planet-chunk';
 
@@ -225,6 +226,8 @@ export function sameWorldSettings(have: WorldSettings, want: WorldSettings, seed
   } else {
     // A planet world is its planet and home chunk; an open home matches the auto pick.
     if (have.planet !== want.planet) return false;
+    if (have.seaLevel !== want.seaLevel) return false;
+    if (have.tempBias !== want.tempBias || have.moistBias !== want.moistBias) return false;
     if (want.homeChunk && !(have.homeChunk && sameChunk(have.homeChunk, want.homeChunk))) {
       return false;
     }
@@ -535,10 +538,11 @@ export function generatePlanetChunk(
     height: h,
     style: 'continent',
     landAt: planetLandSampler(frame.field, target, coarse),
-    latAt: planetLatAt(frame.n, target),
+    latAt: planetLatAt(frame.n, target, settings.tempBias),
     mainRange: false,
+    moistBias: settings.moistBias * CHUNK_MOIST_GAIN,
   });
-  const latAt = planetLatAt(frame.n, target);
+  const latAt = planetLatAt(frame.n, target, settings.tempBias);
   smooth(terrain.biomes, w, h);
   smooth(terrain.biomes, w, h);
   reinforceClimate(terrain.biomes, terrain.heightM, w, h, latAt);
@@ -555,6 +559,23 @@ export function generatePlanetChunk(
   world.seed = seed;
   world.wraps = false;
   return world;
+}
+
+/**
+ * Any chunk of a world's planet, as World Gen's inspector shows it. The home
+ * chunk is exactly the playable map (`generateWorld`); other chunks use their
+ * own terrain seed. Nothing here is saved or used by game logic.
+ */
+export function generateChunkAt(
+  seed: number,
+  settings: WorldSettings,
+  addr: ChunkAddr,
+  frame: PlanetFrame = planetFrame(seed, settings),
+): WorldData {
+  if (settings.worldSource === 'island' && sameChunk(addr, frame.home)) {
+    return generateWorld(seed, settings);
+  }
+  return generatePlanetChunk(seed, settings, addr, frame);
 }
 
 /**

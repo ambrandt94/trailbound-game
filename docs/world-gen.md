@@ -100,3 +100,51 @@ On the world map's globe, a planet world bakes its own source and stamps the hom
 ### Sea level
 
 The default stays at `TRAILBOUND_SEA_LEVEL = 0`: 34.2% of the flat map is land, matching the reference. That is ~39.6% by sphere area. Forcing 34% _by area_ would mean raising the sea about 0.06, which drowns most of the small islands and thins the straits in Alex's shape. So the "about 34%" target is met on the map as drawn. The sea-level slider (WG3) moves it either way.
+
+## WG3: the World Gen screen
+
+**Flow:** Title → New → **World Gen** → Character → Take the road.
+
+- **Quick start** skips to Character with the defaults: Trailbound, seed 7741, auto start.
+- **Back** in Character returns to World Gen.
+
+**Existing worlds:** World Gen also opens for a world in play, from the map's **More → World Gen** or the pause menu's **World Gen** button.
+
+- Settings are read-only there; any chunk can still be looked at.
+- Game logic is paused while it's open: only the top scene updates, and the map and area don't draw underneath.
+
+### Panel
+
+| Group             | Controls                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| World             | Source (Trailbound / Procedural / Classic island); seed with **Re-roll**; Land shape (island only)                                                                        |
+| Chunks            | Chunks per face (new presets: 4, 10, 20, 30, 40); chunk resolution (1×–32×), with a readout of chunk count, km around the equator and km per chunk                        |
+| Shape and climate | Planet sources only: sea level (readout: land % by area from the bake), temperature, moisture. Stored as `seaLevel`, `tempBias` and `moistBias` (−1..1); old saves read 0 |
+| Layers            | Biomes, heightmap (hypsometric), land mask, chunk grid (gold cube-face borders), ice, start chunk                                                                         |
+| Start             | **Auto** (best candidate), **Reroll start** (next of up to 12 good starts, each ≥2 chunks from the others), **Pick on map** (click a land chunk)                          |
+| Chunk inspector   | Address, lat/long, land %, elevation range, main biomes and start score for the clicked chunk, with its map generation progress                                           |
+
+**Start details:**
+
+- A hand pick under 20% land is refused.
+- If the sea later rises over the chosen start, the panel says the auto pick will be used. This matches `planetFrame`'s fallback.
+
+### Views
+
+- **Globe and flat world map** share one lat/long mesh (`src/render/worldgen/view.ts`).
+  - A shader blends sphere and equirect positions with `uMorph`; WG3 switches it 0 ↔ 1, and WG4 animates it.
+  - The texture is an equirect bake (`core/planet/world-bake.ts`).
+  - Chunk grid, face borders, start, hover and selection are computed per pixel from the direction, so they need no extra bake.
+- **Bakes run in a worker:**
+  - a 512×256 preview (≈0.9 s to first picture), then a 1536×768 full bake with start ranking (≈4 s);
+  - slider moves are debounced 140 ms;
+  - a new request terminates the running bake.
+- **Chunk view:** click any chunk on the globe or flat map, and its full local map is generated on demand in a second worker.
+  - The map uses the same generator and resolution as the playable map (16× ≈ 2.7 s), then shrinks to a 1536² raster with roads and towns.
+  - The inspector shows a progress bar with **Cancel**.
+  - Clicking another chunk replaces the job; the worker is terminated, so nothing queues.
+  - When the map is ready the view zooms into it, with pan and wheel-zoom.
+  - The home chunk of an island world shows the playable island exactly (`generateChunkAt`). Other chunks show what the planet would grow there, each with its own terrain seed.
+- **Memory:** inspected chunks are held in an in-memory LRU of 4 (`ChunkCache`), only while the screen is open.
+  - They're dropped on exit and are never saved.
+  - The game still plays only the home chunk.

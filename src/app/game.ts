@@ -48,6 +48,10 @@ import {
   creatorSource,
   creatorView,
   newWorldSettings,
+  newWorldGen,
+  newWorldLand,
+  newWorldSeed,
+  defaultNewWorldGen,
 } from '../ui/creator-state';
 import {
   bindCommands,
@@ -111,6 +115,7 @@ import { MinigameScene } from './scenes/minigame-scene';
 import { BootScene } from './scenes/boot';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
+import { WorldGenScene } from './scenes/world-gen';
 import { TransitionScene } from './scenes/transition';
 import { DIVE_BARE_MAGNIFY, DIVE_MAP_MAGNIFY, DIVE_MAX_MAGNIFY, DiveScene } from './scenes/dive';
 import { DIVE_CAM_DIST_M, areaPxPerMetre } from '../render/area/dive-camera';
@@ -152,6 +157,7 @@ export class Game implements GameHost {
   private mapScene: MapView | null = null;
   private areaScene: AreaView | null = null;
   private mode: AppMode = 'boot';
+  private worldGenOpen = false;
   private fadeOpacity = 0;
   private readonly frameHold: FrameHold;
   private running = false;
@@ -265,6 +271,7 @@ export class Game implements GameHost {
     if (mode === 'boot') screen.value = 'boot';
     else if (mode === 'title') screen.value = 'title';
     else if (mode === 'creator') screen.value = 'creator';
+    else if (mode === 'worldgen') screen.value = 'worldgen';
     else screen.value = 'play';
   }
 
@@ -748,7 +755,10 @@ export class Game implements GameHost {
   private bindUi(): void {
     bindCommands({
       newGame: () => {
-        void this.newGame();
+        void this.openNewWorldGen();
+      },
+      openWorldGen: () => {
+        void this.openWorldGenFor();
       },
       continueGame: () => {
         void this.continueGame();
@@ -839,13 +849,69 @@ export class Game implements GameHost {
       x: this.place.map.x,
       y: this.place.map.y,
     });
-    this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, {
+    this.world.beginGeneratedWorld(newWorldSeed.value, {
       settings: newWorldSettings(),
     });
     await this.mapRenderer.load(this.options.baseUrl ?? './');
     await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
     generating.value = false;
     await this.openCreator('new');
+  }
+
+  /** Title → New: the World step, before the character. */
+  private async openNewWorldGen(): Promise<void> {
+    if (this.stack.current()?.id === 'WorldGen') return;
+    settingsOpen.value = false;
+    savedFlash.value = '';
+    this.setMode('worldgen');
+    await this.stack.push(
+      new WorldGenScene({
+        existing: null,
+        onConfirm: async () => {
+          await this.stack.pop();
+          await this.newGame();
+        },
+        onQuickStart: async () => {
+          newWorldGen.value = defaultNewWorldGen();
+          newWorldLand.value = 'random';
+          newWorldSeed.value = DEFAULT_WORLD_SEED;
+          await this.stack.pop();
+          await this.newGame();
+        },
+        onClose: async () => {
+          await this.stack.pop();
+          this.setMode('title');
+        },
+      }),
+    );
+  }
+
+  /**
+   * World Gen for the world in play, read-only. Game logic is paused while it
+   * is open (only the top scene updates) and its chunk maps are dropped on close.
+   */
+  private async openWorldGenFor(): Promise<void> {
+    const data = this.world.data;
+    if (!data || this.stack.current()?.id === 'WorldGen') return;
+    if (this.mode !== 'map' && this.mode !== 'area') return;
+    const returnMode = this.mode;
+    const returnView = this.view;
+    settingsOpen.value = false;
+    this.worldGenOpen = true;
+    this.setMode('worldgen');
+    await this.stack.push(
+      new WorldGenScene({
+        existing: { seed: this.world.seed, settings: { ...data.settings } },
+        onConfirm: () => undefined,
+        onQuickStart: () => undefined,
+        onClose: async () => {
+          await this.stack.pop();
+          this.worldGenOpen = false;
+          this.setMode(returnMode);
+          this.setView(returnView);
+        },
+      }),
+    );
   }
 
   private async continueGame(): Promise<void> {
@@ -906,13 +972,14 @@ export class Game implements GameHost {
           await this.stack.pop();
           if (intent === 'new') {
             const wanted = newWorldSettings();
+            const seed = newWorldSeed.value;
             const current = this.world.data?.settings;
-            if (!current || !sameWorldSettings(current, wanted, DEFAULT_WORLD_SEED)) {
+            if (!current || this.world.seed !== seed || !sameWorldSettings(current, wanted, seed)) {
               generating.value = true;
               await new Promise((resolve) => {
                 setTimeout(resolve, 40);
               });
-              this.world.beginGeneratedWorld(DEFAULT_WORLD_SEED, { settings: wanted });
+              this.world.beginGeneratedWorld(seed, { settings: wanted });
               await this.mapRenderer.setSkin(settings.value.mapSkin, this.world.data);
               generating.value = false;
               // The save above still describes the placeholder world. Store this one.
@@ -934,6 +1001,8 @@ export class Game implements GameHost {
           this.setMode(intent === 'new' ? 'title' : returnMode);
           this.setView(returnView);
           this.setCreatorVisible(false);
+          // A new traveller's Back returns to the World step.
+          if (intent === 'new') await this.openNewWorldGen();
         },
       }),
     );
@@ -1023,8 +1092,9 @@ export class Game implements GameHost {
 
   private renderFrame(alpha: number): void {
     const top = this.stack.current();
-    if (this.mapScene) this.mapScene.render(alpha);
-    if (this.view === 'area') this.areaScene?.render(alpha);
+    // World Gen covers the screen; the paused map and area need no frames under it.
+    if (this.mapScene && !this.worldGenOpen) this.mapScene.render(alpha);
+    if (this.view === 'area' && !this.worldGenOpen) this.areaScene?.render(alpha);
     if (top && top !== this.mapScene && top !== this.areaScene) top.render(alpha);
     this.musicConductor.tick();
     this.publish();

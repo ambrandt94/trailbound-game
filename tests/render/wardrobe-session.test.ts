@@ -18,6 +18,7 @@ import {
 } from '../../src/ui/creator-state';
 import { skinText } from '../../src/ui/glyphs';
 import { commands, screen } from '../../src/ui/state';
+import { wgCommands } from '../../src/ui/worldgen-state';
 import { WardrobeScreen } from '../../src/ui/wardrobe';
 import { Game } from '../../src/app/game';
 import type { SaveBackend } from '../../src/core/save/types';
@@ -110,6 +111,9 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
   try {
     await game.start();
     commands.newGame();
+    // The World step comes first; go on to the character with its defaults.
+    await waitFor(() => screen.value === 'worldgen');
+    wgCommands.confirm();
     await waitFor(
       () => screen.value === 'creator' && /^[0-9a-f]{16}$/.test(creatorView.value.hash),
     );
@@ -228,6 +232,9 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     expect(creatorView.value.worn.torso_mid).toBe('tunic');
 
     creatorCommands.cancel();
+    // Back from a new traveller returns to the World step; its Back goes to the title.
+    await waitFor(() => screen.value === 'worldgen');
+    wgCommands.close();
     await waitFor(() => screen.value === 'title');
     expect(saves.writes).toBe(0);
     expect(await saves.api.readCore('slot-1')).toBeNull();
