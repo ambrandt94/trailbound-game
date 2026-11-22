@@ -48,6 +48,7 @@ import {
   globeLook,
   globeTurnWeight,
   homeChunk,
+  type WorldSource,
   homePatchRgba,
 } from '../../core/planet';
 
@@ -284,17 +285,35 @@ export class MapView implements Scene {
     const globe = this.host.globe;
     const preset = data.settings.planet;
     const spec = PLANET_PRESET_SPECS[preset];
-    const key = `${world.seed}:${preset}:${data.width}`;
+    const preview = globePreviewSource();
+    const key = `${world.seed}:${preset}:${data.width}:${preview ?? 'island'}`;
     if (this.mapAge >= GLOBE_PREFETCH_SEC) {
       if (globe.requestedFor() !== key) {
-        globe.prepare({
-          key,
-          seed: world.seed,
-          n: spec.n,
-          faceTexels: spec.faceTexels,
-          home: homeChunk(spec.n),
-          homePatch: { size: HOME_PATCH_TEXELS, rgba: homePatchRgba(data, HOME_PATCH_TEXELS) },
-        });
+        globe.prepare(
+          preview
+            ? // Preview another world source: the planet alone, pinned at its start chunk.
+              {
+                key,
+                source: preview,
+                seed: world.seed,
+                n: spec.n,
+                faceTexels: spec.faceTexels,
+                home: null,
+                homePatch: null,
+              }
+            : {
+                key,
+                source: 'island',
+                seed: world.seed,
+                n: spec.n,
+                faceTexels: spec.faceTexels,
+                home: homeChunk(spec.n),
+                homePatch: {
+                  size: HOME_PATCH_TEXELS,
+                  rgba: homePatchRgba(data, HOME_PATCH_TEXELS),
+                },
+              },
+        );
       }
     }
     this.camera.setGlobeZoom(globe.ready);
@@ -315,15 +334,12 @@ export class MapView implements Scene {
     const viewW = canvas.clientWidth;
     const viewH = canvas.clientHeight;
     const spec = PLANET_PRESET_SPECS[data.settings.planet];
-    const home = homeChunk(spec.n);
+    const home = globe.home ?? homeChunk(spec.n);
     const hero = this.host.world.hero;
     const clamp01 = (v: number) => Math.min(0.9999, Math.max(0, v));
-    const pin = chunkToSphere(
-      spec.n,
-      home,
-      clamp01(hero.x / data.width),
-      clamp01(hero.y / data.height),
-    );
+    const pin = globePreviewSource()
+      ? chunkToSphere(spec.n, home)
+      : chunkToSphere(spec.n, home, clamp01(hero.x / data.width), clamp01(hero.y / data.height));
     const scale = this.camera.scale;
     const diameterPx = globeDiameterPx(scale, this.camera.cellsWide(), spec.n, viewW, viewH);
     this.globeRadiusPx = diameterPx / 2;
@@ -497,4 +513,14 @@ export class MapView implements Scene {
     const canvas = this.host.mapCanvas;
     this.camera.zoomAt(sx, sy, factor, canvas.clientWidth, canvas.clientHeight);
   }
+}
+
+/**
+ * Dev preview of another world source on the globe (`?world=trailbound` or
+ * `?world=procedural`). The home map itself is unchanged.
+ */
+function globePreviewSource(): Exclude<WorldSource, 'island'> | null {
+  if (typeof location === 'undefined') return null;
+  const want = new URLSearchParams(location.search).get('world');
+  return want === 'trailbound' || want === 'procedural' ? want : null;
 }

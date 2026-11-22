@@ -4,3 +4,8 @@ export * from './noise3';
 export * from './global-layer';
 export * from './atlas';
 export * from './globe-view';
+export * from './field';
+export * from './mask';
+export * from './trailbound-layer';
+export * from './start-pick';
+export * from './make-field';

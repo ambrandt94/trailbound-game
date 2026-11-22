@@ -2,6 +2,7 @@
 import {
   bakeOneFace,
   makeLayer,
+  resolveHome,
   type PlanetBakeRequest,
   type PlanetBakeResult,
 } from './planet-bake';
@@ -17,9 +18,10 @@ scope.onmessage = (event) => {
   const req = event.data;
   const t0 = performance.now();
   const layer = makeLayer(req);
+  const home = resolveHome(layer, req);
   const faces: Uint8ClampedArray[] = [];
-  for (let f = 0; f < 6; f++) faces.push(bakeOneFace(layer, req, f as 0));
-  const result: PlanetBakeResult = { key: req.key, faces, ms: performance.now() - t0 };
+  for (let f = 0; f < 6; f++) faces.push(bakeOneFace(layer, req, home, f as 0));
+  const result: PlanetBakeResult = { key: req.key, home, faces, ms: performance.now() - t0 };
   scope.postMessage(
     result,
     faces.map((face) => face.buffer as ArrayBuffer),

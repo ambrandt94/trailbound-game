@@ -5,7 +5,7 @@
  */
 import { Biome, type WorldData } from '../world/models';
 import { FACES, faceToSphere, type FaceId, type ChunkAddr } from './cube-sphere';
-import type { PlanetLayer } from './global-layer';
+import type { PlanetField } from './field';
 
 type Rgb = readonly [number, number, number];
 
@@ -60,7 +60,7 @@ export interface ChunkPatch {
  * DataTexture (row 0 at uv.y = 0) with `uv.y = (t + 1) / 2`.
  */
 export function bakeFace(
-  layer: PlanetLayer,
+  layer: PlanetField,
   face: FaceId,
   size: number,
   patches: readonly ChunkPatch[] = [],

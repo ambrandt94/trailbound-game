@@ -14,6 +14,7 @@ import { chunkToSphere, FACES, PATCH_FEATHER, type ChunkAddr, type Vec3 } from '
 import {
   bakeOneFace,
   makeLayer,
+  resolveHome,
   type PlanetBakeRequest,
   type PlanetBakeResult,
 } from './planet-bake';
@@ -61,6 +62,11 @@ export class PlanetGlobe {
     private readonly after: HTMLElement,
   ) {}
 
+  /** The baked planet's home chunk (the pin's chunk), once ready. */
+  get home(): ChunkAddr | null {
+    return this.ready && this.result ? this.result.home : null;
+  }
+
   /** True once the textures for the requested planet are back. */
   get ready(): boolean {
     return !!this.result && this.result.key === this.requestedKey;
@@ -89,8 +95,13 @@ export class PlanetGlobe {
     if (worker) {
       this.pending = req;
       // The worker gets its own copy; the original stays for the home mesh.
-      const rgba = req.homePatch.rgba.slice();
-      worker.postMessage({ ...req, homePatch: { size: req.homePatch.size, rgba } }, [
+      const patch = req.homePatch;
+      if (!patch) {
+        worker.postMessage(req);
+        return;
+      }
+      const rgba = patch.rgba.slice();
+      worker.postMessage({ ...req, homePatch: { size: patch.size, rgba } }, [
         rgba.buffer as ArrayBuffer,
       ]);
       return;
@@ -163,13 +174,15 @@ export class PlanetGlobe {
     const layer = makeLayer(req);
     const faces: Uint8ClampedArray[] = [];
     let ms = 0;
+    let home: ChunkAddr | null = null;
     const next = () => {
       if (req.key !== this.requestedKey) return;
       const t0 = performance.now();
-      faces.push(bakeOneFace(layer, req, faces.length as 0));
+      home ??= resolveHome(layer, req);
+      faces.push(bakeOneFace(layer, req, home, faces.length as 0));
       ms += performance.now() - t0;
       if (faces.length < 6) setTimeout(next, 0);
-      else this.accept({ key: req.key, faces, ms });
+      else this.accept({ key: req.key, home, faces, ms });
     };
     setTimeout(next, 0);
   }
@@ -249,7 +262,7 @@ export class PlanetGlobe {
       );
       group.add(mesh);
     });
-    if (req) group.add(homePatchMesh(req));
+    if (req?.homePatch) group.add(homePatchMesh(req.n, result.home, req.homePatch));
     group.add(atmosphere());
     scene.add(group);
     this.planet = group;
@@ -346,16 +359,19 @@ function gridGeometry(pos: Float32Array, uv: Float32Array, seg: number): THREE.B
 }
 
 /** The home world at full patch resolution, a hair above its chunk. */
-function homePatchMesh(req: PlanetBakeRequest): THREE.Mesh {
+function homePatchMesh(
+  n: number,
+  home: ChunkAddr,
+  patch: { size: number; rgba: Uint8ClampedArray },
+): THREE.Mesh {
   const seg = PATCH_SEGMENTS;
   const count = (seg + 1) * (seg + 1);
   const pos = new Float32Array(count * 3);
   const uv = new Float32Array(count * 2);
-  const home: ChunkAddr = req.home;
   let k = 0;
   for (let j = 0; j <= seg; j++) {
     for (let i = 0; i <= seg; i++) {
-      const p = chunkToSphere(req.n, home, i / seg, j / seg);
+      const p = chunkToSphere(n, home, i / seg, j / seg);
       pos[k * 3] = p[0] * 1.0004;
       pos[k * 3 + 1] = p[1] * 1.0004;
       pos[k * 3 + 2] = p[2] * 1.0004;
@@ -364,8 +380,8 @@ function homePatchMesh(req: PlanetBakeRequest): THREE.Mesh {
       k++;
     }
   }
-  const { size } = req.homePatch;
-  const rgba = featherEdges(req.homePatch.rgba, size);
+  const { size } = patch;
+  const rgba = featherEdges(patch.rgba, size);
   const tex = new THREE.DataTexture(rgba, size, size, THREE.RGBAFormat);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.magFilter = THREE.LinearFilter;
