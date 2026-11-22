@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { AvatarEngine, PlayerAvatar, PlayerProfileEntry } from '../../core/people/avatar';
 import { clipTimeScale } from '../../core/state/area-pace';
+import { applyKaykitLocomotion } from '../kaykit-locomotion';
 import { createCharacterBackend } from './backends/select';
 import type { BuiltCharacter, CharacterBackend, CharacterPlatform } from './backends/types';
 import { createV1Backend } from './backends/v1';
@@ -439,6 +440,8 @@ export async function buildAvatar(
       budgetMs: options.budgetMs ?? (backend.id === 'cf2' ? 6 : BUDGET_MS),
       atlasSize: 256,
     });
+    // v2's authored Idle/Walk are a near T-pose. Swap in the vendored KayKit clips.
+    if (backend.id === 'cf2') await applyKaykitLocomotion(built);
     buildMs = now() - started;
     return wrapForge(built, backend.recipeHash(recipe.engine));
   } catch (error) {
