@@ -180,6 +180,29 @@
   background: var(--tb-leather);
 }
 
+#ui .tool-btn-labeled {
+  width: auto;
+  padding: 0 calc(var(--u) * 4);
+  gap: calc(var(--u) * 3);
+  grid-auto-flow: column;
+}
+
+#ui .tool-caption {
+  font-size: calc(12px * var(--tb-ui-scale));
+  line-height: 1;
+  white-space: nowrap;
+}
+
+#ui .chip-action {
+  cursor: pointer;
+  color: inherit;
+}
+
+#ui .chip-action:hover,
+#ui .chip-action:focus-visible {
+  color: var(--tb-cream);
+}
+
 #ui .tool-btn:focus-visible,
 #ui .card-x:focus-visible,
 #ui .menu-item:focus-visible,

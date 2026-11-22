@@ -58,7 +58,7 @@ const GLOBE_PREFETCH_SEC = 1.2;
 import type { Scene } from '../scene-stack';
 
 const MAP_CONTROLS =
-  'WASD walk · Shift sprint · H halt / roll out · wheel or +/- zoom · drag to pan · click a town, site, or land to route · Shift+click adds a stop · Enter walks this ground in 3D';
+  'WASD walk · Shift sprint · H halt / roll out · T time waits / time runs · wheel or +/- zoom · drag to pan · click a town, site, or land to route · Shift+click adds a stop · Enter walks this ground in 3D';
 
 export class MapView implements Scene {
   readonly id = 'map';

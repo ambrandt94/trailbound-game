@@ -250,6 +250,11 @@ export function SettingsPanel(props: { dock?: boolean }) {
           />
           Map: time moves only when I move
         </label>
+        <p class="lede tight">
+          {skinText(
+            'Overworld only, also on the toolbar and T. On, the clock, the caravan, and everyone else wait until you walk. Off, a rolling caravan runs the clock on its own; Halt still pauses it. 3D ignores this.',
+          )}
+        </p>
         <label class="check">
           <input
             type="checkbox"

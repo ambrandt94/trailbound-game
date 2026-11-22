@@ -86,6 +86,26 @@ export function haltLabel(halted: boolean): 'Roll out' | 'Halt' {
   return halted ? 'Roll out' : 'Halt';
 }
 
+/** Short label for the overworld toolbar toggle. */
+export function timeOnlyWhenMovingLabel(on: boolean): 'Time waits' | 'Time runs' {
+  return on ? 'Time waits' : 'Time runs';
+}
+
+/** Tooltip for the toggle, including the T shortcut. */
+export function timeOnlyWhenMovingTitle(on: boolean): string {
+  return on
+    ? 'Time waits for you to walk (T). A rolling caravan waits too.'
+    : 'Time runs while the caravan is rolling (T). Halt still pauses it.';
+}
+
+/**
+ * The quick toggle is map-only. Hidden in a 3D area, shown on the overworld
+ * (and before a view has been published).
+ */
+export function showTimeOnlyToggle(view: string | null | undefined): boolean {
+  return view !== 'area';
+}
+
 /** On-foot speed on the map, as a multiple of the wagon's map pace. */
 export const ON_FOOT_MIN = 1;
 export const ON_FOOT_MAX = 2;
