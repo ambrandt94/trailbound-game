@@ -8,3 +8,5 @@ src/render/area/ct
 # Golden AreaExports and the tile biome table. Data, not source style.
 tests/fixtures/*.json
 public/assets/**/*.json
+# Derived world masks (run-length rows). Data, not source style.
+src/core/planet/data/*.json

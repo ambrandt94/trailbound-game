@@ -16,6 +16,7 @@
 import { Biome } from '../world/models';
 import { Rng } from '../world/noise';
 import { angleBetween, chunkToSphere, type ChunkAddr, type Vec3 } from './cube-sphere';
+import type { PlanetField } from './field';
 import { fbm3, ridged3 } from './noise3';
 
 export interface PlanetSample {
@@ -64,7 +65,7 @@ function smooth(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-export class PlanetLayer {
+export class PlanetLayer implements PlanetField {
   readonly seed: number;
   readonly n: number;
   readonly home: ChunkAddr | null;
@@ -185,6 +186,11 @@ export class PlanetLayer {
     moist = Math.max(0, Math.min(1, moist));
 
     return { elevM, biome: classify(elevM, temp, moist, belt, a.continental), temp, moist, belt };
+  }
+
+  /** Metres above sea level: the sign is land vs sea. */
+  landValue(v: Vec3): number {
+    return this.sample(v).elevM;
   }
 
   sampleChunk(addr: ChunkAddr, x = 0.5, y = 0.5): PlanetSample {

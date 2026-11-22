@@ -30,3 +30,17 @@ export function planetChunkCount(preset: PlanetPreset): number {
   const n = PLANET_PRESET_SPECS[preset].n;
   return 6 * n * n;
 }
+
+/**
+ * Where a world's land comes from.
+ * - `island`: the classic hand-tuned home map; the globe is procedural around it.
+ *   Saves from before world sources read this.
+ * - `trailbound`: the default authored world (Alex's continents).
+ * - `procedural`: seeded plate continents.
+ */
+export const WORLD_SOURCES = ['trailbound', 'procedural', 'island'] as const;
+export type WorldSource = (typeof WORLD_SOURCES)[number];
+
+export function isWorldSource(value: unknown): value is WorldSource {
+  return typeof value === 'string' && (WORLD_SOURCES as readonly string[]).includes(value);
+}
