@@ -102,7 +102,7 @@ export class MusicConductor {
   }
 
   private apply(decision: MusicDecision, now: number): void {
-    this.player?.play(decision.track, decision.fadeSec);
+    this.player?.play(decision.track, decision.fadeSec, decision.resume ?? false);
     this.record(
       'decision',
       `${decision.reason} -> ${decision.track.id} fade ${decision.fadeSec}s [${decision.key}]`,

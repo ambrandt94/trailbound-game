@@ -1,5 +1,5 @@
 import type { MusicTrack } from './catalog';
-import type { MusicContext, MusicSceneClass } from './context';
+import { INTERLUDE_CLASSES, type MusicContext, type MusicSceneClass } from './context';
 import { MUSIC_RULES, type MusicRules } from './rules';
 import { contextKey, pickTrack, sceneClass, type Pick } from './select';
 
@@ -7,8 +7,10 @@ export interface MusicDecision {
   track: MusicTrack;
   /** Crossfade length for this change; 0 means start without a fade-out (first track). */
   fadeSec: number;
-  reason: 'first' | 'context' | 'class' | 'rotate' | 'ended';
+  reason: 'first' | 'context' | 'class' | 'rotate' | 'ended' | 'resume';
   key: string;
+  /** Pick the track up where it stopped (back from an interlude such as World Gen). */
+  resume?: boolean;
 }
 
 export interface DirectorOptions {
@@ -40,6 +42,8 @@ export class MusicDirector {
   private readonly lastPlayed = new Map<string, number>();
   private lastPick: Pick | null = null;
   private lastCtx: MusicContext | null = null;
+  /** The track an interlude (World Gen) interrupted, to go back to afterwards. */
+  private interrupted: MusicTrack | null = null;
 
   constructor(
     private tracks: readonly MusicTrack[],
@@ -112,8 +116,15 @@ export class MusicDirector {
     const classChange = cls !== this.trackClass;
     const hold = classChange ? this.timing.classHoldSec : this.timing.holdSec;
     if (!force && now - this.pendingSince < hold) return null;
+    if (classChange && this.trackClass && INTERLUDE_CLASSES.includes(this.trackClass)) {
+      const back = this.resumeAfterInterlude(ctx, now, cls, key);
+      if (back) return back;
+    }
     const pick = this.choose(ctx, current.id, null);
     if (!pick) return null;
+    if (classChange && INTERLUDE_CLASSES.includes(cls) && pick.track.id !== current.id) {
+      this.interrupted = INTERLUDE_CLASSES.includes(this.trackClass ?? 'map') ? null : current;
+    }
     if (pick.track.id === current.id) {
       // The playing track still fits the new context best: stay, and take the new context as the baseline.
       this.committedKey = key;
@@ -130,6 +141,25 @@ export class MusicDirector {
       this.timing.crossfadeSec,
       classChange ? 'class' : 'context',
     );
+  }
+
+  /**
+   * Leaving an interlude: the interrupted track comes back (from where it
+   * stopped) when it still fits the new context about as well as anything.
+   */
+  private resumeAfterInterlude(
+    ctx: MusicContext,
+    now: number,
+    cls: MusicSceneClass,
+    key: string,
+  ): MusicDecision | null {
+    const back = this.interrupted;
+    this.interrupted = null;
+    if (!back) return null;
+    const pick = this.choose(ctx, back.id, null);
+    if (!pick || pick.track.id !== back.id) return null;
+    const decision = this.start(back, now, cls, key, this.timing.crossfadeSec, 'resume');
+    return { ...decision, resume: true };
   }
 
   /** Switch to whatever fits now, skipping the holds (debug and tests). */

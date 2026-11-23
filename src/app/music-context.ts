@@ -32,6 +32,16 @@ export function buildMusicContext(input: MusicContextInput): MusicContext | null
       minigame: false,
     };
   }
+  if (mode === 'worldgen') {
+    return {
+      scene: 'worldgen',
+      place: null,
+      biome: null,
+      night: false,
+      camp: false,
+      minigame: false,
+    };
+  }
   const party = world.heroAboard ? world.caravan : world.hero;
   const scene = view === 'area' ? 'area' : 'map';
   let place: string | null = null;

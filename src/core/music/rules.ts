@@ -3,7 +3,7 @@
  * table, so retuning the soundtrack is an edit here, not a code change.
  *
  * Tags come from the Asset Matrix vocabulary:
- * title, map, travel-day, travel-night, camp, town, forest, desert, beach, grove, minigame.
+ * title, worldgen, map, travel-day, travel-night, camp, town, forest, desert, beach, grove, minigame.
  * How scoring works: a track earns `wanted[tag]` for each tag it carries that
  * the context asks for, loses `unwanted[tag]` for each place/biome tag it carries
  * that the context did not ask for, and earns an intensity-fit bonus. See `select.ts`.
@@ -19,9 +19,11 @@ export const MUSIC_RULES = {
   /** Scene by itself. */
   scene: {
     title: [{ tag: 'title', weight: 12 }],
+    /** The World Gen screen has its own theme, asked for as strongly as the title's. */
+    worldgen: [{ tag: 'worldgen', weight: 12 }],
     map: [{ tag: 'map', weight: 2.5 }],
     area: [],
-  } satisfies Record<'title' | 'map' | 'area', TagWant[]>,
+  } satisfies Record<'title' | 'worldgen' | 'map' | 'area', TagWant[]>,
 
   /** A minigame is open: the minigame tag outranks everything else. */
   minigame: [{ tag: 'minigame', weight: 12 }] satisfies TagWant[],
@@ -77,6 +79,7 @@ export const MUSIC_RULES = {
     town: 2,
     minigame: 2,
     title: 8,
+    worldgen: 8,
   } as Record<string, number>,
 
   /** Preferred intensity (0..1) per class, and how much the fit is worth. */
@@ -85,6 +88,7 @@ export const MUSIC_RULES = {
     nightShift: -0.1,
     byClass: {
       title: 0.4,
+      worldgen: 0.45,
       minigame: 0.65,
       camp: 0.28,
       town: 0.35,

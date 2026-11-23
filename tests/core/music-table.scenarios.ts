@@ -11,6 +11,7 @@ const c = (patch: Partial<MusicContext>): MusicContext => ({ ...DEFAULT_MUSIC_CO
 /** The contexts the PR table and the tests walk through. */
 export const SCENARIOS: Scenario[] = [
   { name: 'Title screen', ctx: c({ scene: 'title' }) },
+  { name: 'World Gen screen', ctx: c({ scene: 'worldgen' }) },
   { name: 'Map, day, plains', ctx: c({ scene: 'map', biome: Biome.Plains }) },
   { name: 'Map, day, forest', ctx: c({ scene: 'map', biome: Biome.Forest }) },
   { name: 'Map, day, desert', ctx: c({ scene: 'map', biome: Biome.Desert }) },

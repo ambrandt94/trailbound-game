@@ -11,6 +11,7 @@ const { catalog } = parseMusicManifest(
 /** First entry is what plays first; the rest rotate in when the context lasts. */
 const EXPECTED: Record<string, string[]> = {
   'Title screen': ['menu-theme'],
+  'World Gen screen': ['worldgen-theme'],
   'Map, day, plains': ['on-the-road-happy-loop'],
   'Map, day, forest': ['forest-road-caravan'],
   'Map, day, desert': ['caravan-over-dunes'],

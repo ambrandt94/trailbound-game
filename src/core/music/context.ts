@@ -1,7 +1,10 @@
 /** What the game is doing right now, as far as the soundtrack cares. */
 export interface MusicContext {
-  /** Which screen is up. The map and 3D zones are the two play views. */
-  scene: 'title' | 'map' | 'area';
+  /**
+   * Which screen is up. The map and 3D zones are the two play views; `worldgen`
+   * is the World Gen screen (its own theme, like the title).
+   */
+  scene: 'title' | 'worldgen' | 'map' | 'area';
   /**
    * Kind of place under the party: a settlement kind (`city`, `town`, `village`,
    * `hamlet`, `grove`, `camp`, `shore`, ...), a POI kind, or null in open country.
@@ -28,4 +31,11 @@ export const DEFAULT_MUSIC_CONTEXT: MusicContext = {
 };
 
 /** Coarse class of the context. A change of class is a real scene change, not a flicker. */
-export type MusicSceneClass = 'title' | 'minigame' | 'camp' | 'town' | 'map' | 'travel';
+export type MusicSceneClass =
+  'title' | 'worldgen' | 'minigame' | 'camp' | 'town' | 'map' | 'travel';
+
+/**
+ * Classes that interrupt the road rather than replace it: leaving one goes back
+ * to the track that was playing before, from where it stopped, when it still fits.
+ */
+export const INTERLUDE_CLASSES: readonly MusicSceneClass[] = ['worldgen'];

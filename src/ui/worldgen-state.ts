@@ -7,7 +7,7 @@ import { signal } from '@preact/signals';
 import type { ChunkAddr, StartCandidate } from '../core/planet';
 import type { Biome, WorldSettings } from '../core/world/models';
 
-export type WgMode = 'globe' | 'flat' | 'chunk';
+export type WgMode = 'globe' | 'flat' | 'chunk' | 'regions';
 
 export interface WgLayers {
   biomes: boolean;
