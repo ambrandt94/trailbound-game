@@ -16,7 +16,13 @@
 import { Biome } from '../world/models';
 import { Rng } from '../world/noise';
 import { angleBetween, chunkToSphere, type ChunkAddr, type Vec3 } from './cube-sphere';
-import { NEUTRAL_SHAPE, SHAPE_CLIMATE_GAIN, type PlanetField, type PlanetShape } from './field';
+import {
+  NEUTRAL_SHAPE,
+  SHAPE_CLIMATE_GAIN,
+  type FieldPoint,
+  type PlanetField,
+  type PlanetShape,
+} from './field';
 import { fbm3, ridged3 } from './noise3';
 
 export interface PlanetSample {
@@ -106,6 +112,10 @@ export class PlanetLayer implements PlanetField {
   }
 
   sample(v: Vec3): PlanetSample {
+    return this.point(v);
+  }
+
+  point(v: Vec3): FieldPoint {
     const s = this.seed;
     // Warp so plate edges wander instead of running as great-circle arcs.
     const wx = v[0] + (fbm3(v[0] * 2.1, v[1] * 2.1, v[2] * 2.1, s + 11, 2) - 0.5) * 0.5;
@@ -193,7 +203,33 @@ export class PlanetLayer implements PlanetField {
     moist += Math.max(0, 0.25 - Math.abs(base)) * 0.6;
     moist = Math.max(0, Math.min(1, moist + this.shape.moist * SHAPE_CLIMATE_GAIN));
 
-    return { elevM, biome: classify(elevM, temp, moist, belt, a.continental), temp, moist, belt };
+    return {
+      elevM,
+      biome: classify(elevM, temp, moist, belt, a.continental),
+      temp,
+      moist,
+      belt,
+      lv: elevM,
+      cont: a.continental ? 1 : 0,
+      ice: 0,
+    };
+  }
+
+  /** Coast coves and headlands below the bake's resolution (metres, near the shore only). */
+  fineLand(v: Vec3): number {
+    const e = this.sample(v).elevM;
+    const near = Math.exp(-((e / 260) ** 2));
+    if (near < 1e-3) return e;
+    const s = this.seed;
+    return (
+      e +
+      (fbm3(v[0] * 420, v[1] * 420, v[2] * 420, s + 271, 3) - 0.5) * 150 * near +
+      (fbm3(v[0] * 1900, v[1] * 1900, v[2] * 1900, s + 277, 2) - 0.5) * 50 * near
+    );
+  }
+
+  biomeOf(elevM: number, temp: number, moist: number, belt: number, cont: number): Biome {
+    return classify(elevM, temp, moist, belt, cont > 0.5);
   }
 
   /** Metres above sea level: the sign is land vs sea. */

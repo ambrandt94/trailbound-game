@@ -12,7 +12,13 @@ import { Biome } from '../world/models';
 import landJson from './data/trailbound-land.json';
 import iceJson from './data/trailbound-ice.json';
 import type { Vec3 } from './cube-sphere';
-import { NEUTRAL_SHAPE, SHAPE_CLIMATE_GAIN, type PlanetField, type PlanetShape } from './field';
+import {
+  NEUTRAL_SHAPE,
+  SHAPE_CLIMATE_GAIN,
+  type FieldPoint,
+  type PlanetField,
+  type PlanetShape,
+} from './field';
 import { classify, type PlanetSample } from './global-layer';
 import { decodeRle, sampleField, signedDistance, type RleMask } from './mask';
 import { fbm3, ridged3 } from './noise3';
@@ -136,6 +142,25 @@ export class TrailboundLayer implements PlanetField {
   }
 
   sample(v: Vec3): PlanetSample {
+    return this.point(v);
+  }
+
+  fineLand(v: Vec3): number {
+    return this.landValue(v, true);
+  }
+
+  biomeOf(
+    elevM: number,
+    temp: number,
+    moist: number,
+    belt: number,
+    _cont: number,
+    ice: number,
+  ): Biome {
+    return ice > 0.5 ? Biome.Snow : classify(elevM, temp, moist, belt, true);
+  }
+
+  point(v: Vec3): FieldPoint {
     const s = this.seed;
     const lv = this.landValue(v);
     const inland = clamp01(lv / 40);
@@ -170,6 +195,6 @@ export class TrailboundLayer implements PlanetField {
     moist = clamp01(moist + this.shape.moist * SHAPE_CLIMATE_GAIN);
 
     const biome = ice > 0.5 ? Biome.Snow : classify(elevM, temp, moist, belt, true);
-    return { elevM, biome, temp, moist, belt };
+    return { elevM, biome, temp, moist, belt, lv, cont: 1, ice };
   }
 }

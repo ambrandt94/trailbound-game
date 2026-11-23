@@ -98,8 +98,19 @@ test('saves carry the world settings and older saves load the default world', ()
   delete old.worldSettings;
   // Saves from before world sources keep the classic island.
   expect(savedWorldSettings(old)).toEqual(
-    clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldSource: 'island', homeChunk: null }),
+    clampSettings({
+      ...DEFAULT_WORLD_SETTINGS,
+      worldSource: 'island',
+      homeChunk: null,
+      terrainGen: 1,
+    }),
   );
+  // Planet saves from before seamless chunks keep the classic home map.
+  const prePlanet = {
+    ...roundTrip,
+    worldSettings: { ...roundTrip.worldSettings, worldSource: 'trailbound', terrainGen: undefined },
+  } as never;
+  expect(savedWorldSettings(prePlanet).terrainGen).toBe(1);
   const garbage = { ...roundTrip, worldSettings: { worldScale: 5 } as never };
   expect(savedWorldSettings(garbage).worldScale).toBe(16);
 });
