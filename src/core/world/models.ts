@@ -326,7 +326,16 @@ export interface WorldSettings {
   seaLevel: number;
   tempBias: number;
   moistBias: number;
+  /**
+   * Planet worlds: how the home map is cut from the planet. 2 is seamless
+   * (read off the planet field, matching its neighbours and the globe); 1 is
+   * the original per-chunk generator. Saves without it read 1, so their map
+   * stays exactly as it was; new worlds get 2.
+   */
+  terrainGen: TerrainGen;
 }
+
+export type TerrainGen = 1 | 2;
 
 /** Side length of `WorldSettings.landSketch`. */
 export const LAND_SKETCH_SIZE = 40;
@@ -401,6 +410,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   seaLevel: 0,
   tempBias: 0,
   moistBias: 0,
+  terrainGen: 2,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -562,6 +572,8 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
     seaLevel: clampBias(raw.seaLevel),
     tempBias: clampBias(raw.tempBias),
     moistBias: clampBias(raw.moistBias),
+    // Missing means a world made before seamless chunks: keep its map.
+    terrainGen: raw.terrainGen === 2 ? 2 : 1,
   };
 }
 

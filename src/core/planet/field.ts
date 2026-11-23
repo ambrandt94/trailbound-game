@@ -1,4 +1,5 @@
 import type { Vec3 } from './cube-sphere';
+import type { Biome } from '../world/models';
 import type { PlanetSample } from './global-layer';
 
 /**
@@ -28,4 +29,30 @@ export interface PlanetField {
    * `fine` adds detail below one mask pixel, for chunk-scale sampling.
    */
   landValue(v: Vec3, fine?: boolean): number;
+  /**
+   * `sample` plus the slow terms seamless chunk generation interpolates
+   * (`world/seamless-terrain.ts`): the same numbers the bake reads.
+   */
+  point(v: Vec3): FieldPoint;
+  /** Signed land value with chunk-scale coast detail (sign only: > 0 is land). */
+  fineLand(v: Vec3): number;
+  /** Biome of a chunk tile from its (interpolated, detailed) terms, with the bake's thresholds. */
+  biomeOf(
+    elevM: number,
+    temp: number,
+    moist: number,
+    belt: number,
+    cont: number,
+    ice: number,
+  ): Biome;
+}
+
+/** A field sample with the terms chunk generation needs to stay on the bake. */
+export interface FieldPoint extends PlanetSample {
+  /** `landValue(v)` (coarse, the bake's), in the field's units. */
+  lv: number;
+  /** 1 on a continental plate, 0 oceanic (Trailbound: always 1). */
+  cont: number;
+  /** 0..1 polar ice cover. */
+  ice: number;
 }

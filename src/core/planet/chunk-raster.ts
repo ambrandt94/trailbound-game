@@ -34,6 +34,9 @@ export interface ChunkRaster {
   biomes: Array<{ biome: Biome; share: number }>;
 }
 
+/** Ground a chunk spans, metres (a 16× map: 3072 tiles of 8 m). */
+const CHUNK_GROUND_M = 3072 * 8;
+
 const ROAD: readonly [number, number, number] = [196, 150, 96];
 
 /** Rasterise a generated map at up to `maxSize` px a side (nearest tile, max-pooled roads). */
@@ -44,7 +47,9 @@ export function chunkRaster(world: WorldData, maxSize: number): ChunkRaster {
   const biome = new Uint8ClampedArray(size * size * 4);
   const height = new Uint8ClampedArray(size * size * 4);
   const ids = new Uint8Array(size * size);
-  const cellM = 8 * step;
+  // Real ground per raster pixel: a chunk is the same patch of planet at any
+  // map scale (16× maps have 8 m tiles), so small maps don't shade 16× too steep.
+  const cellM = (CHUNK_GROUND_M / tiles) * step;
   const hAt = (x: number, y: number) => {
     const tx = Math.min(tiles - 1, Math.max(0, Math.floor((x + 0.5) * step)));
     const ty = Math.min(tiles - 1, Math.max(0, Math.floor((y + 0.5) * step)));

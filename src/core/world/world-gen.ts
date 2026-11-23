@@ -15,6 +15,7 @@ import {
   clamp,
 } from './models';
 import { fbm, hash2, Rng } from './noise';
+import { edgeGates, seamlessTerrain } from './seamless-terrain';
 import { placePois } from './pois';
 import { prepareLandSketch, sampleLandSketch } from './land-sketch';
 import {
@@ -228,6 +229,7 @@ export function sameWorldSettings(have: WorldSettings, want: WorldSettings, seed
     if (have.planet !== want.planet) return false;
     if (have.seaLevel !== want.seaLevel) return false;
     if (have.tempBias !== want.tempBias || have.moistBias !== want.moistBias) return false;
+    if (have.terrainGen !== want.terrainGen) return false;
     if (want.homeChunk && !(have.homeChunk && sameChunk(have.homeChunk, want.homeChunk))) {
       return false;
     }
@@ -526,6 +528,10 @@ export function generatePlanetChunk(
   frame: PlanetFrame = planetFrame(seed, settings),
 ): WorldData {
   const target = addr ?? frame.home;
+  // Old worlds keep their home map from the classic generator; everything else is seamless.
+  if (settings.terrainGen === 2 || !sameChunk(target, frame.home)) {
+    return generateSeamlessChunk(seed, settings, target, frame);
+  }
   const terrainSeed = chunkTerrainSeed(seed, frame, target);
   const w = worldExtent(settings.worldScale);
   const h = w;
@@ -556,6 +562,65 @@ export function generatePlanetChunk(
     paths,
     largestLandmass(terrain.biomes, w, h),
   );
+  world.seed = seed;
+  world.wraps = false;
+  return world;
+}
+
+/**
+ * A chunk read off the planet (`seamless-terrain.ts`): its edges meet the
+ * neighbours' and its colours match the globe. Roads run to shared edge gates
+ * so they carry on into the next chunk.
+ */
+function generateSeamlessChunk(
+  seed: number,
+  settings: WorldSettings,
+  target: ChunkAddr,
+  frame: PlanetFrame,
+): WorldData {
+  const terrainSeed = chunkTerrainSeed(seed, frame, target);
+  const w = worldExtent(settings.worldScale);
+  const h = w;
+  const rng = new Rng(terrainSeed);
+  const paths = new Uint8Array(w * h);
+  const terrain = seamlessTerrain(frame.field, frame.n, target, w);
+  const world = populateWorld(
+    terrainSeed,
+    { ...settings, mapStyle: 'continent', homeChunk: frame.home },
+    w,
+    h,
+    rng,
+    terrain,
+    paths,
+    largestLandmass(terrain.biomes, w, h),
+  );
+  const towns = world.nodes.filter(
+    (n) => n.kind === 'city' || n.kind === 'town' || n.kind === 'village',
+  );
+  if (towns.length > 0) {
+    for (const gate of edgeGates(frame.field, frame.n, target, w)) {
+      let best = towns[0]!;
+      let bestD = Infinity;
+      for (const t of towns) {
+        const d = Math.hypot(t.cx - gate.x, t.cy - gate.y);
+        if (d < bestD) {
+          bestD = d;
+          best = t;
+        }
+      }
+      stampPath(
+        paths,
+        terrain.biomes,
+        w,
+        h,
+        Math.floor(best.cx),
+        Math.floor(best.cy),
+        gate.x,
+        gate.y,
+        new Rng(gate.key ^ terrainSeed),
+      );
+    }
+  }
   world.seed = seed;
   world.wraps = false;
   return world;
