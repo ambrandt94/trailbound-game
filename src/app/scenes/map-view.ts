@@ -21,7 +21,7 @@ import { dayLightAt } from '../../core/sim/time';
 import { hasRoute, splitRoute } from '../../core/sim/caravan';
 import { leaderToggleHalt } from '../leader-halt';
 import { travelHudFor, travelHudKey } from '../travel-hud';
-import { MAP_ZOOM_CAP, TILE } from '../../core/world/models';
+import { MAP_ZOOM_CAP, TILE, globeFitScaleFor, startScaleFor } from '../../core/world/models';
 import type { MapCaravanDraw, MapZonesDraw } from '../../render/map/map-renderer';
 import { showsZonePreview, zoneDistance, zoneOutlineAlpha } from '../../core/area/zone-history';
 import { attachRouteClicks, resolveRouteTarget, routeFrame } from '../map-route';
@@ -29,6 +29,7 @@ import {
   canEnter,
   clockRate,
   hint,
+  mapGlobe,
   mapNight,
   nearTown,
   nearestLine,
@@ -41,6 +42,7 @@ import {
   travelHud,
 } from '../../ui/state';
 import type { GameHost } from '../host';
+import { biomeFocus, mapBiomeOverlay } from '../../ui/biome-overlay-state';
 import {
   PLANET_PRESET_SPECS,
   chunkKey,
@@ -48,6 +50,7 @@ import {
   globeDiameterPx,
   globeLook,
   globeTurnWeight,
+  biomeWashRgba,
   homeChunk,
   type WorldSource,
   homePatchRgba,
@@ -57,6 +60,13 @@ import {
 const HOME_PATCH_TEXELS = 256;
 /** Wait this long after the map first draws before baking the globe in the background. */
 const GLOBE_PREFETCH_SEC = 1.2;
+/**
+ * Crossfade band past the switch scale, as a share of it: the globe fades in
+ * over the map's last frame (which is not repainted) between 1.0× and 0.85×.
+ */
+const GLOBE_BAND = 0.15;
+/** The HUD's Chunk / Globe toggle zooms over this long. */
+const VIEW_GLIDE_SEC = 0.9;
 import type { Scene } from '../scene-stack';
 
 const MAP_CONTROLS =
@@ -83,6 +93,14 @@ export class MapView implements Scene {
   private mapAge = 0;
   /** Player's turn of the globe, radians (latitude, longitude). */
   private globeTurn = { lat: 0, lon: 0 };
+  /** Map scale before the HUD toggle went to the globe, to come back to. */
+  private chunkScale: number | null = null;
+  /** The biome overlay image for the current world and legend focus. */
+  private wash: { data: object; key: string; canvas: HTMLCanvasElement } | null = null;
+  /** Camera scale of the map's last painted frame. */
+  private paintedScale = 0;
+  /** The last frame is being scaled by CSS during a toggle glide. */
+  private glideFrame = false;
   private globeRadiusPx = 1;
 
   constructor(private readonly host: GameHost) {}
@@ -254,7 +272,25 @@ export class MapView implements Scene {
       prompt.value = stand.blockedReason ? 'Open water. Walk ashore to enter.' : '';
     }
     this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(4);
+    this.publishGlobe();
+    // During a toggle glide the map is not repainted: its last frame is scaled
+    // with a CSS transform (as the 3D dive does), so the 2D paint stays out of
+    // the animation. The real repaint happens when the glide ends.
+    const gliding =
+      this.host.view === 'map' && !this.bare && this.paintedScale > 0 && this.camera.gliding();
+    if (gliding) {
+      const map = this.host.mapCanvas.style;
+      map.transformOrigin = '50% 50%';
+      map.transform = `scale(${(this.camera.scale / this.paintedScale).toFixed(4)})`;
+      this.glideFrame = true;
+    }
     if (this.host.view === 'map' && data && this.showGlobe()) return;
+    if (gliding) return;
+    if (this.glideFrame) {
+      this.glideFrame = false;
+      this.host.mapCanvas.style.transform = '';
+      this.host.mapCanvas.style.transformOrigin = '';
+    }
     // Under the 3D view the dive holds the map still: keep its last bare frame.
     if (this.bare && this.host.view !== 'map' && this.barePainted) return;
     this.barePainted = this.bare;
@@ -274,7 +310,9 @@ export class MapView implements Scene {
       caravan: this.caravanDraw(),
       zones: this.zonesDraw(),
       bare: this.bare,
+      biomeWash: this.biomeWash(),
     });
+    this.paintedScale = this.camera.scale;
   }
 
   /**
@@ -337,7 +375,7 @@ export class MapView implements Scene {
     const globe = this.host.globe;
     const data = this.host.world.data;
     if (!data || !globe.ready || !this.camera.inGlobe()) {
-      globe.hide();
+      globe.hide(this.camera.gliding());
       if (!this.camera.inGlobe() && (this.globeTurn.lat !== 0 || this.globeTurn.lon !== 0)) {
         this.globeTurn = { lat: 0, lon: 0 };
       }
@@ -357,13 +395,17 @@ export class MapView implements Scene {
     const scale = this.camera.scale;
     const diameterPx = globeDiameterPx(scale, this.camera.cellsWide(), spec.n, viewW, viewH);
     this.globeRadiusPx = diameterPx / 2;
-    const weight = globeTurnWeight(scale, this.camera.globeSwitchScale());
+    const switchScale = this.camera.globeSwitchScale();
+    const weight = globeTurnWeight(scale, switchScale);
+    const band = Math.min(1, Math.max(0, (switchScale - scale) / (switchScale * GLOBE_BAND)));
     globe.show({
       viewW,
       viewH,
       diameterPx,
       look: globeLook(pin, this.globeTurn.lat, this.globeTurn.lon, weight),
       pin,
+      opacity: band * band * (3 - 2 * band),
+      motion: this.camera.gliding(),
     });
     return true;
   }
@@ -470,6 +512,7 @@ export class MapView implements Scene {
 
   exit(): void {
     this.host.globe.hide();
+    mapGlobe.value = { ready: false, on: false };
     this.detachInput?.();
     this.detachInput = null;
     this.detachClicks?.();
@@ -501,6 +544,7 @@ export class MapView implements Scene {
    * owns the camera until `endDive`, and the follow camera resumes after.
    */
   diveTo(x: number, y: number, scale: number): void {
+    this.camera.stopGlide();
     this.barePainted = false;
     this.camera.follow = false;
     this.camera.x = this.camera.targetX = x / this.camera.step;
@@ -510,6 +554,62 @@ export class MapView implements Scene {
 
   endDive(): void {
     this.camera.follow = true;
+  }
+
+  /**
+   * The HUD's Chunk · Globe toggle: glide out to the fitted globe, or back in
+   * to the map at the zoom it was left at. The crossfade band does the handover.
+   */
+  viewTo(kind: 'chunk' | 'globe'): void {
+    if (this.host.view !== 'map') return;
+    const cells = this.camera.cellsWide();
+    if (kind === 'globe') {
+      if (!this.host.globe.ready) return;
+      if (!this.camera.inGlobe()) this.chunkScale = this.camera.scale;
+      this.host.globe.prime();
+      this.camera.glideScale(globeFitScaleFor(cells), VIEW_GLIDE_SEC);
+      return;
+    }
+    this.camera.glideScale(this.chunkScale ?? startScaleFor(cells), VIEW_GLIDE_SEC);
+  }
+
+  /**
+   * The HUD's biome overlay: the legend colours over the whole map, built once
+   * per world and legend focus (≤1024 px a side), then drawn with the terrain.
+   */
+  private biomeWash(): HTMLCanvasElement | null {
+    const data = this.host.world.data;
+    const focus = biomeFocus.value;
+    if (!data || (!mapBiomeOverlay.value && focus === null)) return null;
+    const key = `${mapBiomeOverlay.value}|${focus}`;
+    if (this.wash && this.wash.data === data && this.wash.key === key) return this.wash.canvas;
+    const w = biomeWashRgba(
+      data.biomes,
+      data.width,
+      data.height,
+      1024,
+      mapBiomeOverlay.value ? 0.45 : 0,
+      focus,
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = w.w;
+    canvas.height = w.h;
+    canvas
+      .getContext('2d')
+      ?.putImageData(new ImageData(new Uint8ClampedArray(w.rgba), w.w, w.h), 0, 0);
+    this.wash = { data, key, canvas };
+    return canvas;
+  }
+
+  private publishGlobe(): void {
+    const ready = this.host.globe.ready && this.host.view === 'map';
+    if (ready && !mapGlobe.value.ready) {
+      const canvas = this.host.mapCanvas;
+      this.host.globe.warm(canvas.clientWidth, canvas.clientHeight);
+    }
+    const on = ready && this.camera.inGlobe();
+    const cur = mapGlobe.value;
+    if (cur.ready !== ready || cur.on !== on) mapGlobe.value = { ready, on };
   }
 
   /** Map scale at the zoom cap, the closest the 2D map draws. */

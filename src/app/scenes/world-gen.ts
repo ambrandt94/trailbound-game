@@ -9,7 +9,8 @@
  * dropped on exit. Nothing is saved and game logic never sees them; the
  * playable world is still just the home chunk.
  */
-import { batch } from '@preact/signals';
+import { batch, effect } from '@preact/signals';
+import { biomeFocus, clearBiomeFocus } from '../../ui/biome-overlay-state';
 import {
   chunkKey,
   chunkLatLon,
@@ -28,7 +29,23 @@ import { ChunkCache } from '../../render/worldgen/chunk-cache';
 import { ChunkView } from '../../render/worldgen/chunk-view';
 import { JobRunner } from '../../render/worldgen/job-runner';
 import type { BakeDone, ChunkDone, WorldGenReply } from '../../render/worldgen/jobs';
-import { flatFitRadius, globeFitRadius, wrapAngle } from '../../render/worldgen/projection';
+import {
+  flatFitRadius,
+  globeFitRadius,
+  project,
+  wrapAngle,
+  type ViewState,
+} from '../../render/worldgen/projection';
+import {
+  bearingOf,
+  chunkFrameView,
+  FADE_AT,
+  FADE_MS,
+  FadeTween,
+  FLY_MS,
+  MORPH_MS,
+  ViewTween,
+} from '../../render/worldgen/transition';
 import { WorldGenView } from '../../render/worldgen/view';
 import {
   newWorldGen,
@@ -74,6 +91,8 @@ const GEN_GUESS_MS: Record<number, number> = {
 export interface WorldGenOptions {
   /** Open an existing world read-only; null edits the next new world. */
   existing: { seed: number; settings: WorldSettings } | null;
+  /** Open on the globe (default) or the flat world map. */
+  view?: 'globe' | 'flat';
   onConfirm(): void | Promise<void>;
   onQuickStart(): void | Promise<void>;
   onClose(): void | Promise<void>;
@@ -99,6 +118,19 @@ export class WorldGenScene implements Scene {
   private steered = false;
   /** The globe's tilt, kept while the flat map (always level) is shown. */
   private globeLat0 = 0.35;
+  /** The chunk whose map the chunk view holds. */
+  private shownChunk: ChunkAddr | null = null;
+  /** WG4: the running view transition, if any (see `render/worldgen/transition.ts`). */
+  private anim: {
+    kind: 'morph' | 'fly-in' | 'fly-out';
+    to: WgMode;
+    tween: ViewTween | null;
+    fade: FadeTween | null;
+    /** A fly in starts its crossfade part-way through. */
+    fadeAt: number | null;
+    /** Planet radius when the chunk map sits at its own fit (scale 1). */
+    frameR: number;
+  } | null = null;
   private readonly cleanups: Array<() => void> = [];
 
   constructor(private readonly options: WorldGenOptions) {}
@@ -119,7 +151,7 @@ export class WorldGenScene implements Scene {
   enter(): void {
     batch(() => {
       wgExisting.value = this.options.existing;
-      wgMode.value = 'globe';
+      wgMode.value = this.options.view ?? 'globe';
       wgLayers.value = { ...DEFAULT_WG_LAYERS };
       wgInspect.value = null;
       wgChunk.value = null;
@@ -143,7 +175,7 @@ export class WorldGenScene implements Scene {
         setNewWorldGen({ homeChunk: null });
         this.settingsChanged();
       },
-      setMode: (mode) => this.setMode(mode),
+      setMode: (mode) => this.requestMode(mode),
       setLayers: (patch) => {
         wgLayers.value = { ...wgLayers.value, ...patch };
         this.applyLayers();
@@ -167,6 +199,20 @@ export class WorldGenScene implements Scene {
     });
     this.requestBake(true);
     this.syncStart();
+    // The legend's hover / tap focus singles a biome out in every view.
+    this.cleanups.push(
+      effect(() => {
+        const focus = biomeFocus.value;
+        if (this.view) {
+          this.view.focus = focus;
+          this.view.invalidate();
+        }
+        if (this.chunkView) {
+          this.chunkView.focus = focus;
+          this.chunkView.invalidate();
+        }
+      }),
+    );
   }
 
   update(): void {
@@ -178,16 +224,31 @@ export class WorldGenScene implements Scene {
   }
 
   render(): void {
+    if (this.anim) {
+      this.stepAnim(animNow());
+      if (this.anim) {
+        this.view?.render();
+        this.chunkView?.render();
+        return;
+      }
+    }
     if (wgMode.value === 'chunk') this.chunkView?.render();
     else this.view?.render();
   }
 
+  /** True while a globe / world map / chunk transition runs. */
+  get animating(): boolean {
+    return this.anim !== null;
+  }
+
   exit(): void {
+    this.anim = null;
     if (this.debounce) clearTimeout(this.debounce);
     this.bakeRunner.dispose();
     this.chunkRunner.dispose();
     this.cache.clear();
     for (const off of this.cleanups.splice(0)) off();
+    clearBiomeFocus();
     this.view?.dispose();
     this.chunkView?.dispose();
     this.stage?.remove();
@@ -228,6 +289,7 @@ export class WorldGenScene implements Scene {
   }
 
   private settingsChanged(): void {
+    this.shownChunk = null;
     this.cache.clear();
     wgCached.value = [];
     this.cancelChunk();
@@ -469,6 +531,8 @@ export class WorldGenScene implements Scene {
         message: '',
       };
       this.chunkView?.setRaster(hit);
+      this.shownChunk = addr;
+      this.view?.setOverlayImage(this.chunkView?.image() ?? null);
       this.setMode('chunk');
       return;
     }
@@ -540,35 +604,180 @@ export class WorldGenScene implements Scene {
       message: '',
     };
     this.chunkView?.setRaster(done.raster);
+    this.shownChunk = done.addr;
+    this.view?.setOverlayImage(this.chunkView?.image() ?? null);
     this.setMode('chunk');
   }
 
   // —— view ——
 
+  /**
+   * The toggle's request. "Chunk" with a different chunk inspected than the one
+   * on show generates (or pulls from the cache) that chunk first; the fly in
+   * starts once its map is ready, so nothing is generated mid-animation.
+   */
+  private requestMode(mode: WgMode): void {
+    if (mode === 'chunk') {
+      const want = wgInspect.value?.addr ?? wgStart.value?.addr ?? null;
+      if (want && !(this.shownChunk && sameChunk(want, this.shownChunk))) {
+        this.openChunk(want);
+        return;
+      }
+    }
+    this.setMode(mode);
+  }
+
   private setMode(mode: WgMode): void {
     if (mode === 'chunk' && !this.chunkView?.hasRaster) return;
+    if (this.anim) this.finishAnim();
     const prev = wgMode.value;
     if (mode !== 'chunk') this.lastMode = mode;
     wgMode.value = mode;
-    if (this.stage) this.stage.dataset.mode = mode;
+    const view = this.view;
+    if (!view || prev === mode || reducedMotion() || (mode === 'chunk' && !this.shownChunk)) {
+      this.snapMode(mode, prev);
+      return;
+    }
+    const now = animNow();
+    const { w, h } = view.size;
+    const n = PLANET_PRESET_SPECS[this.settings().planet].n;
+    if (prev !== 'chunk' && mode !== 'chunk') {
+      const from = view.view;
+      if (from.morph < 0.5) this.globeLat0 = from.lat0;
+      this.anim = {
+        kind: 'morph',
+        to: mode,
+        tween: new ViewTween(from, this.planetView(mode, from, w, h), now, MORPH_MS),
+        fade: null,
+        fadeAt: null,
+        frameR: 1,
+      };
+    } else if (mode === 'chunk') {
+      const addr = this.shownChunk!;
+      const from = view.view;
+      if (from.morph < 0.5) this.globeLat0 = from.lat0;
+      const to = chunkFrameView(n, chunkLatLon(n, addr), from.morph, w, h);
+      this.chunkView?.resetView();
+      this.anim = {
+        kind: 'fly-in',
+        to: 'chunk',
+        tween: new ViewTween(from, to, now, FLY_MS),
+        fade: null,
+        fadeAt: now + FLY_MS * FADE_AT,
+        frameR: to.radiusPx,
+      };
+      this.chunkStyle(0);
+    } else {
+      const addr = this.shownChunk;
+      const morph = mode === 'flat' ? 1 : 0;
+      const centre = addr ? chunkLatLon(n, addr) : { lat: view.view.lat0, lon: view.view.lon0 };
+      // The chunk map hides the planet: start the planet at the chunk, already in the target shape.
+      const from = chunkFrameView(n, centre, morph, w, h);
+      // Pull the chunk map back to its own fit so it lines up with the planet.
+      this.chunkView?.resetView();
+      view.view = from;
+      const target = this.planetView(mode, from, w, h);
+      if (mode === 'globe') target.lat0 = Math.max(-1.2, Math.min(1.2, centre.lat));
+      this.anim = {
+        kind: 'fly-out',
+        to: mode,
+        tween: new ViewTween(from, target, now, FLY_MS),
+        fade: new FadeTween(1, 0, now, FADE_MS),
+        fadeAt: null,
+        frameR: from.radiusPx,
+      };
+      this.chunkStyle(1);
+    }
+    if (this.stage) this.stage.dataset.anim = this.anim!.kind;
+    view.setMoving(true);
+    view.invalidate();
+  }
+
+  /** The fitted globe or world map, keeping the current longitude. */
+  private planetView(mode: 'globe' | 'flat', from: ViewState, w: number, h: number): ViewState {
+    if (mode === 'globe') {
+      return { ...from, morph: 0, lat0: this.globeLat0, radiusPx: globeFitRadius(w, h) };
+    }
+    return { ...from, morph: 1, lat0: 0, radiusPx: flatFitRadius(w, h) };
+  }
+
+  /** Advance the running transition to `now`; ends it when every part is done. */
+  private stepAnim(now: number): void {
+    const a = this.anim;
+    const view = this.view;
+    if (!a || !view) return;
+    if (a.tween) {
+      view.view = a.tween.at(now);
+      view.invalidate();
+      if (a.tween.done(now)) a.tween = null;
+    }
+    if (a.fadeAt !== null && now >= a.fadeAt) {
+      a.fade = new FadeTween(0, 1, a.fadeAt, FADE_MS);
+      a.fadeAt = null;
+    }
+    if (a.fade) {
+      this.chunkStyle(a.fade.at(now));
+      if (a.fade.done(now)) a.fade = null;
+    }
+    if (!a.tween && !a.fade && a.fadeAt === null) this.finishAnim();
+  }
+
+  /**
+   * Lay the chunk map over the planet's own chunk: same place, size and turn
+   * as the planet draws it right now, easing to north-up as it fades in. It is
+   * drawn by the planet view in the same frame (no extra canvas to composite).
+   */
+  private chunkStyle(opacity: number): void {
+    const view = this.view;
+    const addr = this.shownChunk;
+    if (!view || !addr || !this.anim) return;
+    const n = PLANET_PRESET_SPECS[this.settings().planet].n;
+    const v = view.view;
+    const c = project(v, chunkLatLon(n, addr));
+    const up = project(v, chunkLatLon(n, addr, 0.5, 0.35));
+    const { w, h } = view.size;
+    const side =
+      (this.chunkView?.fitSidePx(w, h) ?? 0) * (v.radiusPx / Math.max(1e-6, this.anim.frameR));
+    view.overlay = {
+      x: c ? c.x : 0,
+      y: c ? c.y : 0,
+      turn: c && up ? bearingOf(up.x - c.x, up.y - c.y) * (1 - opacity) : 0,
+      sidePx: side,
+      opacity,
+    };
+    view.invalidate();
+  }
+
+  /** End the running transition at its final frame. */
+  private finishAnim(): void {
+    const a = this.anim;
+    if (!a) return;
+    this.anim = null;
+    if (a.tween && this.view) this.view.view = a.tween.to;
+    if (this.view) {
+      this.view.setMoving(false);
+      this.view.overlay = null;
+    }
+    if (this.stage) delete this.stage.dataset.anim;
+    this.markMode(a.to);
+  }
+
+  /** The old instant switch (no view yet, same mode, or reduced motion). */
+  private snapMode(mode: WgMode, prev: WgMode): void {
     const view = this.view;
     if (view && mode !== 'chunk' && prev !== mode) {
       const { w, h } = view.size;
-      if (mode === 'globe') {
-        view.view = {
-          ...view.view,
-          morph: 0,
-          lat0: this.globeLat0,
-          radiusPx: globeFitRadius(w, h),
-        };
-      } else {
-        if (view.view.morph < 0.5) this.globeLat0 = view.view.lat0;
-        view.view = { ...view.view, morph: 1, lat0: 0, radiusPx: flatFitRadius(w, h) };
-      }
+      if (mode === 'flat' && view.view.morph < 0.5) this.globeLat0 = view.view.lat0;
+      view.view = this.planetView(mode, view.view, w, h);
     }
-    view?.invalidate();
+    this.markMode(mode);
+  }
+
+  private markMode(mode: WgMode): void {
+    this.view?.invalidate();
     this.chunkView?.invalidate();
     if (this.stage) {
+      this.stage.dataset.mode = mode;
       this.stage.dataset.wgView = mode;
     }
   }
@@ -586,7 +795,9 @@ export class WorldGenScene implements Scene {
     }
     if (this.chunkView) {
       this.chunkView.showHeight = l.height && !l.biomes;
+      this.chunkView.overlay = l.overlay;
       this.chunkView.invalidate();
+      this.view?.setOverlayImage(this.chunkView.image());
     }
   }
 
@@ -595,7 +806,9 @@ export class WorldGenScene implements Scene {
     const stage = document.createElement('div');
     stage.id = 'worldgen';
     stage.className = 'wg-stage';
-    stage.dataset.mode = 'globe';
+    const first = this.options.view ?? 'globe';
+    this.lastMode = first;
+    stage.dataset.mode = first;
     const ui = root.querySelector('#ui');
     if (ui) root.insertBefore(stage, ui);
     else root.append(stage);
@@ -605,11 +818,12 @@ export class WorldGenScene implements Scene {
     const { w, h } = this.view.size;
     const start = this.settings().homeChunk;
     const ll = start ? chunkLatLon(PLANET_PRESET_SPECS[this.settings().planet].n, start) : null;
+    this.globeLat0 = ll ? Math.max(-1.2, Math.min(1.2, ll.lat)) : 0.35;
     this.view.view = {
       lon0: ll ? ll.lon : 0,
-      lat0: ll ? Math.max(-1.2, Math.min(1.2, ll.lat)) : 0.35,
-      radiusPx: globeFitRadius(w, h),
-      morph: 0,
+      lat0: first === 'flat' ? 0 : this.globeLat0,
+      radiusPx: first === 'flat' ? flatFitRadius(w, h) : globeFitRadius(w, h),
+      morph: first === 'flat' ? 1 : 0,
     };
     this.applyLayers();
     this.bindPointer(stage);
@@ -666,7 +880,7 @@ export class WorldGenScene implements Scene {
 
   private hover(x: number, y: number): void {
     const view = this.view;
-    if (!view || wgMode.value === 'chunk') return;
+    if (!view || wgMode.value === 'chunk' || this.anim) return;
     const addr = view.pick(x, y);
     const prev = view.hover;
     if ((addr && prev && sameChunk(addr, prev)) || (!addr && !prev)) return;
@@ -675,7 +889,7 @@ export class WorldGenScene implements Scene {
   }
 
   private click(x: number, y: number): void {
-    if (wgMode.value === 'chunk') return;
+    if (wgMode.value === 'chunk' || this.anim) return;
     const addr = this.view?.pick(x, y);
     if (!addr) return;
     if (wgPickStart.value && !this.readOnly) this.pickStart(addr);
@@ -683,6 +897,7 @@ export class WorldGenScene implements Scene {
   }
 
   private drag(dx: number, dy: number): void {
+    if (this.anim) return;
     if (wgMode.value === 'chunk') {
       this.chunkView?.pan(dx, dy);
       return;
@@ -701,6 +916,7 @@ export class WorldGenScene implements Scene {
   }
 
   private zoom(factor: number, x: number, y: number): void {
+    if (this.anim) return;
     if (wgMode.value === 'chunk') {
       this.chunkView?.zoomAt(factor, x, y);
       return;
@@ -714,4 +930,22 @@ export class WorldGenScene implements Scene {
     view.view = { ...v, radiusPx };
     view.invalidate();
   }
+}
+
+/** Users who ask for less motion get the old instant switch. */
+function reducedMotion(): boolean {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/**
+ * Transition clock. `?wgslow=8` plays transitions 8× slower (a dev aid for
+ * frame-by-frame shots); otherwise it is just `performance.now()`.
+ */
+const SLOW =
+  typeof location === 'undefined'
+    ? 1
+    : Math.max(1, Math.min(50, Number(new URLSearchParams(location.search).get('wgslow')) || 1));
+
+function animNow(): number {
+  return performance.now() / SLOW;
 }

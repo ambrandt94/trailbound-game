@@ -120,7 +120,11 @@ export function replyTransfer(reply: WorldGenReply): ArrayBuffer[] {
     return [b.biome.buffer, b.height.buffer, b.flags.buffer] as ArrayBuffer[];
   }
   if (reply.type === 'chunk') {
-    return [reply.raster.biome.buffer, reply.raster.height.buffer] as ArrayBuffer[];
+    return [
+      reply.raster.biome.buffer,
+      reply.raster.height.buffer,
+      reply.raster.ids.buffer,
+    ] as ArrayBuffer[];
   }
   return [];
 }

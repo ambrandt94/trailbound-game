@@ -32,6 +32,8 @@ export interface MapDrawState {
   zones?: MapZonesDraw | null;
   /** Terrain only (no labels, pins, hero, or wagon) while the dive magnifies the map. */
   bare?: boolean;
+  /** Biome overlay wash (whole map, legend colours, already semi-transparent). */
+  biomeWash?: CanvasImageSource | null;
 }
 
 /**
@@ -141,6 +143,7 @@ export class MapRenderer {
       caravan: state.bare ? null : (state.caravan ?? null),
       zones: state.bare ? null : (state.zones ?? null),
       markers: !state.bare,
+      biomeWash: state.bare ? null : (state.biomeWash ?? null),
     });
     const paintMs = performance.now() - paintStarted;
     this.drawMs = this.drawMs === 0 ? paintMs : this.drawMs * 0.8 + paintMs * 0.2;

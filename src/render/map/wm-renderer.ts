@@ -1339,6 +1339,8 @@ export class WorldRenderer {
       zones?: MapZonesDraw | null;
       /** Settlement outlines, names, and pins. Off for the dive's bare terrain frames. */
       markers?: boolean;
+      /** Biome overlay: a semi-transparent legend-colour image of the whole map, under the markers. */
+      biomeWash?: CanvasImageSource | null;
     },
   ): void {
     this.caravanDraw = opts.caravan ?? null;
@@ -1413,6 +1415,9 @@ export class WorldRenderer {
       cameraTransform(lctx, camera, viewW, viewH);
       this.drawVisibleChunks(lctx, camera, viewW, viewH, world, 1, isoKeys);
       if (opts.showHeight) this.drawRelief(lctx, world, camera, viewW, viewH, !!opts.showContours);
+      if (opts.biomeWash) {
+        lctx.drawImage(opts.biomeWash, 0, 0, world.width * TILE, world.height * TILE);
+      }
       this.drawChunkSprites(
         lctx,
         camera,
@@ -1543,6 +1548,12 @@ export class WorldRenderer {
 
     if (showChunks) this.drawVisibleChunks(ctx, camera, viewW, viewH, world, 1);
     if (opts.showHeight) this.drawRelief(ctx, world, camera, viewW, viewH, !!opts.showContours);
+    if (opts.biomeWash) {
+      ctx.imageSmoothingEnabled = false;
+      for (const shift of wrapShifts) {
+        ctx.drawImage(opts.biomeWash, shift * TILE, 0, viewWTiles * TILE, viewHTiles * TILE);
+      }
+    }
     if (showChunks) {
       this.drawChunkSprites(
         ctx,

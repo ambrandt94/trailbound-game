@@ -3,6 +3,7 @@
  * sliders, layers, the start chunk and the chunk inspector. The planet view
  * itself is drawn by the World Gen scene behind this panel.
  */
+import { BiomeLegend } from './biome-legend';
 import {
   chunkKey,
   FACE_NAMES,
@@ -65,22 +66,41 @@ const LAYERS: Array<{ id: keyof WgLayers; label: string }> = [
   { id: 'grid', label: 'Chunk grid' },
   { id: 'ice', label: 'Ice' },
   { id: 'start', label: 'Start chunk' },
+  { id: 'overlay', label: 'Biome overlay' },
 ];
 
+/**
+ * Globe · World map · Chunk. The thumb slides with the view's own transition;
+ * "Chunk" opens the inspected chunk (or the start), generating it first if
+ * needed, with a spinner until its map is ready.
+ */
 function ModeToggle() {
   const mode = wgMode.value;
-  const chunkReady = wgChunk.value?.state === 'ready';
+  const job = wgChunk.value;
+  const target = wgInspect.value?.addr ?? wgStart.value?.addr ?? null;
+  const pending = job?.state === 'generating';
+  const at = Math.max(
+    0,
+    MODES.findIndex((m) => m.id === mode),
+  );
   return (
-    <div class="wg-modes" role="group" aria-label="View">
+    <div class="wg-modes" role="group" aria-label="View" data-pending={pending ? 'yes' : 'no'}>
+      <span
+        class="wg-mode-thumb"
+        aria-hidden="true"
+        style={{ transform: `translateX(${at * 100}%)` }}
+      />
       {MODES.map((m) => (
         <button
           key={m.id}
           type="button"
           class={`wg-mode${mode === m.id ? ' on' : ''}`}
           aria-pressed={mode === m.id}
-          disabled={m.id === 'chunk' && !chunkReady}
+          disabled={m.id === 'chunk' && !target && job?.state !== 'ready'}
+          title={m.id === 'chunk' ? 'Fly into the selected chunk' : undefined}
           onClick={() => wgCommands.setMode(m.id)}
         >
+          {m.id === 'chunk' && pending ? <span class="wg-spin" aria-label="Generating" /> : null}
           {m.label}
         </button>
       ))}
@@ -222,6 +242,7 @@ export function WorldGenScreen() {
   return (
     <div class="wg-screen" data-wg-mode={wgMode.value} data-wg-bake={bake.state}>
       <ModeToggle />
+      {layers.overlay ? <BiomeLegend class="wg-legend" /> : null}
       {wgMode.value === 'chunk' ? (
         <button
           type="button"

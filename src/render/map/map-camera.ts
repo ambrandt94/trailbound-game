@@ -48,6 +48,8 @@ export class MapCamera {
   private wraps = true;
   /** When the planet globe is ready, zoom may continue out past the flat map. */
   private globeZoom = false;
+  /** A timed zoom (the Chunk / Globe toggle), eased in log space; any wheel zoom drops it. */
+  private glide: { from: number; to: number; t: number; dur: number } | null = null;
   private zoomPivot: {
     wx: number;
     wy: number;
@@ -117,6 +119,7 @@ export class MapCamera {
   }
 
   zoomAt(sx: number, sy: number, factor: number, viewW: number, viewH: number): void {
+    this.glide = null;
     const next = clamp(this.targetScale * factor, this.minScale(), MAP_ZOOM_CAP);
     const before = this.follow ? null : this.screenToWorld(sx, sy, viewW, viewH);
     this.targetScale = next;
@@ -142,7 +145,24 @@ export class MapCamera {
 
   /** Ease toward a scale. The current scale catches up in `update`. */
   easeScale(scale: number): void {
+    this.glide = null;
     this.targetScale = clamp(scale, this.minScale(), MAP_ZOOM_CAP);
+  }
+
+  /**
+   * Zoom to `scale` over `seconds`, slow out and slow in, evenly in log space
+   * (a 30× zoom out to the globe reads as one smooth pull back).
+   */
+  glideScale(scale: number, seconds = 0.8): void {
+    const to = clamp(scale, this.minScale(), MAP_ZOOM_CAP);
+    this.zoomPivot = null;
+    this.targetScale = to;
+    this.glide = { from: this.scale, to, t: 0, dur: Math.max(0.05, seconds) };
+  }
+
+  /** True while a `glideScale` runs. */
+  gliding(): boolean {
+    return this.glide !== null;
   }
 
   lookAt(x: number, y: number, scale?: number): void {
@@ -153,9 +173,15 @@ export class MapCamera {
     this.x = this.targetX;
     this.y = this.targetY;
     if (scale) {
+      this.glide = null;
       this.targetScale = clamp(scale, this.minScale(), MAP_ZOOM_CAP);
       this.scale = this.targetScale;
     }
+  }
+
+  /** Drop a running `glideScale` (the dive takes the camera). */
+  stopGlide(): void {
+    this.glide = null;
   }
 
   update(dt: number, heroX: number, heroY: number): void {
@@ -166,9 +192,20 @@ export class MapCamera {
     }
     const zoomT = 1 - Math.exp(-ZOOM_FOLLOW * dt);
     const panT = 1 - Math.exp(-PAN_FOLLOW * dt);
-    this.scale += (this.targetScale - this.scale) * zoomT;
-    if (Math.abs(this.scale - this.targetScale) <= this.targetScale * 0.0015) {
-      this.scale = this.targetScale;
+    const glide = this.glide;
+    if (glide) {
+      glide.t += dt;
+      const k = easeInOut(glide.t / glide.dur);
+      this.scale = Math.exp(Math.log(glide.from) + (Math.log(glide.to) - Math.log(glide.from)) * k);
+      if (glide.t >= glide.dur) {
+        this.scale = glide.to;
+        this.glide = null;
+      }
+    } else {
+      this.scale += (this.targetScale - this.scale) * zoomT;
+      if (Math.abs(this.scale - this.targetScale) <= this.targetScale * 0.0015) {
+        this.scale = this.targetScale;
+      }
     }
     if (this.zoomPivot && !this.follow) {
       this.holdZoomPivot();
@@ -211,4 +248,10 @@ export class MapCamera {
       followPlayer: this.follow,
     };
   }
+}
+
+/** Cubic slow out, slow in on 0..1. */
+function easeInOut(t: number): number {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
 }

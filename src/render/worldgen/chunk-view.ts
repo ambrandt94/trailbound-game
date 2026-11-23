@@ -3,7 +3,7 @@
  * and zoom, town labels and its biome or height layer. The raster comes from
  * the worker (`jobs.ts`); this only draws it.
  */
-import type { ChunkRaster } from '../../core/planet';
+import { biomeWashRgba, type ChunkRaster } from '../../core/planet';
 
 export interface ChunkViewState {
   /** Raster px per CSS px, relative to fitting the map in the view. */
@@ -23,6 +23,11 @@ export class ChunkView {
   state: ChunkViewState = { zoom: 1, cx: 0, cy: 0 };
   showHeight = false;
   showLabels = true;
+  /** Biome overlay: the legend's flat colours washed over the map. */
+  overlay = false;
+  /** Biome the legend singles out, or null. */
+  focus: number | null = null;
+  private wash: { key: string; canvas: HTMLCanvasElement } | null = null;
 
   constructor(private readonly host: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -41,10 +46,29 @@ export class ChunkView {
   setRaster(raster: ChunkRaster | null): void {
     if (raster === this.raster) return;
     this.raster = raster;
+    this.wash = null;
     this.images = raster
       ? { biome: toCanvas(raster.biome, raster.size), height: toCanvas(raster.height, raster.size) }
       : null;
     if (raster) this.state = { zoom: 1, cx: raster.size / 2, cy: raster.size / 2 };
+    this.dirty = true;
+  }
+
+  /** The map image on show (biome or height), for the planet view's crossfade overlay. */
+  image(): HTMLCanvasElement | null {
+    if (!this.images) return null;
+    return this.showHeight ? this.images.height : this.images.biome;
+  }
+
+  /** Side of the whole map on screen at its fitted zoom, CSS px. */
+  fitSidePx(viewW: number, viewH: number): number {
+    return Math.min(viewW, viewH) * 0.92;
+  }
+
+  /** Back to the whole map, fitted and centred (where a fly in lands). */
+  resetView(): void {
+    if (!this.raster) return;
+    this.state = { zoom: 1, cx: this.raster.size / 2, cy: this.raster.size / 2 };
     this.dirty = true;
   }
 
@@ -108,6 +132,11 @@ export class ChunkView {
     const y0 = h / 2 - this.state.cy * s;
     g.imageSmoothingEnabled = s < 1;
     g.drawImage(this.showHeight ? img.height : img.biome, x0, y0, r.size * s, r.size * s);
+    const wash = this.washCanvas();
+    if (wash) {
+      g.imageSmoothingEnabled = false;
+      g.drawImage(wash, x0, y0, r.size * s, r.size * s);
+    }
     g.strokeStyle = 'rgba(255,255,255,0.85)';
     g.lineWidth = 2;
     g.strokeRect(x0 - 1, y0 - 1, r.size * s + 2, r.size * s + 2);
@@ -134,6 +163,21 @@ export class ChunkView {
       }
     }
     return true;
+  }
+
+  /** The overlay / focus wash for the current raster, rebuilt only when either changes. */
+  private washCanvas(): HTMLCanvasElement | null {
+    const r = this.raster;
+    if (!r || (!this.overlay && this.focus === null)) return null;
+    const key = `${this.overlay}|${this.focus}`;
+    if (this.wash?.key === key) return this.wash.canvas;
+    const w = biomeWashRgba(r.ids, r.size, r.size, 768, this.overlay ? 0.62 : 0, this.focus);
+    const c = document.createElement('canvas');
+    c.width = w.w;
+    c.height = w.h;
+    c.getContext('2d')?.putImageData(new ImageData(new Uint8ClampedArray(w.rgba), w.w, w.h), 0, 0);
+    this.wash = { key, canvas: c };
+    return c;
   }
 
   dispose(): void {
