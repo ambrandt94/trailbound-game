@@ -14,6 +14,7 @@ import {
   regionsRumors,
   regionsSelected,
   type RegionsDebug,
+  type RegionsReadout,
   type RegionsTool,
 } from './regions-state';
 
@@ -29,6 +30,8 @@ function Range(props: {
   disabled?: boolean;
   onInput: (v: number) => void;
   extra?: ComponentChildren;
+  /** One plain line under the label: what the control does. */
+  hint?: string;
 }) {
   return (
     <label class="rg-row">
@@ -36,6 +39,7 @@ function Range(props: {
         {props.label} <em class="wg-readout">{props.readout ?? props.value}</em>
         {props.extra}
       </span>
+      {props.hint ? <small class="rg-hint">{props.hint}</small> : null}
       <input
         type="range"
         min={props.min}
@@ -94,47 +98,70 @@ const TOOLS: Array<{ id: RegionsTool; label: string; title: string }> = [
   { id: 'centre', label: 'Centre', title: 'Click to move the home / centre chunk' },
 ];
 
+/** The view's state in plain words. */
+export function plainSummary(r: RegionsReadout, d: RegionsDebug): string {
+  const across = Math.max(1, Math.round(r.knownSpan));
+  const chunks = r.known === 1 ? '1 chunk' : `${r.known} chunks`;
+  const showing = r.step <= 1 ? 'showing your chunk' : `showing ${r.step}×${r.step}`;
+  const next =
+    r.step <= 1
+      ? `widens after ${r.nextAt} visited`
+      : `${r.step + 1}×${r.step + 1} after ${r.nextAt} visited`;
+  let shape: string;
+  if (r.bend < 0.01) shape = `flat map, curving starts at ${d.bendStart} across`;
+  else if (r.bend < 0.99)
+    shape = `curving (${Math.round(r.bend * 100)}%), whole globe at ${d.spanFull} across`;
+  else shape = 'the whole globe';
+  return `You know ${chunks}, spanning ${across} across; ${showing} (${next}); ${shape}.`;
+}
+
 function Readout() {
   const r = regionsReadout.value;
   if (!r) return <p class="note">Waiting for the first frame…</p>;
   return (
-    <dl class="rg-readout" aria-label="Regions readout">
-      <dt>Known</dt>
-      <dd>
-        {r.known} visited · {r.glimpsed} glimpsed
-      </dd>
-      <dt>Span</dt>
-      <dd>
-        {r.span.toFixed(1)} chunks · {Math.round(r.km).toLocaleString('en-US')} km
-      </dd>
-      <dt>k / bend</dt>
-      <dd>
-        {r.k.toFixed(2)} / {r.bend.toFixed(2)} · view ±{r.visibleDeg.toFixed(1)}°
-      </dd>
-      <dt>Chunk</dt>
-      <dd>
-        {Math.round(r.chunkPx)} px · clouds ×{r.pixel}
-      </dd>
-      <dt>Day</dt>
-      <dd>{r.today}</dd>
-      <dt>Frame</dt>
-      <dd>
-        {r.frameMs.toFixed(1)} ms avg · {r.frameMax.toFixed(1)} max · GL {r.drawMs.toFixed(1)} · 2D{' '}
-        {r.overlayMs.toFixed(1)} ({r.stamps} stamps)
-      </dd>
-      <dt>Detail</dt>
-      <dd>
-        {r.detailReady} chunk maps{r.detailQueued ? ' · generating…' : ''}
-      </dd>
-      <dt>Clouds</dt>
-      <dd>
-        {r.atlas === 'loaded'
-          ? 'pixel art'
-          : r.atlas === 'failed'
-            ? 'procedural (atlas failed)'
-            : 'loading…'}
-      </dd>
-    </dl>
+    <>
+      <p class="rg-summary" aria-live="polite">
+        {plainSummary(r, regionsDebug.value)}
+      </p>
+      <dl class="rg-readout" aria-label="Regions readout">
+        <dt>Known</dt>
+        <dd>
+          {r.known} visited · {r.glimpsed} glimpsed
+        </dd>
+        <dt>Span</dt>
+        <dd>
+          {r.knownSpan.toFixed(1)} known · {r.span.toFixed(1)} shown ·{' '}
+          {Math.round(r.km).toLocaleString('en-US')} km
+        </dd>
+        <dt>k / bend</dt>
+        <dd>
+          {r.k.toFixed(2)} / {r.bend.toFixed(2)} · view ±{r.visibleDeg.toFixed(1)}°
+        </dd>
+        <dt>Chunk</dt>
+        <dd>
+          {Math.round(r.chunkPx)} px · clouds ×{r.pixel}
+        </dd>
+        <dt>Day</dt>
+        <dd>{r.today}</dd>
+        <dt>Frame</dt>
+        <dd>
+          {r.frameMs.toFixed(1)} ms avg · {r.frameMax.toFixed(1)} max · GL {r.drawMs.toFixed(1)} ·
+          2D {r.overlayMs.toFixed(1)} ({r.stamps} stamps)
+        </dd>
+        <dt>Detail</dt>
+        <dd>
+          {r.detailReady} chunk maps{r.detailQueued ? ' · generating…' : ''}
+        </dd>
+        <dt>Clouds</dt>
+        <dd>
+          {r.atlas === 'loaded'
+            ? 'pixel art'
+            : r.atlas === 'failed'
+              ? 'procedural (atlas failed)'
+              : 'loading…'}
+        </dd>
+      </dl>
+    </>
   );
 }
 
@@ -235,7 +262,7 @@ export function RegionsPanel() {
 
           <h4>Explored (simulated)</h4>
           <div class="rg-tools" role="group" aria-label="Exploration">
-            {(['block', 'walk', 'journey'] as const).map((e) => (
+            {(['count', 'block', 'walk', 'journey'] as const).map((e) => (
               <button
                 key={e}
                 type="button"
@@ -243,10 +270,27 @@ export function RegionsPanel() {
                 aria-pressed={d.explore === e}
                 onClick={() => set({ explore: e })}
               >
-                {e === 'block' ? 'Radius' : e === 'walk' ? 'Random walk' : 'Journey'}
+                {e === 'count'
+                  ? 'Visited'
+                  : e === 'block'
+                    ? 'Radius'
+                    : e === 'walk'
+                      ? 'Random walk'
+                      : 'Journey'}
               </button>
             ))}
           </div>
+          {d.explore === 'count' ? (
+            <Range
+              label="Visited chunks"
+              value={d.visitCount}
+              min={1}
+              max={400}
+              step={1}
+              hint="A compact patch this big, nearest your centre chunk first."
+              onInput={(v) => set({ visitCount: v })}
+            />
+          ) : null}
           {d.explore === 'block' ? (
             <Range
               label="Known block"
@@ -335,68 +379,124 @@ export function RegionsPanel() {
             </button>
           </div>
 
-          <h4>View</h4>
+          <h4>How the view grows</h4>
           <Range
-            label="Knowledge k"
-            value={d.k}
-            min={0}
-            max={1}
-            step={0.01}
-            readout={d.kAuto ? 'auto' : d.k.toFixed(2)}
-            disabled={d.kAuto}
-            onInput={(v) => set({ k: v })}
-            extra={
-              <Auto
-                label="Knowledge"
-                on={d.kAuto}
-                onChange={(v) => set({ kAuto: v, k: regionsReadout.value?.k ?? d.k })}
-              />
-            }
+            label="Visited chunks before the view widens"
+            value={d.widenAfter}
+            min={1}
+            max={12}
+            step={1}
+            readout={`${d.widenAfter}`}
+            hint="Until then the view stays on the chunk you're in."
+            onInput={(v) => set({ widenAfter: v })}
           />
           <Range
-            label="Bend"
-            value={d.bend}
-            min={0}
-            max={1}
-            step={0.01}
-            readout={d.bendAuto ? 'auto' : d.bend.toFixed(2)}
-            disabled={d.bendAuto}
-            onInput={(v) => set({ bend: v })}
-            extra={
-              <Auto
-                label="Bend"
-                on={d.bendAuto}
-                onChange={(v) => set({ bendAuto: v, bend: regionsReadout.value?.bend ?? d.bend })}
-              />
-            }
+            label="How full a step must be"
+            value={d.stepFill}
+            min={0.3}
+            max={1.5}
+            step={0.05}
+            readout={`${Math.round(d.stepFill * 100)}%`}
+            hint={`The view frames N×N once N² × this many chunks are visited (3×3 needs ${Math.ceil(9 * d.stepFill - 1e-9)}).`}
+            onInput={(v) => set({ stepFill: v })}
           />
           <Range
-            label="Bend starts at"
+            label="Start curving at"
             value={d.bendStart}
             min={2}
-            max={15}
-            step={0.5}
-            readout={`${d.bendStart} chunks`}
-            onInput={(v) => set({ bendStart: v })}
+            max={30}
+            step={1}
+            readout={`${d.bendStart} chunks across`}
+            hint="Below this the map is flat."
+            onInput={(v) => set({ bendStart: v, spanFull: Math.max(d.spanFull, v + 1) })}
           />
           <Range
-            label="Whole globe at"
+            label="Full globe at"
             value={d.spanFull}
-            min={8}
-            max={60}
+            min={Math.max(4, d.bendStart + 1)}
+            max={80}
             step={1}
-            readout={`${d.spanFull} chunks`}
+            readout={`${d.spanFull} chunks across`}
+            hint="The view has become the whole planet by here."
             onInput={(v) => set({ spanFull: v })}
           />
           <Range
-            label="Margin"
-            value={d.margin}
-            min={1}
-            max={2.5}
-            step={0.05}
-            readout={`×${d.margin.toFixed(2)}`}
-            onInput={(v) => set({ margin: v })}
+            label="Reveal speed"
+            value={d.revealSeconds}
+            min={0}
+            max={12}
+            step={0.5}
+            readout={`${d.revealSeconds} s`}
+            hint="How long the view takes to ease out when you learn a new chunk."
+            onInput={(v) => set({ revealSeconds: v })}
           />
+          <Range
+            label="Haze around visited chunks"
+            value={d.hazeRings}
+            min={0}
+            max={3}
+            step={1}
+            readout={d.hazeRings === 1 ? '1 ring' : `${d.hazeRings} rings`}
+            hint="Chunks this close to where you've been show through a light haze."
+            onInput={(v) => set({ hazeRings: v })}
+          />
+          <details
+            class="rg-advanced"
+            open={d.advanced}
+            onToggle={(e) => {
+              const t = e.currentTarget;
+              if (t instanceof HTMLDetailsElement && t.open !== d.advanced)
+                set({ advanced: t.open });
+            }}
+          >
+            <summary>Advanced (raw k / bend)</summary>
+            <Range
+              label="Knowledge k"
+              value={d.k}
+              min={0}
+              max={1}
+              step={0.01}
+              readout={d.kAuto ? 'auto' : d.k.toFixed(2)}
+              disabled={d.kAuto}
+              hint="0 = one chunk fills the view, 1 = the whole globe (log of chunks across)."
+              onInput={(v) => set({ k: v })}
+              extra={
+                <Auto
+                  label="Knowledge"
+                  on={d.kAuto}
+                  onChange={(v) => set({ kAuto: v, k: regionsReadout.value?.k ?? d.k })}
+                />
+              }
+            />
+            <Range
+              label="Bend"
+              value={d.bend}
+              min={0}
+              max={1}
+              step={0.01}
+              readout={d.bendAuto ? 'auto' : d.bend.toFixed(2)}
+              disabled={d.bendAuto}
+              hint="0 = flat map, 1 = globe."
+              onInput={(v) => set({ bend: v })}
+              extra={
+                <Auto
+                  label="Bend"
+                  on={d.bendAuto}
+                  onChange={(v) => set({ bendAuto: v, bend: regionsReadout.value?.bend ?? d.bend })}
+                />
+              }
+            />
+            <Range
+              label="Room around the view"
+              value={d.margin}
+              min={1}
+              max={2.5}
+              step={0.05}
+              readout={`×${d.margin.toFixed(2)}`}
+              hint="Extra space around the framed chunks."
+              onInput={(v) => set({ margin: v })}
+            />
+          </details>
 
           <h4>Fog and clouds</h4>
           <div class="wg-layers">

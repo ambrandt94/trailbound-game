@@ -19,11 +19,11 @@ import {
   glimpsed,
   journeyPath,
   knowledgeFromPath,
-  knownExtent,
   makeRumor,
   maxVisibleAngle,
   normalize3,
   randomWalk,
+  regionsFraming,
   regionsProject,
   regionsTarget,
   regionsUnproject,
@@ -36,6 +36,7 @@ import {
   type ChunkAddr,
   type Knowledge,
   type RegionsFrame,
+  type RegionsFraming,
   type RegionsTuning,
   type Rumor,
   type Vec3,
@@ -54,7 +55,10 @@ import {
 } from '../../render/worldgen/regions-view';
 import {
   bindRegions,
+  clearRegionsDebug,
+  loadRegionsDebug,
   regionsCommands,
+  saveRegionsDebug,
   DEFAULT_REGIONS_DEBUG,
   regionsDebug,
   regionsJourney,
@@ -129,6 +133,13 @@ export class RegionsController {
   private maskDirty = true;
   private cur: ViewNow | null = null;
   private target: ReturnType<typeof regionsTarget> | null = null;
+  private framing: RegionsFraming | null = null;
+  /** Bumped whenever the simulated knowledge changes (the view only re-frames then). */
+  private knowVersion = 0;
+  private targetKey = '';
+  /** The slow ease from the last framing to the new one (several seconds). */
+  private reveal: { from: ViewNow; to: ViewNow; t0: number; dur: number } | null = null;
+  private nowMs = 0;
   /** Hand pan / zoom on top of the knowledge-driven view. */
   private pan: Vec3 | null = null;
   private zoomMul = 1;
@@ -160,6 +171,8 @@ export class RegionsController {
     private readonly host: RegionsHost,
   ) {
     this.runner = new JobRunner((reply) => this.onDetail(reply));
+    // The panel remembers its values between debug sessions (localStorage, never a save).
+    regionsDebug.value = loadRegionsDebug();
     this.view = new RegionsView(stage);
     this.overlay = new RegionsOverlay(stage);
     void loadCloudAtlas().then((atlas) => {
@@ -181,6 +194,7 @@ export class RegionsController {
         regionsSelected.value = null;
         regionsNote.value = null;
         this.mode = 'you';
+        clearRegionsDebug();
         regionsDebug.value = { ...DEFAULT_REGIONS_DEBUG, collapsed: regionsDebug.value.collapsed };
       },
       newWalk: () => {
@@ -288,7 +302,7 @@ export class RegionsController {
     this.cleanups.push(
       effect(() => {
         const d = regionsDebug.value;
-        void d;
+        saveRegionsDebug(d);
         this.simulate();
       }),
     );
@@ -338,6 +352,9 @@ export class RegionsController {
     const d = regionsDebug.value;
     return {
       ...DEFAULT_REGIONS_TUNING,
+      widenAfter: d.widenAfter,
+      stepFill: d.stepFill,
+      hazeRings: d.hazeRings,
       bendStart: d.bendStart,
       spanFull: Math.max(d.bendStart + 1, d.spanFull),
       margin: d.margin,
@@ -367,6 +384,13 @@ export class RegionsController {
       this.journeyAt = Math.min(this.journeyAt, Math.max(0, this.path.length - 1));
       base = knowledgeFromPath(this.path, Math.floor(this.journeyAt) + 1);
       this.player = chunkToSphere(n, this.path[Math.floor(this.journeyAt)] ?? centre);
+    } else if (d.explore === 'count') {
+      // A compact patch of `visitCount` chunks, nearest the centre first.
+      this.path = [];
+      const count = Math.max(1, Math.round(d.visitCount));
+      const block = exploreBlock(n, centre, Math.ceil(Math.sqrt(count)) + 2).slice(0, count);
+      base = new Map(block.map((a) => [chunkKey(a), { addr: a, lastVisit: 0 }]));
+      this.player = chunkToSphere(n, centre);
     } else {
       this.path = [];
       const block = exploreBlock(n, centre, Math.max(1, Math.round(d.block)));
@@ -382,7 +406,8 @@ export class RegionsController {
     for (const [key, addr] of this.arrivals) base.set(key, { addr, lastVisit: last });
     this.known = base;
     this.today = last + d.timeSkip;
-    this.glimpse = glimpsed(n, base);
+    this.glimpse = glimpsed(n, base, d.hazeRings);
+    this.knowVersion++;
     this.openCache.clear();
     this.maskDirty = true;
     this.syncJourney();
@@ -581,9 +606,77 @@ export class RegionsController {
     this.focusRumor = null;
   }
 
-  private youView(): ViewNow {
+  /**
+   * Re-frame only when the knowledge (or a framing setting) changed, and then
+   * ease there over `revealSeconds`, so the view grows in earned steps
+   * instead of tracking every frame.
+   */
+  private retarget(now: number, w: number, h: number): void {
+    const d = regionsDebug.value;
+    const t = this.tuning();
+    const key = [
+      this.knowVersion,
+      w,
+      h,
+      t.widenAfter,
+      t.stepFill,
+      t.bendStart,
+      t.spanFull,
+      t.margin,
+      d.kAuto ? 'a' : d.k,
+      d.bendAuto ? 'a' : d.bend,
+    ].join('|');
+    if (key === this.targetKey && this.target) return;
+    const n = this.host.n();
+    const from = this.target ? this.shownView(now) : null;
+    const resized = this.targetKey.split('|').slice(1, 3).join('|') !== `${w}|${h}`;
+    this.targetKey = key;
+    this.framing = regionsFraming(
+      n,
+      this.known,
+      this.player ?? chunkToSphere(n, this.centreChunk()),
+      t,
+    );
+    this.target = regionsTarget(n, this.framing, w, h, t, {
+      k: d.kAuto ? null : d.k,
+      bend: d.bendAuto ? null : d.bend,
+    });
+    const to = { c: this.target.centre, logR: Math.log(this.target.R), bend: this.target.bend };
+    const same =
+      from &&
+      angleBetween(from.c, to.c) < 1e-6 &&
+      Math.abs(from.logR - to.logR) < 1e-4 &&
+      Math.abs(from.bend - to.bend) < 1e-4;
+    if (!from || resized || same || d.revealSeconds <= 0) {
+      this.reveal = null;
+      return;
+    }
+    this.reveal = { from, to, t0: now, dur: d.revealSeconds * 1000 };
+  }
+
+  /** The knowledge view right now: mid-reveal, or the target. */
+  private shownView(now: number): ViewNow {
     const t = this.target!;
-    return { c: this.pan ?? t.centre, logR: Math.log(t.R * this.zoomMul), bend: t.bend };
+    const to = { c: t.centre, logR: Math.log(t.R), bend: t.bend };
+    const r = this.reveal;
+    if (!r) return to;
+    const u = Math.min(1, (now - r.t0) / r.dur);
+    if (u >= 1) {
+      this.reveal = null;
+      return to;
+    }
+    // Slow in, slow out.
+    const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+    return {
+      c: slerp3(r.from.c, r.to.c, e),
+      logR: r.from.logR + (r.to.logR - r.from.logR) * e,
+      bend: r.from.bend + (r.to.bend - r.from.bend) * e,
+    };
+  }
+
+  private youView(): ViewNow {
+    const v = this.shownView(this.nowMs);
+    return { c: this.pan ?? v.c, logR: v.logR + Math.log(this.zoomMul), bend: v.bend };
   }
 
   private flyTo(to: ViewNow, then: 'rumor' | 'you'): void {
@@ -723,14 +816,9 @@ export class RegionsController {
       if (Math.floor(this.journeyAt) !== was || !this.playing) this.simulate();
     }
 
-    const ext = knownExtent(n, this.known, this.player ?? chunkToSphere(n, this.centreChunk()));
-    this.target = regionsTarget(n, ext, w, h, this.tuning(), {
-      k: d.kAuto ? null : d.k,
-      bend: d.bendAuto ? null : d.bend,
-    });
-    if (!this.cur) {
-      this.cur = { c: this.target.centre, logR: Math.log(this.target.R), bend: this.target.bend };
-    }
+    this.nowMs = now;
+    this.retarget(now, w, h);
+    if (!this.cur) this.cur = this.youView();
     this.step(now, dt);
     if (this.maskDirty) this.rebuildMask();
     this.pumpDetail();
@@ -844,16 +932,20 @@ export class RegionsController {
     });
     this.overlayMs = performance.now() - t1;
 
-    if (now - this.lastReadout > 250) {
+    if (now - this.lastReadout > 250 && this.target) {
       this.lastReadout = now;
       const ft = this.frameTimes;
       const avg = ft.length ? ft.reduce((s, v) => s + v, 0) / ft.length : 0;
       const t = this.target;
+      const fr = this.framing;
       regionsReadout.value = {
         known: this.known.size,
+        knownSpan: fr?.knownSpan ?? 1,
+        step: fr?.step ?? 1,
+        nextAt: fr?.nextAt ?? 1,
         glimpsed: this.glimpse.size,
         span: t.span,
-        km: t.span * this.host.chunkKm(),
+        km: (fr?.knownSpan ?? t.span) * this.host.chunkKm(),
         k: t.k,
         bend: frame.bend,
         visibleDeg: (t.visible * 180) / Math.PI,

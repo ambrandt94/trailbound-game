@@ -5,7 +5,7 @@
 import { signal } from '@preact/signals';
 import type { ChunkAddr, Rumor } from '../core/planet';
 
-export type RegionsExplore = 'block' | 'walk' | 'journey';
+export type RegionsExplore = 'count' | 'block' | 'walk' | 'journey';
 export type RegionsTool = 'visit' | 'rumor' | 'waypoint' | 'centre';
 export type RegionsClouds = 'art' | 'procedural' | 'off';
 
@@ -15,16 +15,28 @@ export interface RegionsDebug {
   explore: RegionsExplore;
   /** Block side, chunks (1 → 2×2 → N×N). */
   block: number;
+  /** 'count' mode: this many visited chunks, nearest the centre first. */
+  visitCount: number;
   walkSteps: number;
   walkSeed: number;
   kAuto: boolean;
   k: number;
   bendAuto: boolean;
   bend: number;
+  /** Visited chunks before the view widens past the current chunk. */
+  widenAfter: number;
+  /** Share of an N×N block visited before the view frames N×N (1 = all N²). */
+  stepFill: number;
   /** Chunks across at which the view starts to bend, and where the globe is whole. */
   bendStart: number;
   spanFull: number;
+  /** Seconds the view takes to ease to a new step (only when a chunk is learned). */
+  revealSeconds: number;
+  /** Rings of hazy chunks around the visited ones. */
+  hazeRings: number;
   margin: number;
+  /** The raw k / bend overrides section is open. */
+  advanced: boolean;
   fog: boolean;
   clouds: RegionsClouds;
   density: number;
@@ -49,17 +61,23 @@ export interface RegionsDebug {
 
 export const DEFAULT_REGIONS_DEBUG: RegionsDebug = {
   centre: null,
-  explore: 'block',
+  explore: 'count',
   block: 1,
+  visitCount: 1,
   walkSteps: 40,
   walkSeed: 1,
   kAuto: true,
   k: 0.5,
   bendAuto: true,
   bend: 0,
-  bendStart: 5,
-  spanFull: 20,
+  widenAfter: 4,
+  stepFill: 1,
+  bendStart: 8,
+  spanFull: 40,
+  revealSeconds: 4,
+  hazeRings: 1,
   margin: 1.2,
+  advanced: false,
   fog: true,
   clouds: 'art',
   density: 0.8,
@@ -79,6 +97,12 @@ export const DEFAULT_REGIONS_DEBUG: RegionsDebug = {
 
 export interface RegionsReadout {
   known: number;
+  /** The known area across, chunks. */
+  knownSpan: number;
+  /** Chunks across the view frames now (the earned step). */
+  step: number;
+  /** Visited chunks the next step needs. */
+  nextAt: number;
   glimpsed: number;
   span: number;
   km: number;
@@ -98,6 +122,44 @@ export interface RegionsReadout {
   detailQueued: number;
   atlas: 'loaded' | 'loading' | 'failed';
   view: 'you' | 'rumor' | 'isolated';
+}
+
+/** Debug-session memory of the panel (World Gen only; never part of a save). */
+const STORE_KEY = 'tb-regions-debug';
+
+/** The panel values from the last debug session, over the defaults. */
+export function loadRegionsDebug(): RegionsDebug {
+  try {
+    const raw = globalThis.localStorage?.getItem(STORE_KEY);
+    if (!raw) return { ...DEFAULT_REGIONS_DEBUG };
+    const parsed = JSON.parse(raw) as Partial<RegionsDebug>;
+    const out = { ...DEFAULT_REGIONS_DEBUG };
+    for (const key of Object.keys(out) as Array<keyof RegionsDebug>) {
+      const v = parsed[key];
+      if (v !== undefined && (typeof v === typeof out[key] || key === 'centre')) {
+        (out as Record<string, unknown>)[key] = v;
+      }
+    }
+    return out;
+  } catch {
+    return { ...DEFAULT_REGIONS_DEBUG };
+  }
+}
+
+export function saveRegionsDebug(d: RegionsDebug): void {
+  try {
+    globalThis.localStorage?.setItem(STORE_KEY, JSON.stringify(d));
+  } catch {
+    // Storage full or blocked: the panel still works, it just won't remember.
+  }
+}
+
+export function clearRegionsDebug(): void {
+  try {
+    globalThis.localStorage?.removeItem(STORE_KEY);
+  } catch {
+    // Nothing to clear.
+  }
 }
 
 export const regionsDebug = signal<RegionsDebug>({ ...DEFAULT_REGIONS_DEBUG });

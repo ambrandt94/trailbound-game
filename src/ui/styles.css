@@ -1407,6 +1407,56 @@ input:focus-visible {
   width: 100%;
 }
 
+.rg-hint {
+  font-size: 11px;
+  line-height: 1.25;
+  opacity: 0.72;
+  margin: 0.05rem 0 0.1rem;
+}
+
+.rg-summary {
+  margin: 0.35rem 0 0.2rem;
+  padding: 0.35rem 0.45rem;
+  border-left: 3px solid rgba(122, 62, 24, 0.55);
+  background: rgba(255, 244, 214, 0.55);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+
+.rg-advanced {
+  margin: 0.4rem 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px dashed rgba(42, 29, 16, 0.25);
+}
+
+.rg-advanced summary {
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* The panel is a dense debug tool: keep its controls small (the app-wide
+   #ui control size is meant for the game's menus). */
+#ui .wg-regions-panel button,
+#ui .wg-regions-panel select,
+#ui .wg-regions-panel summary {
+  font-size: 12px;
+}
+
+#ui .wg-regions-panel button {
+  line-height: 1.25;
+  min-height: 0;
+  min-width: 0;
+  padding: 0.2rem 0.5rem;
+}
+
+#ui .wg-regions-panel .rg-auto,
+#ui .wg-regions-panel .rg-tool,
+#ui .wg-regions-panel .rg-collapse,
+#ui .wg-regions-panel .action {
+  font-size: 11px;
+}
+
 .rg-row select {
   font: inherit;
   font-size: 12px;
