@@ -757,8 +757,11 @@ export class Game implements GameHost {
       newGame: () => {
         void this.openNewWorldGen();
       },
-      openWorldGen: () => {
-        void this.openWorldGenFor();
+      openWorldGen: (view) => {
+        void this.openWorldGenFor(view);
+      },
+      mapView: (kind) => {
+        this.mapScene?.viewTo(kind);
       },
       continueGame: () => {
         void this.continueGame();
@@ -890,7 +893,7 @@ export class Game implements GameHost {
    * World Gen for the world in play, read-only. Game logic is paused while it
    * is open (only the top scene updates) and its chunk maps are dropped on close.
    */
-  private async openWorldGenFor(): Promise<void> {
+  private async openWorldGenFor(view: 'globe' | 'flat' = 'globe'): Promise<void> {
     const data = this.world.data;
     if (!data || this.stack.current()?.id === 'WorldGen') return;
     if (this.mode !== 'map' && this.mode !== 'area') return;
@@ -902,6 +905,7 @@ export class Game implements GameHost {
     await this.stack.push(
       new WorldGenScene({
         existing: { seed: this.world.seed, settings: { ...data.settings } },
+        view,
         onConfirm: () => undefined,
         onQuickStart: () => undefined,
         onClose: async () => {

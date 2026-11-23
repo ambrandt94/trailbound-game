@@ -1,7 +1,7 @@
 /**
  * World Gen's whole-planet images: one equirectangular raster per layer
  * (biomes with hillshade, hypsometric height, and a flags image for the land
- * mask and ice). Equirect is what both views need: the globe wraps it on a
+ * mask, ice and biome ids). Equirect is what both views need: the globe wraps it on a
  * sphere and the flat world map shows it as is, so WG4 can morph one into the
  * other with the same texture. Pure data; it runs in a worker.
  *
@@ -21,7 +21,7 @@ export interface WorldBake {
   biome: Uint8ClampedArray;
   /** Hypsometric tint: blue depths, green lowlands to white peaks (RGBA). */
   height: Uint8ClampedArray;
-  /** R = land (255) or sea (0); G = ice cover 0..255; A = 255. */
+  /** R = land (255) or sea (0); G = ice cover 0..255; B = biome id (Water at sea, for the overlay); A = 255. */
   flags: Uint8ClampedArray;
   /** Land share by area on the sphere, 0..1. */
   landShare: number;
@@ -110,6 +110,8 @@ export function bakeWorld(
       const iceCover = ice ? ice.iceAt(v) : s.biome === Biome.Snow && !land ? 1 : 0;
       flags[i * 4] = land ? 255 : 0;
       flags[i * 4 + 1] = Math.round(Math.max(0, Math.min(1, iceCover)) * 255);
+      // Biome id (ocean reads as Water), for the biome overlay and legend focus.
+      flags[i * 4 + 2] = land ? s.biome : Biome.Water;
       flags[i * 4 + 3] = 255;
       area += weight;
       if (land) landArea += weight;

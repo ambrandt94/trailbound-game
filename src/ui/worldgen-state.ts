@@ -16,6 +16,8 @@ export interface WgLayers {
   grid: boolean;
   ice: boolean;
   start: boolean;
+  /** Biome overlay: flat legend colours, with the legend shown. */
+  overlay: boolean;
 }
 
 export const DEFAULT_WG_LAYERS: WgLayers = {
@@ -25,6 +27,7 @@ export const DEFAULT_WG_LAYERS: WgLayers = {
   grid: true,
   ice: false,
   start: true,
+  overlay: false,
 };
 
 export interface WgBakeView {

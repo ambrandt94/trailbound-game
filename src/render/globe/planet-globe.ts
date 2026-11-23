@@ -34,10 +34,24 @@ export interface GlobeView {
   look: Vec3;
   /** "You are here" on the unit sphere. */
   pin: Vec3 | null;
+  /**
+   * 0..1; below 1 the map's last frame shows through (the crossfade band just
+   * past the switch scale). Defaults to 1.
+   */
+  opacity?: number;
+  /**
+   * Mid-glide (the HUD's Chunk / Globe toggle): draw at half resolution. Software
+   * GL pays per pixel and the motion hides it; the settled frame is sharp.
+   */
+  motion?: boolean;
 }
 
 export class PlanetGlobe {
   private canvas: HTMLCanvasElement | null = null;
+  private opacity = '';
+  private primed = false;
+  /** The starfield behind the planet, drawn at the view's size. */
+  private sky: { w: number; h: number; tex: THREE.CanvasTexture } | null = null;
   private renderer: THREE.WebGLRenderer | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.OrthographicCamera | null = null;
@@ -120,7 +134,13 @@ export class PlanetGlobe {
       this.root.dataset.globe = 'on';
       this.lastViewKey = '';
     }
+    const opacity = (view.opacity ?? 1).toFixed(3);
+    if (opacity !== this.opacity) {
+      this.opacity = opacity;
+      canvas.style.opacity = opacity;
+    }
     const key = [
+      view.motion ? 'm' : 's',
       view.viewW,
       view.viewH,
       view.diameterPx.toFixed(2),
@@ -132,8 +152,47 @@ export class PlanetGlobe {
     this.draw(view);
   }
 
-  hide(): void {
-    if (!this.shown) return;
+  /**
+   * Build the planet and draw it once off screen as soon as the bake lands, so
+   * the first zoom out (or toggle glide) does not pay for meshes and texture uploads.
+   */
+  warm(viewW: number, viewH: number): void {
+    if (!this.ready || !this.result || this.shown) return;
+    if (this.builtKey === this.result.key) return;
+    if (!this.renderer && !this.createRenderer()) return;
+    this.buildPlanet(this.result);
+    this.draw({
+      viewW,
+      viewH,
+      diameterPx: Math.min(viewW, viewH) * 0.8,
+      look: [0, 0, 1],
+      pin: null,
+    });
+    this.lastViewKey = '';
+  }
+
+  /**
+   * Put the (transparent) globe layer up ahead of a glide out, so the first
+   * band frame does not also pay for bringing the canvas on screen.
+   */
+  prime(): void {
+    if (!this.canvas || this.shown) return;
+    this.primed = true;
+    this.opacity = '0.000';
+    this.canvas.style.opacity = '0';
+    this.canvas.style.visibility = 'visible';
+  }
+
+  /** Take the globe down. A primed (invisible) layer stays up unless `keepPrimed` is false. */
+  hide(keepPrimed = false): void {
+    if (!this.shown) {
+      if (this.primed && !keepPrimed) {
+        this.primed = false;
+        if (this.canvas) this.canvas.style.visibility = 'hidden';
+      }
+      return;
+    }
+    this.primed = false;
     this.shown = false;
     if (this.canvas) this.canvas.style.visibility = 'hidden';
     this.root.dataset.globe = 'off';
@@ -207,12 +266,14 @@ export class PlanetGlobe {
     this.after.insertAdjacentElement('afterend', canvas);
     let renderer: THREE.WebGLRenderer;
     try {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+      // Opaque, with the starfield drawn as the scene background: software GL
+      // composites an alpha canvas at a real per-frame cost (WG4 measured it).
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
     } catch {
       canvas.remove();
       return false;
     }
-    renderer.setClearColor(0x000000, 0);
+    renderer.setClearColor(0x070b14, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 20);
@@ -246,7 +307,9 @@ export class PlanetGlobe {
     }
     const req = this.pendingMeta(result.key);
     const group = new THREE.Group();
-    const anisotropy = Math.min(4, this.renderer!.capabilities.getMaxAnisotropy());
+    // No anisotropic filtering: software GL pays for it on every globe pixel, and
+    // the lit limb hides the difference.
+    const anisotropy = 1;
     result.faces.forEach((rgba, face) => {
       const size = Math.round(Math.sqrt(rgba.length / 4));
       const tex = new THREE.DataTexture(rgba, size, size, THREE.RGBAFormat);
@@ -285,11 +348,18 @@ export class PlanetGlobe {
   private draw(view: GlobeView): void {
     const renderer = this.renderer!;
     const camera = this.camera!;
-    const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+    const dpr = Math.min(2, globalThis.devicePixelRatio || 1) * (view.motion ? 0.25 : 1);
     const w = Math.max(1, Math.round(view.viewW));
     const h = Math.max(1, Math.round(view.viewH));
     renderer.setPixelRatio(dpr);
     renderer.setSize(w, h, false);
+    if (!this.sky || this.sky.w !== w || this.sky.h !== h) {
+      this.sky?.tex.dispose();
+      const tex = new THREE.CanvasTexture(skyCanvas(w, h));
+      tex.colorSpace = THREE.SRGBColorSpace;
+      this.sky = { w, h, tex };
+      this.scene!.background = tex;
+    }
     const radiusPx = Math.max(1, view.diameterPx / 2);
     camera.left = -w / 2 / radiusPx;
     camera.right = w / 2 / radiusPx;
@@ -485,4 +555,38 @@ function starfield(): string {
   }
   starCss = `url(${c.toDataURL()}) repeat, radial-gradient(ellipse at 50% 45%, #13203a 0%, #070b14 70%)`;
   return starCss;
+}
+
+/** The starfield (`starfield()`'s look) painted once at a view size, for the opaque globe canvas. */
+function skyCanvas(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  if (!g) return c;
+  const r = Math.max(w, h) * 0.7;
+  const grad = g.createRadialGradient(w * 0.5, h * 0.45, 0, w * 0.5, h * 0.45, r);
+  grad.addColorStop(0, '#13203a');
+  grad.addColorStop(1, '#070b14');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, w, h);
+  let s = 1234567;
+  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 0x100000000;
+  const stars: Array<[number, number, number, number]> = [];
+  for (let i = 0; i < 90; i++) {
+    const a = 0.25 + rnd() * 0.65;
+    const rad = rnd() < 0.1 ? 1.2 : 0.6;
+    stars.push([rnd() * 256, rnd() * 256, rad, a]);
+  }
+  for (let oy = 0; oy < h; oy += 256) {
+    for (let ox = 0; ox < w; ox += 256) {
+      for (const [x, y, rad, a] of stars) {
+        g.fillStyle = `rgba(220,230,255,${a.toFixed(2)})`;
+        g.beginPath();
+        g.arc(ox + x, oy + y, rad, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+  }
+  return c;
 }

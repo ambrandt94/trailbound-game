@@ -11,3 +11,4 @@ export * from './start-pick';
 export * from './make-field';
 export * from './world-bake';
 export * from './chunk-raster';
+export * from './biome-legend';

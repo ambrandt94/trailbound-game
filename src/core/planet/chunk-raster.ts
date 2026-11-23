@@ -23,6 +23,8 @@ export interface ChunkRaster {
   tiles: number;
   biome: Uint8ClampedArray;
   height: Uint8ClampedArray;
+  /** Biome id per raster pixel (for the biome overlay and legend focus). */
+  ids: Uint8Array;
   nodes: ChunkRasterNode[];
   /** Land share of the generated map, 0..1. */
   land: number;
@@ -41,6 +43,7 @@ export function chunkRaster(world: WorldData, maxSize: number): ChunkRaster {
   const step = tiles / size;
   const biome = new Uint8ClampedArray(size * size * 4);
   const height = new Uint8ClampedArray(size * size * 4);
+  const ids = new Uint8Array(size * size);
   const cellM = 8 * step;
   const hAt = (x: number, y: number) => {
     const tx = Math.min(tiles - 1, Math.max(0, Math.floor((x + 0.5) * step)));
@@ -78,6 +81,7 @@ export function chunkRaster(world: WorldData, maxSize: number): ChunkRaster {
       }
       const col = road ? ROAD : biomeRgb(b, b === Biome.Water ? Math.min(-1, e) : Math.max(1, e));
       const hyp = hypsoRgb(b === Biome.Water ? Math.min(-1, e) : Math.max(1, e));
+      ids[y * size + x] = b;
       const o = (y * size + x) * 4;
       biome[o] = col[0] * shade;
       biome[o + 1] = col[1] * shade;
@@ -114,6 +118,7 @@ export function chunkRaster(world: WorldData, maxSize: number): ChunkRaster {
     tiles,
     biome,
     height,
+    ids,
     nodes,
     land: land / Math.max(1, world.biomes.length),
     minM,

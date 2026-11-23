@@ -901,6 +901,15 @@ input:focus-visible {
   visibility: hidden;
 }
 
+/* WG4: while a transition runs the planet view draws everything, the chunk map included. */
+.wg-stage[data-anim] .wg-planet {
+  visibility: visible;
+}
+
+.wg-stage[data-anim] .wg-chunk {
+  visibility: hidden;
+}
+
 .wg-screen {
   position: absolute;
   inset: 0;
@@ -988,7 +997,8 @@ input:focus-visible {
   position: absolute;
   top: 12px;
   left: 12px;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(5.5rem, 1fr));
   pointer-events: auto;
   border: 2px solid #3a2410;
   border-radius: 6px;
@@ -996,22 +1006,74 @@ input:focus-visible {
   background: rgba(246, 241, 230, 0.95);
 }
 
+/* The sliding selection behind the three buttons (one third wide). */
+.wg-mode-thumb {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% / 3);
+  background: #7a3b22;
+  transition: transform 420ms cubic-bezier(0.65, 0, 0.35, 1);
+  pointer-events: none;
+}
+
 .wg-mode {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   border: 0;
   padding: 0.35rem 0.8rem;
   font: inherit;
   background: transparent;
   color: #2a1d10;
   cursor: pointer;
+  transition: color 300ms ease;
 }
 
 .wg-mode + .wg-mode {
-  border-left: 1px solid #c8b89c;
+  border-left: 1px solid rgba(200, 184, 156, 0.7);
 }
 
 .wg-mode.on {
-  background: #7a3b22;
   color: #fff6e0;
+}
+
+.wg-spin {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: wg-spin 0.8s linear infinite;
+}
+
+/* The same toggle on the map HUD, under the toolbar. */
+.hud-views {
+  position: relative;
+  top: auto;
+  left: auto;
+  align-self: flex-end;
+  font-size: 0.85rem;
+}
+
+#ui .hud-views .wg-mode {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+@keyframes wg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wg-mode-thumb {
+    transition: none;
+  }
 }
 
 .wg-mode:disabled {
@@ -1104,4 +1166,130 @@ input:focus-visible {
     bottom: calc(46% + 8px);
     max-width: calc(100% - 24px);
   }
+}
+
+/* —— Biome overlay legend (World Gen and the map HUD) —— */
+.hud-viewrow {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.hud-biome-toggle {
+  border: 2px solid #3a2410;
+  border-radius: 6px;
+  padding: 0.15rem 0.6rem;
+  font: inherit;
+  font-size: 0.8rem;
+  background: rgba(246, 241, 230, 0.95);
+  color: #2a1d10;
+  cursor: pointer;
+}
+
+.hud-biome-toggle.on {
+  background: #7a3b22;
+  color: #fff6e0;
+}
+
+.biome-legend {
+  pointer-events: auto;
+  padding: 6px 8px;
+  border: 2px solid #3a2410;
+  border-radius: 6px;
+  background: rgba(246, 241, 230, 0.96);
+  color: #2a1d10;
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+}
+
+.biome-legend h4 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  color: #7a3b22;
+}
+
+.biome-legend ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 1px;
+}
+
+.biome-key {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  border-radius: 3px;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.15;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.biome-key:hover,
+.biome-key.on {
+  background: rgba(122, 59, 34, 0.16);
+}
+
+.biome-key[aria-pressed='true'] {
+  outline: 2px solid #7a3b22;
+  outline-offset: -2px;
+}
+
+.biome-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #3a2410;
+  image-rendering: pixelated;
+}
+
+.wg-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  min-width: 11rem;
+}
+
+.hud-legend {
+  align-self: flex-end;
+  min-width: 11rem;
+}
+
+.wg-legend ul {
+  grid-template-columns: repeat(2, minmax(0, auto));
+  column-gap: 6px;
+}
+
+.wg-screen .wg-legend .biome-key {
+  font-size: 12px;
+}
+
+.wg-screen .biome-legend h4,
+#ui .biome-legend h4 {
+  font-size: 15px;
+}
+
+/* The map HUD legend fits all biomes at 760 px tall without scrolling. */
+#ui .hud-legend {
+  max-height: calc(100vh - 120px);
+  padding: 4px 6px;
+}
+
+#ui .hud-legend ul {
+  gap: 0;
+}
+
+#ui .hud-legend .biome-key {
+  padding: 0 4px;
+  line-height: 1.05;
 }

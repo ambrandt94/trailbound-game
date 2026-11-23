@@ -106,6 +106,8 @@ export interface ConvoyHud {
   away?: boolean;
 }
 export const travelHud = signal<TravelHud | null>(null);
+/** The map's planet globe: baked and usable (`ready`), and currently shown (`on`). */
+export const mapGlobe = signal<{ ready: boolean; on: boolean }>({ ready: false, on: false });
 /** Registered minigames, filled by the app so settings can launch them. */
 export const minigameCatalog = signal<Array<{ id: string; name: string }>>([]);
 
@@ -117,8 +119,10 @@ export interface UiCommands {
   changeSettings(partial: Partial<GameSettings>): void;
   save(): void;
   editAvatar(): void;
-  /** World Gen for the world in play, read-only (map More menu, pause menu). */
-  openWorldGen(): void;
+  /** World Gen for the world in play, read-only (map More menu, pause menu); `flat` opens on the world map. */
+  openWorldGen(view?: 'globe' | 'flat'): void;
+  /** The map HUD's Chunk · Globe toggle (World opens World Gen on the world map). */
+  mapView(kind: 'chunk' | 'globe'): void;
   enterPlace(): void;
   wagonAct(id: WagonActionId): void;
   closeWagon(): void;
@@ -156,7 +160,10 @@ export const commands: UiCommands = {
   editAvatar() {
     return;
   },
-  openWorldGen() {
+  openWorldGen(_view?: 'globe' | 'flat') {
+    return;
+  },
+  mapView(_kind: 'chunk' | 'globe') {
     return;
   },
   enterPlace() {
@@ -203,6 +210,7 @@ export function bindCommands(next: UiCommands): void {
   commands.save = next.save;
   commands.editAvatar = next.editAvatar;
   commands.openWorldGen = next.openWorldGen;
+  commands.mapView = next.mapView;
   commands.enterPlace = next.enterPlace;
   commands.wagonAct = next.wagonAct;
   commands.closeWagon = next.closeWagon;

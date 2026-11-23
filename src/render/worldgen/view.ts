@@ -8,11 +8,19 @@
  * Draws only when something changed. Built lazily; without WebGL it stays blank.
  */
 import * as THREE from 'three';
-import { latLonToSphere, sphereToChunk, type ChunkAddr, type WorldBake } from '../../core/planet';
+import {
+  biomeLegendRgb,
+  latLonToSphere,
+  sphereToChunk,
+  type ChunkAddr,
+  type WorldBake,
+} from '../../core/planet';
 import { unproject, type ViewState } from './projection';
 
-const SEG_LON = 256;
-const SEG_LAT = 128;
+const SEG_LON = 128;
+const SEG_LAT = 64;
+/** Behind the planet (the canvas is opaque; this is the stage gradient's middle tone). */
+const SPACE = 0x0d1628;
 
 export interface ViewLayers {
   biomes: boolean;
@@ -21,6 +29,8 @@ export interface ViewLayers {
   grid: boolean;
   ice: boolean;
   start: boolean;
+  /** Flat legend colours washed over the planet (see the biome legend). */
+  overlay: boolean;
 }
 
 const VERT = /* glsl */ `
@@ -57,6 +67,10 @@ uniform sampler2D uFlags;
 uniform float uHasTex;
 uniform vec4 uLayersA; // biomes, height, mask, ice
 uniform vec2 uLayersB; // grid, start
+uniform float uOverlay;
+uniform float uFocus; // biome id to single out, or -1
+uniform vec2 uBakeSize;
+uniform vec3 uLegend[16];
 uniform float uN;
 uniform vec3 uStart;
 uniform vec3 uSel;
@@ -103,17 +117,30 @@ void main() {
   vec2 uv = vec2(fract((vLL.y + PI) / (2.0 * PI)), 0.5 - vLL.x / PI);
   vec3 col = vec3(0.16, 0.22, 0.32);
   if (uHasTex > 0.5) {
-    vec3 b = texture2D(uBiome, uv).rgb;
-    vec3 h = texture2D(uHeight, uv).rgb;
-    vec4 f = texture2D(uFlags, uv);
-    if (uLayersA.x > 0.5 && uLayersA.y > 0.5) col = mix(b, h, 0.5);
-    else if (uLayersA.y > 0.5) col = h;
-    else if (uLayersA.x > 0.5) col = b;
+    // Sample only what the layers need (software GL pays for every fetch).
+    bool needFlags = uLayersA.z > 0.5 || uLayersA.w > 0.5 || (uLayersA.x < 0.5 && uLayersA.y < 0.5)
+      || uOverlay > 0.5 || uFocus > -0.5;
+    vec4 f = needFlags ? texture2D(uFlags, uv) : vec4(0.0);
+    if (uLayersA.x > 0.5 && uLayersA.y > 0.5) col = mix(texture2D(uBiome, uv).rgb, texture2D(uHeight, uv).rgb, 0.5);
+    else if (uLayersA.y > 0.5) col = texture2D(uHeight, uv).rgb;
+    else if (uLayersA.x > 0.5) col = texture2D(uBiome, uv).rgb;
     else col = f.r > 0.5 ? vec3(0.6, 0.58, 0.52) : vec3(0.1, 0.16, 0.26);
     if (uLayersA.z > 0.5) col = mix(col, f.r > 0.5 ? vec3(0.97) : vec3(0.04, 0.05, 0.08), 0.82);
     if (uLayersA.w > 0.5 && f.g > 0.02) {
       float stripe = step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / 9.0));
       col = mix(col, vec3(0.72, 0.94, 1.0), f.g * (0.45 + 0.35 * stripe));
+    }
+    if (uOverlay > 0.5 || uFocus > -0.5) {
+      // Biome id from the flags' blue channel, read at the texel centre (no blending of ids).
+      vec2 tuv = (floor(uv * uBakeSize) + 0.5) / uBakeSize;
+      int id = int(floor(texture2D(uFlags, tuv).b * 255.0 + 0.5));
+      vec3 lc = vec3(0.5);
+      for (int i = 0; i < 16; i++) { if (i == id) lc = uLegend[i]; }
+      if (uOverlay > 0.5) col = mix(col, lc, 0.62);
+      if (uFocus > -0.5) {
+        if (abs(float(id) - uFocus) < 0.5) col = mix(col, lc, 0.5) * 1.12;
+        else col = mix(col, vec3(dot(col, vec3(0.3, 0.59, 0.11))), 0.7) * 0.4;
+      }
     }
   }
   col *= vShade;
@@ -144,6 +171,21 @@ function cellVec(a: ChunkAddr | null): THREE.Vector3 {
   return a ? new THREE.Vector3(a.face, a.cx, a.cy) : new THREE.Vector3(-1, -1, -1);
 }
 
+/**
+ * The chunk map laid over the planet during a fly in or out (WG4): drawn in
+ * the same WebGL frame, so the crossfade costs no extra compositing.
+ * Position is the chunk centre's offset from the view centre (CSS px, y down).
+ */
+export interface ChunkOverlay {
+  x: number;
+  y: number;
+  /** Clockwise turn, radians. */
+  turn: number;
+  /** Side length, CSS px. */
+  sidePx: number;
+  opacity: number;
+}
+
 export class WorldGenView {
   readonly canvas: HTMLCanvasElement;
   private renderer: THREE.WebGLRenderer | null = null;
@@ -157,6 +199,18 @@ export class WorldGenView {
   private h = 0;
   /** Last frame's draw time, ms (for perf readouts). */
   drawMs = 0;
+  /**
+   * Resolution while a transition runs, as a share of the full one. Software
+   * GL pays per pixel; a reduced resolution for 0.6 s of motion is not visible,
+   * and the settled frame is drawn sharp again.
+   */
+  motionScale = 0.4;
+  private moving = false;
+  private ratio = 0;
+  private overlayMesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | null = null;
+  private overlayTex: { image: HTMLCanvasElement; tex: THREE.CanvasTexture } | null = null;
+  /** The chunk map over the planet, or null (the usual case). */
+  overlay: ChunkOverlay | null = null;
   view: ViewState = { lon0: 0, lat0: 0.35, radiusPx: 260, morph: 0 };
   layers: ViewLayers = {
     biomes: true,
@@ -165,7 +219,10 @@ export class WorldGenView {
     grid: true,
     ice: false,
     start: true,
+    overlay: false,
   };
+  /** Biome the legend singles out (hover or tap), or null. */
+  focus: number | null = null;
   n = 20;
   start: ChunkAddr | null = null;
   selected: ChunkAddr | null = null;
@@ -200,6 +257,7 @@ export class WorldGenView {
     u.uHeight!.value = this.textures[1];
     u.uFlags!.value = this.textures[2];
     u.uHasTex!.value = 1;
+    (u.uBakeSize!.value as THREE.Vector2).set(bake.w, bake.h);
     this.dirty = true;
   }
 
@@ -223,9 +281,12 @@ export class WorldGenView {
     const rect = this.host.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
     const h = Math.max(1, Math.round(rect.height));
-    if (w !== this.w || h !== this.h) {
+    const ratio = baseRatio() * (this.moving ? this.motionScale : 1);
+    if (w !== this.w || h !== this.h || ratio !== this.ratio) {
       this.w = w;
       this.h = h;
+      this.ratio = ratio;
+      this.renderer!.setPixelRatio(ratio);
       this.renderer!.setSize(w, h, false);
       this.canvas.style.width = `${w}px`;
       this.canvas.style.height = `${h}px`;
@@ -249,12 +310,50 @@ export class WorldGenView {
     const l = this.layers;
     (u.uLayersA!.value as THREE.Vector4).set(+l.biomes, +l.height, +l.mask, +l.ice);
     (u.uLayersB!.value as THREE.Vector2).set(+l.grid, +l.start);
+    u.uOverlay!.value = l.overlay ? 1 : 0;
+    u.uFocus!.value = this.focus ?? -1;
     u.uStart!.value = cellVec(this.start);
     u.uSel!.value = cellVec(this.selected);
     u.uHover!.value = cellVec(this.hover);
+    const mesh = this.overlayMesh!;
+    const o = this.overlay;
+    mesh.visible = !!o && !!this.overlayTex && o.opacity > 0.002;
+    if (o && mesh.visible) {
+      mesh.position.set(o.x, -o.y, 0);
+      mesh.rotation.z = -o.turn;
+      mesh.scale.set(o.sidePx, o.sidePx, 1);
+      mesh.material.opacity = o.opacity;
+    }
     this.renderer!.render(this.scene!, this.camera!);
     this.drawMs = performance.now() - t0;
     return true;
+  }
+
+  /**
+   * The chunk map image for overlays. Uploaded now (when the map arrives), so
+   * a fly never waits on a texture upload.
+   */
+  setOverlayImage(image: HTMLCanvasElement | null): void {
+    if (this.overlayTex?.image === image) return;
+    this.overlayTex?.tex.dispose();
+    this.overlayTex = null;
+    if (!image || !this.ensure()) return;
+    const tex = new THREE.CanvasTexture(image);
+    tex.colorSpace = THREE.NoColorSpace;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.NearestFilter;
+    tex.generateMipmaps = true;
+    this.renderer!.initTexture(tex);
+    this.overlayTex = { image, tex };
+    this.overlayMesh!.material.map = tex;
+    this.overlayMesh!.material.needsUpdate = true;
+  }
+
+  /** Draw at `motionScale` while a transition runs; back to full resolution after. */
+  setMoving(moving: boolean): void {
+    if (this.moving === moving) return;
+    this.moving = moving;
+    this.dirty = true;
   }
 
   get size(): { w: number; h: number } {
@@ -263,6 +362,10 @@ export class WorldGenView {
   }
 
   dispose(): void {
+    this.overlayTex?.tex.dispose();
+    this.overlayTex = null;
+    this.overlayMesh?.geometry.dispose();
+    this.overlayMesh?.material.dispose();
     for (const t of this.textures) t.dispose();
     this.textures = [];
     this.material?.dispose();
@@ -277,12 +380,13 @@ export class WorldGenView {
     try {
       const renderer = new THREE.WebGLRenderer({
         canvas: this.canvas,
-        antialias: true,
-        alpha: true,
+        antialias: false,
+        // Opaque: software GL composites an alpha canvas at a real per-frame cost.
+        alpha: false,
         powerPreference: 'low-power',
       });
-      renderer.setPixelRatio(Math.min(2, globalThis.devicePixelRatio || 1));
-      renderer.setClearColor(0x000000, 0);
+      renderer.setPixelRatio(baseRatio());
+      renderer.setClearColor(SPACE, 1);
       this.renderer = renderer;
     } catch {
       this.failed = true;
@@ -307,6 +411,15 @@ export class WorldGenView {
         uHasTex: { value: 0 },
         uLayersA: { value: new THREE.Vector4(1, 0, 0, 0) },
         uLayersB: { value: new THREE.Vector2(1, 1) },
+        uOverlay: { value: 0 },
+        uFocus: { value: -1 },
+        uBakeSize: { value: new THREE.Vector2(1, 1) },
+        uLegend: {
+          value: Array.from({ length: 16 }, (_, i) => {
+            const c = biomeLegendRgb()[i] ?? [128, 128, 128];
+            return new THREE.Vector3(c[0] / 255, c[1] / 255, c[2] / 255);
+          }),
+        },
         uStart: { value: new THREE.Vector3(-1, -1, -1) },
         uSel: { value: new THREE.Vector3(-1, -1, -1) },
         uHover: { value: new THREE.Vector3(-1, -1, -1) },
@@ -315,6 +428,15 @@ export class WorldGenView {
     const mesh = new THREE.Mesh(latLonGrid(), this.material);
     mesh.frustumCulled = false;
     this.scene.add(mesh);
+    const overlay = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false }),
+    );
+    overlay.renderOrder = 1;
+    overlay.frustumCulled = false;
+    overlay.visible = false;
+    this.overlayMesh = overlay;
+    this.scene.add(overlay);
     return true;
   }
 }
@@ -348,4 +470,8 @@ function latLonGrid(): THREE.BufferGeometry {
   geo.setAttribute('aLL', new THREE.BufferAttribute(ll, 2));
   geo.setIndex(index);
   return geo;
+}
+
+function baseRatio(): number {
+  return Math.min(2, globalThis.devicePixelRatio || 1);
 }

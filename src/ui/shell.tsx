@@ -10,6 +10,8 @@ import {
 import type { HudPrefs } from '../core/state/settings';
 import { CreatorScreen } from './creator';
 import { WorldGenScreen } from './worldgen';
+import { BiomeLegend } from './biome-legend';
+import { clearBiomeFocus, mapBiomeOverlay } from './biome-overlay-state';
 import { skinText } from './glyphs';
 import { SettingsPanel } from './area-settings';
 import { DayCycleHud } from './day-cycle/hud';
@@ -25,6 +27,7 @@ import {
   hint,
   hudHidden,
   hudMenuOpen,
+  mapGlobe,
   mapNight,
   nearestLine,
   notice,
@@ -210,6 +213,73 @@ function Toolbar() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Chunk · World · Globe on the map. Chunk and Globe glide the map camera (the
+ * globe fades in over the map's last frame); World opens World Gen read-only
+ * on the flat world map. Globe shows a spinner until the planet is baked.
+ */
+function MapViewToggle() {
+  if (travelHud.value?.view !== 'map') return null;
+  const g = mapGlobe.value;
+  const at = g.on ? 2 : 0;
+  const biomes = mapBiomeOverlay.value;
+  return (
+    <>
+      <div class="hud-viewrow">
+        <div class="wg-modes hud-views" role="group" aria-label="Map view">
+          <span
+            class="wg-mode-thumb"
+            aria-hidden="true"
+            style={{ transform: `translateX(${at * 100}%)` }}
+          />
+          <button
+            type="button"
+            class={`wg-mode${g.on ? '' : ' on'}`}
+            aria-pressed={!g.on}
+            title="Your map"
+            onClick={() => commands.mapView('chunk')}
+          >
+            Chunk
+          </button>
+          <button
+            type="button"
+            class="wg-mode"
+            aria-pressed={false}
+            title="The flattened world map (World Gen, read-only)"
+            onClick={() => commands.openWorldGen('flat')}
+          >
+            World
+          </button>
+          <button
+            type="button"
+            class={`wg-mode${g.on ? ' on' : ''}`}
+            aria-pressed={g.on}
+            disabled={!g.ready}
+            title={g.ready ? 'Zoom out to the planet' : 'The planet is still baking'}
+            onClick={() => commands.mapView('globe')}
+          >
+            {g.ready ? null : <span class="wg-spin" aria-label="Baking" />}
+            Globe
+          </button>
+        </div>
+        <button
+          type="button"
+          class={`hud-biome-toggle${biomes ? ' on' : ''}`}
+          aria-pressed={biomes}
+          title="Biome overlay, with a colour legend"
+          onClick={() => {
+            mapBiomeOverlay.value = !biomes;
+            if (biomes) clearBiomeFocus();
+          }}
+        >
+          Biomes
+        </button>
+      </div>
+      {biomes ? <BiomeLegend class="hud-legend" /> : null}
+    </>
   );
 }
 
@@ -539,6 +609,7 @@ function Hud() {
             <DayCycleHud />
             <div class="hud-right">
               <Toolbar />
+              <MapViewToggle />
               <MoreMenu />
               {rightPanel}
             </div>
