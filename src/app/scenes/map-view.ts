@@ -43,6 +43,7 @@ import {
 import type { GameHost } from '../host';
 import {
   PLANET_PRESET_SPECS,
+  chunkKey,
   chunkToSphere,
   globeDiameterPx,
   globeLook,
@@ -118,7 +119,13 @@ export class MapView implements Scene {
   update(dt: number): void {
     const world = this.host.world;
     if (world.data && !this.framed) {
-      this.camera.frame(world.data.width, world.data.height, world.hero.x, world.hero.y);
+      this.camera.frame(
+        world.data.width,
+        world.data.height,
+        world.hero.x,
+        world.hero.y,
+        world.data.wraps !== false,
+      );
       this.framed = true;
     }
     const sprint =
@@ -285,8 +292,13 @@ export class MapView implements Scene {
     const globe = this.host.globe;
     const preset = data.settings.planet;
     const spec = PLANET_PRESET_SPECS[preset];
-    const preview = globePreviewSource();
-    const key = `${world.seed}:${preset}:${data.width}:${preview ?? 'island'}`;
+    const settings = data.settings;
+    const planetWorld = settings.worldSource !== 'island';
+    // Island worlds may preview another planet (`?world=`); planet worlds show their own.
+    const preview = planetWorld ? null : globePreviewSource();
+    const source = planetWorld ? settings.worldSource : (preview ?? 'island');
+    const homeKey = settings.homeChunk ? chunkKey(settings.homeChunk) : '-';
+    const key = `${world.seed}:${preset}:${data.width}:${source}:${homeKey}`;
     if (this.mapAge >= GLOBE_PREFETCH_SEC) {
       if (globe.requestedFor() !== key) {
         globe.prepare(
@@ -303,11 +315,12 @@ export class MapView implements Scene {
               }
             : {
                 key,
-                source: 'island',
+                source,
                 seed: world.seed,
                 n: spec.n,
                 faceTexels: spec.faceTexels,
-                home: homeChunk(spec.n),
+                // Planet worlds are cut from their home chunk; island worlds sit on face 0.
+                home: planetWorld ? (settings.homeChunk ?? null) : homeChunk(spec.n),
                 homePatch: {
                   size: HOME_PATCH_TEXELS,
                   rgba: homePatchRgba(data, HOME_PATCH_TEXELS),
@@ -337,7 +350,8 @@ export class MapView implements Scene {
     const home = globe.home ?? homeChunk(spec.n);
     const hero = this.host.world.hero;
     const clamp01 = (v: number) => Math.min(0.9999, Math.max(0, v));
-    const pin = globePreviewSource()
+    const preview = data.settings.worldSource === 'island' && globePreviewSource() !== null;
+    const pin = preview
       ? chunkToSphere(spec.n, home)
       : chunkToSphere(spec.n, home, clamp01(hero.x / data.width), clamp01(hero.y / data.height));
     const scale = this.camera.scale;

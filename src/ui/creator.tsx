@@ -1,5 +1,12 @@
 import type { AvatarGender } from '../core/people/avatar';
-import { isPlanetPreset, PLANET_PRESETS, PLANET_PRESET_SPECS } from '../core/planet/presets';
+import {
+  isPlanetPreset,
+  isWorldSource,
+  PLANET_PRESETS,
+  PLANET_PRESET_SPECS,
+  WORLD_SOURCES,
+  WORLD_SOURCE_LABELS,
+} from '../core/planet/presets';
 import {
   EXPERIMENTAL_WORLD_SCALES,
   LAND_CHOICES,
@@ -542,26 +549,46 @@ export function CreatorScreen() {
       {view.intent === 'new' ? (
         <>
           <label class="field">
-            <span>Land</span>
+            <span>World</span>
             <select
-              aria-label="Land"
-              value={newWorldLand.value}
+              aria-label="World"
+              value={newWorldGen.value.worldSource}
               onChange={(event) => {
                 const target = event.currentTarget;
                 if (!(target instanceof HTMLSelectElement)) return;
-                const next = target.value;
-                if ((LAND_CHOICES as readonly string[]).includes(next)) {
-                  newWorldLand.value = next as LandStyle;
-                }
+                if (isWorldSource(target.value)) setNewWorldGen({ worldSource: target.value });
               }}
             >
-              {LAND_CHOICES.map((choice) => (
-                <option key={choice} value={choice}>
-                  {LAND_CHOICE_LABELS[choice]}
+              {WORLD_SOURCES.map((source) => (
+                <option key={source} value={source}>
+                  {WORLD_SOURCE_LABELS[source]}
                 </option>
               ))}
             </select>
           </label>
+          {newWorldGen.value.worldSource === 'island' ? (
+            <label class="field">
+              <span>Land</span>
+              <select
+                aria-label="Land"
+                value={newWorldLand.value}
+                onChange={(event) => {
+                  const target = event.currentTarget;
+                  if (!(target instanceof HTMLSelectElement)) return;
+                  const next = target.value;
+                  if ((LAND_CHOICES as readonly string[]).includes(next)) {
+                    newWorldLand.value = next as LandStyle;
+                  }
+                }}
+              >
+                {LAND_CHOICES.map((choice) => (
+                  <option key={choice} value={choice}>
+                    {LAND_CHOICE_LABELS[choice]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <WorldControls />
         </>
       ) : null}

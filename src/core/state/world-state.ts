@@ -82,6 +82,7 @@ import {
   nodeContaining,
   travelGameHours,
   wrapX,
+  worldX,
   type ChunkData,
   type MapEntity,
   type MapNode,
@@ -235,8 +236,11 @@ export class WorldState {
     this.entryPose = null;
     this.zones = [];
     this.areaCache.clear();
+    // No settings: the classic 16x island. The game always passes settings (new games
+    // default to the Trailbound world); tools and tests rely on this fixed island.
     const settings =
-      options?.settings ?? clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
+      options?.settings ??
+      clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldSource: 'island', worldScale: 16 });
     this.data = generateWorld(seed, settings);
     this.chunks.clear();
     this.entities = [...spawnEntities(this.data, seed), ...spawnResidents(this.data, seed)];
@@ -321,7 +325,7 @@ export class WorldState {
       this.syncPlayer();
       return;
     }
-    const x = wrapX(this.hero.x + dx, world.width);
+    const x = worldX(world, this.hero.x + dx);
     const y = clamp(this.hero.y + dy, 0.5, world.height - 0.5);
     if (dx !== 0 || dy !== 0) this.hero.yaw = Math.atan2(dx, -dy);
     this.hero = { ...this.hero, x, y };
@@ -848,7 +852,7 @@ export class WorldState {
   }): number {
     const world = this.data;
     const moved = stepped.caravan;
-    if (world) moved.x = wrapX(moved.x, world.width);
+    if (world) moved.x = worldX(world, moved.x);
     this.caravan = moved;
     for (const event of stepped.events) this.caravanEvents.push(event);
     if (this.caravanEvents.length > 8) this.caravanEvents.splice(0, this.caravanEvents.length - 8);

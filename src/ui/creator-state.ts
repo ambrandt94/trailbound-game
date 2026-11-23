@@ -115,6 +115,7 @@ export type NewWorldGen = Pick<
   | 'avgPerHouse'
   | 'avgPerPlace'
   | 'planet'
+  | 'worldSource'
 >;
 
 export function defaultNewWorldGen(): NewWorldGen {
@@ -129,6 +130,7 @@ export function defaultNewWorldGen(): NewWorldGen {
     avgPerHouse: d.avgPerHouse,
     avgPerPlace: d.avgPerPlace,
     planet: d.planet,
+    worldSource: d.worldSource,
   };
 }
 
@@ -147,6 +149,7 @@ export function setNewWorldGen(patch: Partial<NewWorldGen>): void {
     avgPerHouse: next.avgPerHouse,
     avgPerPlace: next.avgPerPlace,
     planet: next.planet,
+    worldSource: next.worldSource,
   };
 }
 

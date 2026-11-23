@@ -17,7 +17,21 @@ import {
 import { fbm, hash2, Rng } from './noise';
 import { placePois } from './pois';
 import { prepareLandSketch, sampleLandSketch } from './land-sketch';
-import { buildTerrain, metersToNormalized, reinforceClimate, sampleMacroMeters } from './terrain';
+import {
+  buildTerrain,
+  coarseStride,
+  metersToNormalized,
+  reinforceClimate,
+  sampleMacroMeters,
+} from './terrain';
+import { sameChunk, type ChunkAddr } from '../planet/cube-sphere';
+import {
+  chunkTerrainSeed,
+  planetFrame,
+  planetLandSampler,
+  planetLatAt,
+  type PlanetFrame,
+} from './planet-chunk';
 
 const AUTHORED: Array<
   Omit<MapNode, 'cx' | 'cy' | 'biome' | 'x0' | 'y0' | 'x1' | 'y1' | 'tiles'> & { want: Biome }
@@ -203,10 +217,19 @@ export function resolveLandStyle(style: LandStyle, seed: number): Exclude<MapSty
  * the seed resolves to, so an unchanged choice does not regenerate.
  */
 export function sameWorldSettings(have: WorldSettings, want: WorldSettings, seed: number): boolean {
-  const wantStyle = want.mapStyle === 'random' ? resolveLandStyle('random', seed) : want.mapStyle;
-  if (wantStyle === 'custom' || have.mapStyle === 'custom') return false;
+  if (have.worldSource !== want.worldSource) return false;
+  if (want.worldSource === 'island') {
+    const wantStyle = want.mapStyle === 'random' ? resolveLandStyle('random', seed) : want.mapStyle;
+    if (wantStyle === 'custom' || have.mapStyle === 'custom') return false;
+    if (have.mapStyle !== wantStyle) return false;
+  } else {
+    // A planet world is its planet and home chunk; an open home matches the auto pick.
+    if (have.planet !== want.planet) return false;
+    if (want.homeChunk && !(have.homeChunk && sameChunk(have.homeChunk, want.homeChunk))) {
+      return false;
+    }
+  }
   return (
-    have.mapStyle === wantStyle &&
     have.worldScale === want.worldScale &&
     have.poiCount === want.poiCount &&
     have.wanderers === want.wanderers &&
@@ -366,6 +389,7 @@ function findSite(
   rng: Rng,
   taken: MapNode[],
   minR: number,
+  allowed?: Uint8Array,
 ): { x: number; y: number; biome: Biome } | null {
   const fallback: Biome[] =
     want === Biome.Sand
@@ -390,6 +414,7 @@ function findSite(
     const b = biomes[idx(x, y, w)] as Biome;
     if (!fallback.includes(b)) continue;
     if (b === Biome.Water) continue;
+    if (allowed && !allowed[idx(x, y, w)]) continue;
     const ok = taken.every((n) => Math.hypot(n.cx - x, n.cy - y) > n.radius + minR + 4);
     if (!ok) continue;
     return { x, y, biome: b };
@@ -462,6 +487,7 @@ export function generateWorld(
   seed: number,
   settings: WorldSettings = DEFAULT_WORLD_SETTINGS,
 ): WorldData {
+  if (settings.worldSource !== 'island') return generatePlanetChunk(seed, settings);
   const w = worldExtent(settings.worldScale);
   const h = w;
   const rng = new Rng(seed);
@@ -476,15 +502,82 @@ export function generateWorld(
     style,
     landAt: (nx, ny) => landMask(nx, ny, style, seed, sketch),
   });
-  const { heightM, heights, biomes } = terrain;
+  const { heightM, biomes } = terrain;
   smooth(biomes, w, h);
   smooth(biomes, w, h);
   reinforceClimate(biomes, heightM, w, h);
+  return populateWorld(seed, { ...settings, mapStyle: style }, w, h, rng, terrain, paths);
+}
 
+/**
+ * Generate a planet world's map: one chunk of the planet. With no `addr` this
+ * is the home chunk the game is played in. Any other chunk (World Gen's
+ * inspector) gets its own terrain seed and the same towns and roads pass,
+ * so it looks like what a later visit would find. No ocean margin, no sea
+ * ring and no forced mountain spine: the planet decides the land.
+ */
+export function generatePlanetChunk(
+  seed: number,
+  settings: WorldSettings,
+  addr?: ChunkAddr,
+  frame: PlanetFrame = planetFrame(seed, settings),
+): WorldData {
+  const target = addr ?? frame.home;
+  const terrainSeed = chunkTerrainSeed(seed, frame, target);
+  const w = worldExtent(settings.worldScale);
+  const h = w;
+  const rng = new Rng(terrainSeed);
+  const paths = new Uint8Array(w * h);
+  const coarse = Math.ceil(w / coarseStride(w));
+  const terrain = buildTerrain({
+    seed: terrainSeed,
+    width: w,
+    height: h,
+    style: 'continent',
+    landAt: planetLandSampler(frame.field, target, coarse),
+    latAt: planetLatAt(frame.n, target),
+    mainRange: false,
+  });
+  const latAt = planetLatAt(frame.n, target);
+  smooth(terrain.biomes, w, h);
+  smooth(terrain.biomes, w, h);
+  reinforceClimate(terrain.biomes, terrain.heightM, w, h, latAt);
+  const world = populateWorld(
+    terrainSeed,
+    { ...settings, mapStyle: 'continent', homeChunk: frame.home },
+    w,
+    h,
+    rng,
+    terrain,
+    paths,
+    largestLandmass(terrain.biomes, w, h),
+  );
+  world.seed = seed;
+  world.wraps = false;
+  return world;
+}
+
+/**
+ * Towns, roads, decorations and points of interest on a finished terrain.
+ * `mainland` (planet chunks) keeps the towns on the largest landmass so the
+ * roads can join them, and guarantees Ashfen even when no tile suits it.
+ */
+function populateWorld(
+  seed: number,
+  settings: WorldSettings,
+  w: number,
+  h: number,
+  rng: Rng,
+  terrain: { heightM: Float32Array; heights: Float32Array; biomes: Uint8Array },
+  paths: Uint8Array,
+  mainland?: Uint8Array,
+): WorldData {
+  const { heightM, heights, biomes } = terrain;
   const nodes: MapNode[] = [];
   const blocked = new Set<string>();
   for (const spec of AUTHORED) {
-    const site = findSite(biomes, w, h, spec.want, rng, nodes, spec.radius);
+    let site = findSite(biomes, w, h, spec.want, rng, nodes, spec.radius, mainland);
+    if (!site && mainland && spec.id === 'ashfen') site = mainlandHeart(biomes, w, h, mainland);
     if (!site) continue;
     const blob = growTileBlob(site.x + 0.5, site.y + 0.5, spec.radius, {
       kind: spec.kind,
@@ -616,7 +709,7 @@ export function generateWorld(
     seed,
     width: w,
     height: h,
-    settings: { ...settings, mapStyle: style },
+    settings,
     biomes,
     heights,
     heightM,
@@ -625,6 +718,78 @@ export function generateWorld(
     pois,
     features,
   };
+}
+
+/** 1 on the tiles of the largest 4-connected landmass, 0 elsewhere. */
+export function largestLandmass(biomes: Uint8Array, w: number, h: number): Uint8Array {
+  const label = new Int32Array(w * h);
+  const stack = new Int32Array(w * h);
+  let best = 0;
+  let bestSize = 0;
+  let next = 0;
+  for (let start = 0; start < w * h; start++) {
+    if (label[start] || biomes[start] === Biome.Water) continue;
+    next++;
+    let size = 0;
+    let top = 0;
+    stack[top++] = start;
+    label[start] = next;
+    while (top > 0) {
+      const i = stack[--top]!;
+      size++;
+      const x = i % w;
+      const y = (i - x) / w;
+      if (x > 0) visit(i - 1);
+      if (x < w - 1) visit(i + 1);
+      if (y > 0) visit(i - w);
+      if (y < h - 1) visit(i + w);
+    }
+    if (size > bestSize) {
+      bestSize = size;
+      best = next;
+    }
+    function visit(j: number): void {
+      if (label[j] || biomes[j] === Biome.Water) return;
+      label[j] = next;
+      stack[top++] = j;
+    }
+  }
+  const out = new Uint8Array(w * h);
+  if (best) for (let i = 0; i < w * h; i++) if (label[i] === best) out[i] = 1;
+  return out;
+}
+
+/** The mainland tile farthest from its coast (sampled), for a town that found no better spot. */
+function mainlandHeart(
+  biomes: Uint8Array,
+  w: number,
+  h: number,
+  mainland: Uint8Array,
+): { x: number; y: number; biome: Biome } | null {
+  const step = Math.max(1, Math.floor(w / 96));
+  let best: { x: number; y: number; biome: Biome } | null = null;
+  let bestD = -1;
+  for (let y = 8; y < h - 8; y += step) {
+    for (let x = 8; x < w - 8; x += step) {
+      if (!mainland[idx(x, y, w)]) continue;
+      let d = 1;
+      while (d < 64) {
+        if (
+          !mainland[idx(Math.min(w - 1, x + d), y, w)] ||
+          !mainland[idx(Math.max(0, x - d), y, w)] ||
+          !mainland[idx(x, Math.min(h - 1, y + d), w)] ||
+          !mainland[idx(x, Math.max(0, y - d), w)]
+        )
+          break;
+        d += step;
+      }
+      if (d > bestD) {
+        bestD = d;
+        best = { x, y, biome: biomes[idx(x, y, w)] as Biome };
+      }
+    }
+  }
+  return best;
 }
 
 function treeFor(b: Biome, n: number): { threshold: number; sprite: string } | null {

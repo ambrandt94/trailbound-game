@@ -9,8 +9,10 @@ import type { PackedWorld, PlayerSave, SaveManifest } from './types';
  */
 export function savedWorldSettings(core: PackedWorld): WorldSettings {
   const raw = core.worldSettings;
-  if (!raw || typeof raw !== 'object') return clampSettings({ ...DEFAULT_WORLD_SETTINGS });
-  return clampSettings({ ...DEFAULT_WORLD_SETTINGS, ...raw });
+  // Saves from before world sources are classic islands; keep their map exactly.
+  const classic = { ...DEFAULT_WORLD_SETTINGS, worldSource: 'island' as const, homeChunk: null };
+  if (!raw || typeof raw !== 'object') return clampSettings(classic);
+  return clampSettings({ ...classic, ...raw });
 }
 
 export function assertPackedWorld(value: PackedWorld): PackedWorld {

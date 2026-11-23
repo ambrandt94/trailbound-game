@@ -626,8 +626,9 @@ function worldWrapShifts(
   halfW: number,
   width: number,
   viewTilesX: number,
+  wraps = true,
 ): number[] {
-  if (viewTilesX >= width * 0.92) return [0];
+  if (!wraps || viewTilesX >= width * 0.92) return [0];
   const shifts = [0];
   if (cameraX - halfW < 0) shifts.push(-width);
   if (cameraX + halfW > width) shifts.push(width);
@@ -1505,7 +1506,7 @@ export class WorldRenderer {
       ctx.drawImage(this.worldBake, 0, 0, wpx, hpx);
       const halfW = viewW / (2 * camera.scale) / TILE;
       const viewTilesX = viewW / (camera.scale * TILE);
-      if (viewTilesX < viewWTiles * 0.92) {
+      if (world.wraps !== false && viewTilesX < viewWTiles * 0.92) {
         if (camera.x - halfW < 0) ctx.drawImage(this.worldBake, -wpx, 0, wpx, hpx);
         if (camera.x + halfW > viewWTiles) ctx.drawImage(this.worldBake, wpx, 0, wpx, hpx);
       }
@@ -1522,7 +1523,13 @@ export class WorldRenderer {
     const detailT = showChunks ? 1 : 0;
     const halfW = viewW / (2 * camera.scale) / TILE;
     const viewTilesX = viewW / (camera.scale * TILE);
-    const wrapShifts = worldWrapShifts(camera.x, halfW, viewWTiles, viewTilesX);
+    const wrapShifts = worldWrapShifts(
+      camera.x,
+      halfW,
+      viewWTiles,
+      viewTilesX,
+      world.wraps !== false,
+    );
     if (featureAlpha > 0.02) {
       ctx.globalAlpha = featureAlpha;
       for (const shift of wrapShifts) {

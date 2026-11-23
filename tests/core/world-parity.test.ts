@@ -34,7 +34,11 @@ const golden = JSON.parse(
 ) as GoldenFile;
 
 test('seed 7741 at worldScale 16 matches the settlement fixture and Ironmarch hash', () => {
-  const world = generateWorld(7741, { ...DEFAULT_WORLD_SETTINGS, worldScale: 16 });
+  const world = generateWorld(7741, {
+    ...DEFAULT_WORLD_SETTINGS,
+    worldSource: 'island',
+    worldScale: 16,
+  });
   expect(world.width).toBe(golden.width);
   expect(world.height).toBe(golden.height);
   const settlements = world.nodes

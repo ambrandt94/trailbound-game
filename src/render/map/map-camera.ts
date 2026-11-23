@@ -44,6 +44,8 @@ export class MapCamera {
   step = 1;
   private width = 192;
   private height = 192;
+  /** False on planet chunks: the map has east and west edges. */
+  private wraps = true;
   /** When the planet globe is ready, zoom may continue out past the flat map. */
   private globeZoom = false;
   private zoomPivot: {
@@ -55,7 +57,8 @@ export class MapCamera {
     viewH: number;
   } | null = null;
 
-  frame(width: number, height: number, heroX: number, heroY: number): void {
+  frame(width: number, height: number, heroX: number, heroY: number, wraps = true): void {
+    this.wraps = wraps;
     this.step = width >= WORLD_BASE && width % WORLD_BASE === 0 ? width / WORLD_BASE : 1;
     this.width = Math.max(1, Math.round(width / this.step));
     this.height = Math.max(1, Math.round(height / this.step));
@@ -99,6 +102,15 @@ export class MapCamera {
     return Math.max(this.scale, minScaleFor(this.width));
   }
 
+  /** Whether this map wraps east–west (planet chunks do not). */
+  get wrapsX(): boolean {
+    return this.wraps;
+  }
+
+  private edgeX(x: number): number {
+    return this.wraps ? wrapX(x, this.width) : clamp(x, 0, this.width);
+  }
+
   /** Map width in map cells (192 on today's worlds). */
   cellsWide(): number {
     return this.width;
@@ -122,7 +134,7 @@ export class MapCamera {
     this.zoomPivot = null;
     const tilesX = dx / (this.scale * TILE);
     const tilesY = dy / (this.scale * TILE);
-    this.x = wrapX(this.x - tilesX, this.width);
+    this.x = this.edgeX(this.x - tilesX);
     this.y = clampLatY(this.y - tilesY, this.height);
     this.targetX = this.x;
     this.targetY = this.y;
@@ -136,7 +148,7 @@ export class MapCamera {
   lookAt(x: number, y: number, scale?: number): void {
     this.follow = false;
     this.zoomPivot = null;
-    this.targetX = wrapX(x / this.step, this.width);
+    this.targetX = this.edgeX(x / this.step);
     this.targetY = clampLatY(y / this.step, this.height);
     this.x = this.targetX;
     this.y = this.targetY;
@@ -162,7 +174,9 @@ export class MapCamera {
       this.holdZoomPivot();
       return;
     }
-    this.x = lerpWrapX(this.x, this.targetX, panT, this.width);
+    this.x = this.wraps
+      ? lerpWrapX(this.x, this.targetX, panT, this.width)
+      : this.x + (this.targetX - this.x) * panT;
     this.y = clampLatY(this.y + (this.targetY - this.y) * panT, this.height);
   }
 
@@ -170,7 +184,7 @@ export class MapCamera {
   private holdZoomPivot(): void {
     const pivot = this.zoomPivot;
     if (!pivot || this.scale <= 0) return;
-    this.targetX = wrapX(pivot.wx - (pivot.sx - pivot.viewW / 2) / (this.scale * TILE), this.width);
+    this.targetX = this.edgeX(pivot.wx - (pivot.sx - pivot.viewW / 2) / (this.scale * TILE));
     this.targetY = clampLatY(
       pivot.wy - (pivot.sy - pivot.viewH / 2) / (this.scale * TILE),
       this.height,
@@ -181,7 +195,7 @@ export class MapCamera {
 
   screenToWorld(sx: number, sy: number, viewW: number, viewH: number): { x: number; y: number } {
     return {
-      x: wrapX(this.x + (sx - viewW / 2) / (this.scale * TILE), this.width),
+      x: this.edgeX(this.x + (sx - viewW / 2) / (this.scale * TILE)),
       y: this.y + (sy - viewH / 2) / (this.scale * TILE),
     };
   }

@@ -1,4 +1,12 @@
-import { DEFAULT_PLANET_PRESET, isPlanetPreset, type PlanetPreset } from '../planet/presets';
+import {
+  DEFAULT_PLANET_PRESET,
+  isPlanetPreset,
+  isWorldSource,
+  PLANET_PRESET_SPECS,
+  type PlanetPreset,
+  type WorldSource,
+} from '../planet/presets';
+import type { ChunkAddr } from '../planet/cube-sphere';
 
 export const TILE = 16;
 export const WORLD_BASE = 192;
@@ -299,6 +307,17 @@ export interface WorldSettings {
    * planet only feeds the globe view for now. Older saves read `standard`.
    */
   planet: PlanetPreset;
+  /**
+   * Where the land comes from (`core/planet/presets`). `island` is the classic
+   * hand-tuned map; `trailbound` and `procedural` cut the map out of a planet.
+   * Saves from before this field read `island` and keep their map exactly.
+   */
+  worldSource: WorldSource;
+  /**
+   * Planet worlds: the chunk this map is cut from. Null asks generation to pick
+   * the best start chunk; the generated world stores the resolved chunk.
+   */
+  homeChunk: ChunkAddr | null;
 }
 
 /** Side length of `WorldSettings.landSketch`. */
@@ -369,6 +388,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   avgPerHouse: DEFAULT_AVG_PER_HOUSE,
   avgPerPlace: DEFAULT_AVG_PER_PLACE,
   planet: DEFAULT_PLANET_PRESET,
+  worldSource: 'trailbound',
+  homeChunk: null,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -464,6 +485,21 @@ export function lerpWrapX(from: number, to: number, t: number, width: number): n
   return wrapX(from + wrapDeltaX(from, to, width) * t, width);
 }
 
+/** A world x on this map: wrapped east–west, or held inside a planet chunk that does not wrap. */
+export function worldX(world: Pick<WorldData, 'width' | 'wraps'>, x: number): number {
+  if (world.wraps !== false) return wrapX(x, world.width);
+  return clamp(Number.isFinite(x) ? x : 0, 0.5, Math.max(0.5, world.width - 0.5));
+}
+
+/** East–west step from one x to another: the short way round, or straight on a non-wrapping map. */
+export function worldDeltaX(
+  world: Pick<WorldData, 'width' | 'wraps'>,
+  from: number,
+  to: number,
+): number {
+  return world.wraps !== false ? wrapDeltaX(from, to, world.width) : to - from;
+}
+
 export function clampLatY(y: number, height: number): number {
   return clamp(y, 0.35, Math.max(0.35, height - 0.35));
 }
@@ -506,7 +542,21 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
     avgPerHouse: clampAvg(raw.avgPerHouse, DEFAULT_AVG_PER_HOUSE, 0, 20),
     avgPerPlace: clampAvg(raw.avgPerPlace, DEFAULT_AVG_PER_PLACE, 0, 500),
     planet: isPlanetPreset(raw.planet) ? raw.planet : DEFAULT_PLANET_PRESET,
+    // Missing means a save from before world sources: the classic island.
+    worldSource: isWorldSource(raw.worldSource) ? raw.worldSource : 'island',
+    homeChunk: cleanHomeChunk(
+      raw.homeChunk,
+      PLANET_PRESET_SPECS[isPlanetPreset(raw.planet) ? raw.planet : DEFAULT_PLANET_PRESET].n,
+    ),
   };
+}
+
+function cleanHomeChunk(raw: unknown, n: number): ChunkAddr | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const { face, cx, cy } = raw as Partial<ChunkAddr>;
+  if (!Number.isInteger(face) || !Number.isInteger(cx) || !Number.isInteger(cy)) return null;
+  if (face! < 0 || face! > 5 || cx! < 0 || cy! < 0 || cx! >= n || cy! >= n) return null;
+  return { face: face as ChunkAddr['face'], cx: cx!, cy: cy! };
 }
 
 /** One decimal place. Non-finite values use `fallback`. */
@@ -915,6 +965,11 @@ export interface WorldData {
   nodes: MapNode[];
   pois: PointOfInterest[];
   features: WorldFeature[];
+  /**
+   * False for planet chunks: the map ends at its east and west edges (the
+   * neighbouring chunks come later). Missing means the classic east–west wrap.
+   */
+  wraps?: boolean;
 }
 
 export interface PlayerState {

@@ -917,7 +917,7 @@ export class Game implements GameHost {
               generating.value = false;
               // The save above still describes the placeholder world. Store this one.
               await this.persist();
-            } else if (current.planet !== wanted.planet) {
+            } else if (current.worldSource === 'island' && current.planet !== wanted.planet) {
               // The planet only frames the globe around the home world; no rebuild.
               current.planet = wanted.planet;
               await this.persist();

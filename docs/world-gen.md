@@ -66,3 +66,37 @@ It takes ~150 ms for 2,400 chunks. Seed 7741's start is face 1 (5,3), at about 2
   - Bake: island 4.7 s, procedural 5.1 s, Trailbound 7.0 s (standard), 1.8 s (tiny).
   - The bake runs in the worker; the globe build is 7–19 ms on the main thread.
   - Globe frames: 16.2–16.6 ms average.
+
+## WG2: the home map is a chunk of the planet (`src/core/world/planet-chunk.ts`)
+
+`WorldSettings.worldSource` picks the world: `'trailbound'` (default for new games), `'procedural'`, or `'island'` (the classic generator).
+
+### Saves
+
+- **Old saves keep their island.** A save with no `worldSource` reads as `'island'` (in `clampSettings` and `savedWorldSettings`); nothing is migrated. `tests/core/world-source.test.ts` regenerates six old-save worlds (including seed 7741 at 16x) and checks biomes, heights, roads, nodes and features hash to the values recorded on main before this change.
+- **Planet worlds** store the source plus the resolved `homeChunk`, so a load regenerates the same chunk even if the start-pick scorer changes later.
+- A hand-set `homeChunk` that is under 20% land falls back to the auto pick, so a world never starts at sea.
+
+### Generation
+
+`generateWorld` branches to `generatePlanetChunk` for non-island sources:
+
+1. **Frame.** `planetFrame(seed, settings)` builds the planet field (Trailbound or procedural), at 20 chunks per face for the standard preset, and resolves the home chunk.
+2. **Land.** `planetLandSampler` samples the field's land value on a grid over the chunk and maps it so the generator's coast threshold (`landCut('continent')`) sits exactly on the planet's coast. This fixes the old mismatch, where the mockup showed 85% land against the generator's 58%. A home chunk now matches the planet's land share within a few percent (seed 7741: 0.80–0.84 on the map against 0.84 on the planet).
+3. **No island scaffolding.** Planet chunks skip the ocean margin, the sea ring and the forced main range. Coasts run off the map edges because the continent goes on.
+4. **Climate.** Latitude comes from the chunk's real place on the planet (`planetLatAt`) instead of a pole-to-pole strip. A temperate start has no snow band along its north edge.
+5. **Towns.** Sites are restricted to the largest landmass in the chunk, so Ashfen and the authored towns stay connected by road.
+
+### No east–west wrap
+
+The classic island wraps east–west; a chunk of a continent doesn't. `WorldData.wraps === false` marks planet chunks. `worldX` and `worldDeltaX` clamp or wrap as needed, and the map camera and renderer stop drawing wrap copies.
+
+Some `wrapX` call sites are left alone (fog, projection, zone history, area windows, hero keep and spawn, and entity formation). They're harmless because positions are clamped. The one visible effect is that an area window right at the east edge can sample a sliver of the west edge.
+
+### Globe
+
+On the world map's globe, a planet world bakes its own source and stamps the home map onto `homeChunk`. Island worlds behave as before: the island sits on face 0, and `?world=` previews still work.
+
+### Sea level
+
+The default stays at `TRAILBOUND_SEA_LEVEL = 0`: 34.2% of the flat map is land, matching the reference. That is ~39.6% by sphere area. Forcing 34% _by area_ would mean raising the sea about 0.06, which drowns most of the small islands and thins the straits in Alex's shape. So the "about 34%" target is met on the map as drawn. The sea-level slider (WG3) moves it either way.
