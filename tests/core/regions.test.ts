@@ -8,6 +8,9 @@ import {
   DEFAULT_REGIONS_TUNING,
   exploreBlock,
   fadeAmount,
+  frameStep,
+  nextStepAt,
+  regionsFraming,
   glimpsed,
   journeyPath,
   knowledgeFromPath,
@@ -44,19 +47,54 @@ describe('regions knowledge', () => {
     expect(glimpsed(N, know(exploreBlock(N, home, 3))).size).toBe(16);
   });
 
-  test('span and k: one chunk is k=0, about 20 across is the globe', () => {
+  test('span and k: one chunk is k=0, about 40 across is the globe', () => {
     const one = knownExtent(N, know([home]), chunkToSphere(N, home));
     expect(one.span).toBeCloseTo(1, 5);
     expect(knowledgeScale(one.span)).toBe(0);
     const five = knownExtent(N, know(exploreBlock(N, home, 5)), chunkToSphere(N, home));
     expect(five.span).toBeGreaterThan(5);
     expect(five.span).toBeLessThan(8.5);
-    expect(knowledgeScale(20)).toBeCloseTo(1, 5);
-    // Flat until about 5 across, curved past it, the globe at 20.
-    expect(bendForScale(knowledgeScale(3))).toBe(0);
-    expect(bendForScale(knowledgeScale(5))).toBeCloseTo(0, 5);
-    expect(bendForScale(knowledgeScale(10))).toBeGreaterThan(0.2);
-    expect(bendForScale(knowledgeScale(20))).toBe(1);
+    expect(knowledgeScale(40)).toBeCloseTo(1, 5);
+    // Flat until about 8 across, curved past it, the globe at 40.
+    expect(bendForScale(knowledgeScale(5))).toBe(0);
+    expect(bendForScale(knowledgeScale(8))).toBeCloseTo(0, 5);
+    expect(bendForScale(knowledgeScale(20))).toBeGreaterThan(0.2);
+    expect(bendForScale(knowledgeScale(40))).toBe(1);
+  });
+
+  test('the view grows in earned steps', () => {
+    const steps = [1, 3, 4, 6, 9, 12, 30, 60].map((v) => frameStep(v));
+    expect(steps).toEqual([1, 1, 2, 2, 3, 3, 5, 7]);
+    expect(nextStepAt(1)).toBe(4);
+    expect(nextStepAt(6)).toBe(9);
+    expect(nextStepAt(30)).toBe(36);
+    const loose = { ...DEFAULT_REGIONS_TUNING, widenAfter: 2, stepFill: 0.5 };
+    expect(frameStep(2, loose)).toBe(2);
+    expect(frameStep(5, loose)).toBe(3);
+  });
+
+  test('framing stays on your chunk at first and never outruns the known area', () => {
+    const at = chunkToSphere(N, home);
+    const patch = (count: number) =>
+      know(exploreBlock(N, home, Math.ceil(Math.sqrt(count)) + 2).slice(0, count));
+    expect(regionsFraming(N, patch(3), at).span).toBe(1);
+    expect(regionsFraming(N, patch(3), at).centre).toEqual(at);
+    expect(regionsFraming(N, patch(6), at).span).toBe(2);
+    expect(regionsFraming(N, patch(12), at).span).toBe(3);
+    // A long line of 12 chunks: the view frames 3 across around where you are.
+    const line = know(
+      Array.from({ length: 12 }, (_, i) => ({ face: 0 as const, cx: 2 + i, cy: 10 })),
+    );
+    const end = chunkToSphere(N, { face: 0, cx: 13, cy: 10 });
+    const f = regionsFraming(N, line, end);
+    expect(f.knownSpan).toBeGreaterThan(10);
+    expect(f.span).toBe(3);
+    expect(angleBetween(f.centre, end)).toBeLessThanOrEqual(chunkAngle(N) + 1e-9);
+  });
+
+  test('haze can reach more than one ring', () => {
+    expect(glimpsed(N, know([home]), 0).size).toBe(0);
+    expect(glimpsed(N, know([home]), 2).size).toBe(24);
   });
 
   test('one known chunk fills most of the view; the globe fits at k=1', () => {

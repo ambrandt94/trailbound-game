@@ -4,10 +4,13 @@
  *
  * - Visited chunks are known; their 8 neighbours are glimpsed (hazy); the rest
  *   is under clouds. Rumours open small grey clearings of their own.
- * - One number, k (0..1), says how much of the planet the party has seen. It
- *   comes from the angular span of the known chunks, in chunk widths, on a log
- *   scale: 1 chunk → 0, `spanFull` chunks → 1. The view zooms out with k, and
- *   past `bendStart` chunks it starts to bend from a flat map into the globe.
+ * - The view grows in earned steps (`regionsFraming`): it stays on the
+ *   current chunk until `widenAfter` chunks are visited, then frames N×N once
+ *   about N² chunks are known (2×2, 3×3, …), never wider than the known area.
+ * - One number, k (0..1), says how much of the planet the view shows. It
+ *   comes from the framed span, in chunk widths, on a log scale: 1 chunk → 0,
+ *   `spanFull` chunks → 1. Past `bendStart` chunks across the view starts to
+ *   bend from a flat map into the globe.
  * - The projection is azimuthal around the view centre: screen radius
  *   r(θ) = mix(θ, sin θ, bend) · R. At bend 0 it is a flat (equidistant) map,
  *   at bend 1 the orthographic globe; in between the edges curve away.
@@ -25,6 +28,12 @@ import {
 } from './cube-sphere';
 
 export interface RegionsTuning {
+  /** Visited chunks before the view widens past the current chunk. */
+  widenAfter: number;
+  /** Share of an N×N block that must be visited before the view frames N×N (1 = all N²). */
+  stepFill: number;
+  /** Rings of hazy (glimpsed) chunks around the visited ones. */
+  hazeRings: number;
   /** Chunks across at which the view starts to bend. */
   bendStart: number;
   /** Chunks across at which the whole globe shows (k = 1). */
@@ -37,8 +46,11 @@ export interface RegionsTuning {
 }
 
 export const DEFAULT_REGIONS_TUNING: RegionsTuning = {
-  bendStart: 5,
-  spanFull: 20,
+  widenAfter: 4,
+  stepFill: 1,
+  hazeRings: 1,
+  bendStart: 8,
+  spanFull: 40,
   margin: 1.2,
   fadeStartDays: 10,
   fadeFullDays: 60,
@@ -91,14 +103,21 @@ export function smoothstep(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** Chunks next to the known ones that are not known themselves. */
-export function glimpsed(n: number, known: Knowledge): Map<string, ChunkAddr> {
+/** Chunks within `rings` steps of the known ones that are not known themselves. */
+export function glimpsed(n: number, known: Knowledge, rings = 1): Map<string, ChunkAddr> {
   const out = new Map<string, ChunkAddr>();
-  for (const k of known.values()) {
-    for (const nb of neighbors8(n, k.addr)) {
-      const key = chunkKey(nb);
-      if (!known.has(key)) out.set(key, nb);
+  let front: ChunkAddr[] = [...known.values()].map((k) => k.addr);
+  for (let r = 0; r < Math.max(0, Math.round(rings)); r++) {
+    const next: ChunkAddr[] = [];
+    for (const a of front) {
+      for (const nb of neighbors8(n, a)) {
+        const key = chunkKey(nb);
+        if (known.has(key) || out.has(key)) continue;
+        out.set(key, nb);
+        next.push(nb);
+      }
     }
+    front = next;
   }
   return out;
 }
@@ -139,6 +158,86 @@ export function knownExtent(n: number, known: Knowledge, fallback: Vec3): KnownE
   for (const p of centres) far = Math.max(far, angleBetween(centre, p));
   const radius = far + ca / 2;
   return { centre, radius, span: Math.max(1, (2 * radius) / ca) };
+}
+
+/** Chunks across the view frames for `visited` chunks: 1 until `widenAfter`, then N with N² × stepFill visited. */
+export function frameStep(visited: number, tuning: RegionsTuning = DEFAULT_REGIONS_TUNING): number {
+  if (visited < Math.max(1, tuning.widenAfter)) return 1;
+  return Math.max(2, Math.floor(Math.sqrt(visited / Math.max(0.05, tuning.stepFill)) + 1e-9));
+}
+
+/** Visited chunks the next step (N + 1 across) needs. */
+export function nextStepAt(
+  visited: number,
+  tuning: RegionsTuning = DEFAULT_REGIONS_TUNING,
+): number {
+  const step = frameStep(visited, tuning);
+  if (step === 1) return Math.max(1, tuning.widenAfter);
+  return Math.ceil((step + 1) ** 2 * Math.max(0.05, tuning.stepFill) - 1e-9);
+}
+
+export interface RegionsFraming extends KnownExtent {
+  /** Visited (known) chunks. */
+  visited: number;
+  /** The known area across, chunk widths. */
+  knownSpan: number;
+  /** The earned step: chunks across the view frames (span ≤ this). */
+  step: number;
+  /** Visited chunks the next step needs. */
+  nextAt: number;
+}
+
+/**
+ * What the view frames: the earned step (`frameStep`), no wider than the
+ * known area. When the known area is wider than the step (a long journey),
+ * the frame keeps the current chunk in view and leans toward the middle of
+ * what is known.
+ */
+export function regionsFraming(
+  n: number,
+  known: Knowledge,
+  current: Vec3,
+  tuning: RegionsTuning = DEFAULT_REGIONS_TUNING,
+): RegionsFraming {
+  const ca = chunkAngle(n);
+  const ext = knownExtent(n, known, current);
+  const visited = known.size;
+  const step = frameStep(visited, tuning);
+  // Chunks across, as a map reads it: the known area's box in the view's own axes.
+  const knownSpan = boxSpan(n, known, ext.centre);
+  const span = Math.max(1, Math.min(step, knownSpan));
+  let centre = ext.centre;
+  if (knownSpan > step + 0.01) {
+    // Frame around the current chunk, leaning toward the known area's middle.
+    const room = Math.max(0, ((span - 1) / 2) * ca);
+    const d = angleBetween(current, ext.centre);
+    centre = d <= room ? ext.centre : slerp3(current, ext.centre, room / d);
+  }
+  return {
+    centre,
+    radius: (span * ca) / 2,
+    span,
+    visited,
+    knownSpan,
+    step,
+    nextAt: nextStepAt(visited, tuning),
+  };
+}
+
+/** Known area across in chunk widths: its bounding box around `centre` (east / north axes). */
+export function boxSpan(n: number, known: Knowledge, centre: Vec3): number {
+  if (known.size === 0) return 1;
+  const ca = chunkAngle(n);
+  const axes = frameAxes(centre);
+  let far = 0;
+  for (const k of known.values()) {
+    const p = chunkToSphere(n, k.addr);
+    const z = dot3(p, axes.c);
+    const x = Math.abs(Math.atan2(dot3(p, axes.east), z));
+    const y = Math.abs(Math.atan2(dot3(p, axes.north), z));
+    far = Math.max(far, x, y);
+  }
+  return 1 + (2 * far) / ca;
 }
 
 /** k: 0 with one chunk known, 1 at `spanFull` chunks across (log scale). */
