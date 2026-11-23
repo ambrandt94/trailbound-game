@@ -12,3 +12,4 @@ export * from './make-field';
 export * from './world-bake';
 export * from './chunk-raster';
 export * from './biome-legend';
+export * from './regions';

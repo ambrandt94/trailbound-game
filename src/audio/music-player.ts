@@ -43,13 +43,15 @@ export class MusicPlayer {
   private filter: BiquadFilterNode | null = null;
   private output: GainNode | null = null;
   private readonly voices: Voice[] = [];
-  private wanted: { track: MusicTrack; fadeSec: number } | null = null;
+  private wanted: { track: MusicTrack; fadeSec: number; resume?: boolean } | null = null;
   private listening = false;
   private volume = 0.45;
   private on = true;
   private muffle = 0;
   private lastMuffle = -1;
   private readonly fadeInSec: number;
+  /** Where each released track stopped (seconds into the file), to pick it up again. */
+  private readonly stoppedAt = new Map<string, number>();
 
   constructor(private readonly options: MusicPlayerOptions) {
     this.fadeInSec = options.fadeInSec ?? 1.5;
@@ -97,10 +99,25 @@ export class MusicPlayer {
     }
   }
 
-  /** Crossfade to `track` over `fadeSec` (the first track fades in over the default fade-in). */
-  play(track: MusicTrack, fadeSec: number): void {
+  /**
+   * Crossfade to `track` over `fadeSec` (the first track fades in over the default fade-in).
+   * With `resume`, the track starts where it last stopped (or keeps going if it is still fading out).
+   */
+  play(track: MusicTrack, fadeSec: number, resume = false): void {
     if (this.voices.some((voice) => voice.track.id === track.id && voice.fade.to === 1)) return;
-    this.wanted = { track, fadeSec };
+    if (resume && this.ac) {
+      // Still fading out: turn it back up instead of starting it over.
+      const fading = this.voices.find((voice) => voice.track.id === track.id);
+      if (fading) {
+        for (const voice of this.voices) if (voice !== fading) this.ramp(voice, 0, fadeSec);
+        this.ramp(fading, 1, fadeSec);
+        this.voices.splice(this.voices.indexOf(fading), 1);
+        this.voices.push(fading);
+        this.wanted = null;
+        return;
+      }
+    }
+    this.wanted = { track, fadeSec, resume };
     if (this.unlocked) this.startWanted();
   }
 
@@ -189,6 +206,8 @@ export class MusicPlayer {
     for (const voice of this.voices) this.ramp(voice, 0, fadeSec);
     const voice = this.spawn(want.track);
     if (!voice) return;
+    const at = want.resume ? this.stoppedAt.get(want.track.id) : undefined;
+    if (at !== undefined && at > 0) seek(voice.el, at);
     voice.fade = { start: ac.currentTime, dur: fadeSec, from: 0, to: 1 };
     this.schedule(voice);
     void this.playEl(voice);
@@ -251,6 +270,8 @@ export class MusicPlayer {
   private release(index: number): void {
     const [voice] = this.voices.splice(index, 1);
     if (!voice) return;
+    if (Number.isFinite(voice.el.currentTime))
+      this.stoppedAt.set(voice.track.id, voice.el.currentTime);
     voice.el.pause();
     voice.el.removeAttribute('src');
     voice.el.load();
@@ -269,4 +290,14 @@ export class MusicPlayer {
     filter.Q.setTargetAtTime(0.7 + this.muffle * 2.5, t, tc);
     output.gain.setTargetAtTime(this.outputLevel, t, now ? 0.001 : 0.2);
   }
+}
+
+/** Jump to `sec` once the element knows its duration (setting it earlier is ignored by some browsers). */
+function seek(el: HTMLAudioElement, sec: number): void {
+  const go = () => {
+    const end = Number.isFinite(el.duration) ? el.duration : Infinity;
+    if (sec < end - 0.25) el.currentTime = sec;
+  };
+  if (el.readyState >= 1) go();
+  else el.addEventListener('loadedmetadata', go, { once: true });
 }

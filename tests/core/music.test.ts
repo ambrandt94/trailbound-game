@@ -22,9 +22,9 @@ const pick = (patch: Partial<MusicContext>) => {
 };
 
 describe('the committed manifest', () => {
-  test('parses clean with all 13 tracks and every file name matches its id', () => {
+  test('parses clean with all 14 tracks and every file name matches its id', () => {
     expect(problems).toEqual([]);
-    expect(tracks).toHaveLength(13);
+    expect(tracks).toHaveLength(14);
     for (const track of tracks) expect(track.file).toBe(`${track.id}.ogg`);
   });
 
@@ -280,5 +280,48 @@ describe('director hysteresis', () => {
     const next = director.update(camp, 1);
     expect(next?.reason).toBe('ended');
     expect(next?.track.id).not.toBe(first?.track.id);
+  });
+});
+
+describe('World Gen theme', () => {
+  const plains = ctx({ scene: 'map', biome: Biome.Plains });
+  const worldgen = ctx({ scene: 'worldgen' });
+
+  test('World Gen plays its own theme, whatever the road was doing', () => {
+    expect(sceneClass(worldgen)).toBe('worldgen');
+    expect(pick({ scene: 'worldgen' }).track.id).toBe('worldgen-theme');
+    expect(pick({ scene: 'worldgen', night: true, biome: Biome.Forest }).track.id).toBe(
+      'worldgen-theme',
+    );
+    // ...and never on the road or the title.
+    expect(pick({ scene: 'map', biome: Biome.Plains }).track.id).not.toBe('worldgen-theme');
+    expect(pick({ scene: 'title' }).track.id).toBe('menu-theme');
+  });
+
+  test('leaving World Gen goes back to the interrupted road track, resumed', () => {
+    const director = new MusicDirector(tracks);
+    const road = director.update(plains, 0);
+    expect(road?.track.id).toBe('on-the-road-happy-loop');
+    director.update(worldgen, 100);
+    const into = director.update(worldgen, 102);
+    expect(into?.track.id).toBe('worldgen-theme');
+    expect(into?.reason).toBe('class');
+    director.update(plains, 300);
+    const back = director.update(plains, 302);
+    expect(back?.track.id).toBe('on-the-road-happy-loop');
+    expect(back?.reason).toBe('resume');
+    expect(back?.resume).toBe(true);
+  });
+
+  test('no resume when the interrupted track no longer fits', () => {
+    const director = new MusicDirector(tracks);
+    director.update(plains, 0);
+    director.update(worldgen, 100);
+    director.update(worldgen, 102);
+    const desert = ctx({ scene: 'map', biome: Biome.Desert });
+    director.update(desert, 300);
+    const next = director.update(desert, 302);
+    expect(next?.track.id).toBe('caravan-over-dunes');
+    expect(next?.resume).toBeUndefined();
   });
 });

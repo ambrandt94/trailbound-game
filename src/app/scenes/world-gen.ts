@@ -23,7 +23,7 @@ import {
   type ChunkAddr,
   type PlanetField,
 } from '../../core/planet';
-import { Biome, clampSettings, type WorldSettings } from '../../core/world/models';
+import { Biome, clampSettings, worldSizeKm, type WorldSettings } from '../../core/world/models';
 import { MIN_HOME_LAND, chunkLandShare, settingsShape } from '../../core/world/planet-chunk';
 import { ChunkCache } from '../../render/worldgen/chunk-cache';
 import { ChunkView } from '../../render/worldgen/chunk-view';
@@ -70,6 +70,7 @@ import {
   type WgMode,
 } from '../../ui/worldgen-state';
 import type { Scene } from '../scene-stack';
+import { RegionsController } from './regions-controller';
 
 /** Slider previews: small and quick (≈0.4 s); the full bake follows. */
 const PREVIEW = { w: 512, h: 256 };
@@ -103,6 +104,8 @@ export class WorldGenScene implements Scene {
   private stage: HTMLDivElement | null = null;
   private view: WorldGenView | null = null;
   private chunkView: ChunkView | null = null;
+  /** R1: the Regions tab (belief map debug preview). */
+  private regions: RegionsController | null = null;
   private readonly bakeRunner = new JobRunner((r) => this.onBake(r));
   private readonly chunkRunner = new JobRunner((r) => this.onChunk(r));
   private readonly cache = new ChunkCache();
@@ -112,7 +115,7 @@ export class WorldGenScene implements Scene {
   private field: { key: string; field: PlanetField } | null = null;
   private chunkJob: { id: number; addr: ChunkAddr; key: string } | null = null;
   private genRatio = 1;
-  private lastMode: Exclude<WgMode, 'chunk'> = 'globe';
+  private lastMode: Exclude<WgMode, 'chunk' | 'regions'> = 'globe';
   private pointer: { id: number; x: number; y: number; moved: boolean } | null = null;
   /** The view has been dragged or zoomed: stop re-centring it on the start. */
   private steered = false;
@@ -232,7 +235,8 @@ export class WorldGenScene implements Scene {
         return;
       }
     }
-    if (wgMode.value === 'chunk') this.chunkView?.render();
+    if (wgMode.value === 'regions') this.regions?.render(performance.now());
+    else if (wgMode.value === 'chunk') this.chunkView?.render();
     else this.view?.render();
   }
 
@@ -249,6 +253,8 @@ export class WorldGenScene implements Scene {
     this.cache.clear();
     for (const off of this.cleanups.splice(0)) off();
     clearBiomeFocus();
+    this.regions?.dispose();
+    this.regions = null;
     this.view?.dispose();
     this.chunkView?.dispose();
     this.stage?.remove();
@@ -289,6 +295,7 @@ export class WorldGenScene implements Scene {
   }
 
   private settingsChanged(): void {
+    this.regions?.worldChanged();
     this.shownChunk = null;
     this.cache.clear();
     wgCached.value = [];
@@ -337,6 +344,7 @@ export class WorldGenScene implements Scene {
     if (reply.type !== 'bake') return;
     const done: BakeDone = reply;
     this.view?.setBake(done.bake);
+    this.regions?.setBake(done.bake);
     if (this.bakeStage === 'preview') {
       wgBake.value = {
         state: 'preview',
@@ -631,6 +639,14 @@ export class WorldGenScene implements Scene {
     if (mode === 'chunk' && !this.chunkView?.hasRaster) return;
     if (this.anim) this.finishAnim();
     const prev = wgMode.value;
+    if (mode === 'regions' || prev === 'regions') {
+      // Regions is its own view: switch straight in and out of it.
+      wgMode.value = mode;
+      this.regions?.setActive(mode === 'regions');
+      if (mode === 'globe' || mode === 'flat') this.lastMode = mode;
+      this.snapMode(mode, prev);
+      return;
+    }
     if (mode !== 'chunk') this.lastMode = mode;
     wgMode.value = mode;
     const view = this.view;
@@ -765,7 +781,7 @@ export class WorldGenScene implements Scene {
   /** The old instant switch (no view yet, same mode, or reduced motion). */
   private snapMode(mode: WgMode, prev: WgMode): void {
     const view = this.view;
-    if (view && mode !== 'chunk' && prev !== mode) {
+    if (view && mode !== 'chunk' && mode !== 'regions' && prev !== mode) {
       const { w, h } = view.size;
       if (mode === 'flat' && view.view.morph < 0.5) this.globeLat0 = view.view.lat0;
       view.view = this.planetView(mode, view.view, w, h);
@@ -815,6 +831,13 @@ export class WorldGenScene implements Scene {
     this.stage = stage;
     this.view = new WorldGenView(stage);
     this.chunkView = new ChunkView(stage);
+    this.regions = new RegionsController(stage, {
+      n: () => PLANET_PRESET_SPECS[this.settings().planet].n,
+      seed: () => this.seed(),
+      settings: () => this.settings(),
+      start: () => wgStart.value?.addr ?? this.settings().homeChunk ?? null,
+      chunkKm: () => worldSizeKm(this.settings().worldScale),
+    });
     const { w, h } = this.view.size;
     const start = this.settings().homeChunk;
     const ll = start ? chunkLatLon(PLANET_PRESET_SPECS[this.settings().planet].n, start) : null;
@@ -880,7 +903,7 @@ export class WorldGenScene implements Scene {
 
   private hover(x: number, y: number): void {
     const view = this.view;
-    if (!view || wgMode.value === 'chunk' || this.anim) return;
+    if (!view || wgMode.value === 'chunk' || wgMode.value === 'regions' || this.anim) return;
     const addr = view.pick(x, y);
     const prev = view.hover;
     if ((addr && prev && sameChunk(addr, prev)) || (!addr && !prev)) return;
@@ -889,6 +912,10 @@ export class WorldGenScene implements Scene {
   }
 
   private click(x: number, y: number): void {
+    if (wgMode.value === 'regions') {
+      this.regions?.click(x, y);
+      return;
+    }
     if (wgMode.value === 'chunk' || this.anim) return;
     const addr = this.view?.pick(x, y);
     if (!addr) return;
@@ -897,6 +924,10 @@ export class WorldGenScene implements Scene {
   }
 
   private drag(dx: number, dy: number): void {
+    if (wgMode.value === 'regions') {
+      this.regions?.drag(dx, dy);
+      return;
+    }
     if (this.anim) return;
     if (wgMode.value === 'chunk') {
       this.chunkView?.pan(dx, dy);
@@ -916,6 +947,10 @@ export class WorldGenScene implements Scene {
   }
 
   private zoom(factor: number, x: number, y: number): void {
+    if (wgMode.value === 'regions') {
+      this.regions?.zoom(factor);
+      return;
+    }
     if (this.anim) return;
     if (wgMode.value === 'chunk') {
       this.chunkView?.zoomAt(factor, x, y);

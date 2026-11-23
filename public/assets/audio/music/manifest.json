@@ -4,6 +4,7 @@
   "bundleGeneratedAt": "2026-11-17T03:19:24.444Z",
   "vocabulary": [
     "title",
+    "worldgen",
     "map",
     "travel-day",
     "travel-night",
@@ -185,6 +186,20 @@
       "intensity": 0.65,
       "durationSec": 59,
       "kind": "ambient"
+    },
+    {
+      "id": "worldgen-theme",
+      "name": "World Gen Theme",
+      "file": "worldgen-theme.ogg",
+      "loop": true,
+      "context": [
+        "worldgen"
+      ],
+      "intensity": 0.45,
+      "durationSec": 192.8,
+      "kind": "theme",
+      "mood": "Wonder · cartographer",
+      "notes": "Sent by Alex for the World Gen screen. Add it to the Asset Matrix export so music-sync keeps it."
     }
   ]
 }

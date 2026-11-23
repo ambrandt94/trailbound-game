@@ -4,6 +4,7 @@ import { MUSIC_RULES, type MusicRules, type TagWant } from './rules';
 
 export function sceneClass(ctx: MusicContext): MusicSceneClass {
   if (ctx.scene === 'title') return 'title';
+  if (ctx.scene === 'worldgen') return 'worldgen';
   if (ctx.minigame) return 'minigame';
   if (ctx.camp || ctx.place === 'camp') return 'camp';
   if (ctx.place !== null && MUSIC_RULES.place[ctx.place]?.some((want) => want.tag === 'town')) {
@@ -22,8 +23,8 @@ export function wantedTags(
   rules: MusicRules = MUSIC_RULES,
 ): Map<string, number> {
   const out = new Map<string, number>();
-  if (ctx.scene === 'title') {
-    add(out, rules.scene.title);
+  if (ctx.scene === 'title' || ctx.scene === 'worldgen') {
+    add(out, rules.scene[ctx.scene]);
     return out;
   }
   const cls = sceneClass(ctx);
@@ -52,7 +53,8 @@ export function intensityPreference(ctx: MusicContext, rules: MusicRules = MUSIC
   const cls = sceneClass(ctx);
   let pref = rules.intensity.byClass[cls];
   if (cls === 'town' && ctx.place) pref = rules.intensity.byPlace[ctx.place] ?? pref;
-  if (ctx.night && cls !== 'title' && cls !== 'minigame') pref += rules.intensity.nightShift;
+  if (ctx.night && cls !== 'title' && cls !== 'worldgen' && cls !== 'minigame')
+    pref += rules.intensity.nightShift;
   return Math.min(1, Math.max(0, pref));
 }
 

@@ -4,6 +4,7 @@
  * itself is drawn by the World Gen scene behind this panel.
  */
 import { BiomeLegend } from './biome-legend';
+import { RegionsPanel } from './regions-panel';
 import {
   chunkKey,
   FACE_NAMES,
@@ -57,6 +58,7 @@ const MODES: Array<{ id: WgMode; label: string }> = [
   { id: 'globe', label: 'Globe' },
   { id: 'flat', label: 'World map' },
   { id: 'chunk', label: 'Chunk' },
+  { id: 'regions', label: 'Regions' },
 ];
 
 const LAYERS: Array<{ id: keyof WgLayers; label: string }> = [
@@ -97,7 +99,13 @@ function ModeToggle() {
           class={`wg-mode${mode === m.id ? ' on' : ''}`}
           aria-pressed={mode === m.id}
           disabled={m.id === 'chunk' && !target && job?.state !== 'ready'}
-          title={m.id === 'chunk' ? 'Fly into the selected chunk' : undefined}
+          title={
+            m.id === 'chunk'
+              ? 'Fly into the selected chunk'
+              : m.id === 'regions'
+                ? 'What you know of the world (debug preview)'
+                : undefined
+          }
           onClick={() => wgCommands.setMode(m.id)}
         >
           {m.id === 'chunk' && pending ? <span class="wg-spin" aria-label="Generating" /> : null}
@@ -242,7 +250,8 @@ export function WorldGenScreen() {
   return (
     <div class="wg-screen" data-wg-mode={wgMode.value} data-wg-bake={bake.state}>
       <ModeToggle />
-      {layers.overlay ? <BiomeLegend class="wg-legend" /> : null}
+      {layers.overlay && wgMode.value !== 'regions' ? <BiomeLegend class="wg-legend" /> : null}
+      {wgMode.value === 'regions' ? <RegionsPanel /> : null}
       {wgMode.value === 'chunk' ? (
         <button
           type="button"
