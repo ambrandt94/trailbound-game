@@ -6,6 +6,7 @@ import {
   type WorldSettings,
 } from '../core/world/models';
 import type { AvatarGender } from '../core/people/avatar';
+import { DEFAULT_WORLD_SEED } from '../core/world/index';
 
 export interface SwatchView {
   id: string;
@@ -116,7 +117,14 @@ export type NewWorldGen = Pick<
   | 'avgPerPlace'
   | 'planet'
   | 'worldSource'
+  | 'homeChunk'
+  | 'seaLevel'
+  | 'tempBias'
+  | 'moistBias'
 >;
+
+/** Seed of the next new world (World Gen's seed field and re-roll). */
+export const newWorldSeed = signal<number>(DEFAULT_WORLD_SEED);
 
 export function defaultNewWorldGen(): NewWorldGen {
   const d = DEFAULT_WORLD_SETTINGS;
@@ -131,6 +139,10 @@ export function defaultNewWorldGen(): NewWorldGen {
     avgPerPlace: d.avgPerPlace,
     planet: d.planet,
     worldSource: d.worldSource,
+    homeChunk: d.homeChunk,
+    seaLevel: d.seaLevel,
+    tempBias: d.tempBias,
+    moistBias: d.moistBias,
   };
 }
 
@@ -150,6 +162,10 @@ export function setNewWorldGen(patch: Partial<NewWorldGen>): void {
     avgPerPlace: next.avgPerPlace,
     planet: next.planet,
     worldSource: next.worldSource,
+    homeChunk: next.homeChunk,
+    seaLevel: next.seaLevel,
+    tempBias: next.tempBias,
+    moistBias: next.moistBias,
   };
 }
 

@@ -54,30 +54,66 @@ function chunkStats(field: PlanetField, addr: ChunkAddr): ChunkStats {
   return { land: land / total, cold: cold / total };
 }
 
+function scoreFrom(
+  n: number,
+  a: ChunkAddr,
+  st: ChunkStats,
+  statsOf: (b: ChunkAddr) => ChunkStats,
+): StartCandidate {
+  const ring = neighbors8(n, a);
+  let around = 0;
+  for (const b of ring) around += statsOf(b).land;
+  around /= Math.max(1, ring.length);
+  const latDeg = (sphereToLatLon(chunkToSphere(n, a)).lat * 180) / Math.PI;
+  const own = 1 - clamp01(Math.abs(st.land - 0.8) / 0.4);
+  const inland = clamp01((around - 0.45) / 0.35);
+  const temperate = Math.exp(-(((Math.abs(latDeg) - 35) / 14) ** 2)) * (latDeg >= 0 ? 1 : 0.85);
+  const edge = Math.min(a.cx, a.cy, n - 1 - a.cx, n - 1 - a.cy);
+  const away = n < 6 ? 1 : edge >= 2 ? 1 : 0.35;
+  const score = own * (0.15 + 0.85 * inland) * temperate * away * (1 - st.cold);
+  return { addr: a, score, land: st.land, around, latDeg };
+}
+
 /** Every chunk scored, best first. Deterministic for a field. */
 export function rankStartChunks(field: PlanetField): StartCandidate[] {
   const n = field.n;
   const stats = new Map<string, ChunkStats>();
   const chunks = allChunks(n);
   for (const a of chunks) stats.set(chunkKey(a), chunkStats(field, a));
+  const statsOf = (b: ChunkAddr) => stats.get(chunkKey(b)) ?? { land: 0, cold: 0 };
   const out: StartCandidate[] = [];
   for (const a of chunks) {
-    const st = stats.get(chunkKey(a))!;
+    const st = statsOf(a);
     if (st.land < 0.4) continue;
-    const ring = neighbors8(n, a);
-    let around = 0;
-    for (const b of ring) around += stats.get(chunkKey(b))?.land ?? 0;
-    around /= Math.max(1, ring.length);
-    const latDeg = (sphereToLatLon(chunkToSphere(n, a)).lat * 180) / Math.PI;
-    const own = 1 - clamp01(Math.abs(st.land - 0.8) / 0.4);
-    const inland = clamp01((around - 0.45) / 0.35);
-    const temperate = Math.exp(-(((Math.abs(latDeg) - 35) / 14) ** 2)) * (latDeg >= 0 ? 1 : 0.85);
-    const edge = Math.min(a.cx, a.cy, n - 1 - a.cx, n - 1 - a.cy);
-    const away = n < 6 ? 1 : edge >= 2 ? 1 : 0.35;
-    const score = own * (0.15 + 0.85 * inland) * temperate * away * (1 - st.cold);
-    out.push({ addr: a, score, land: st.land, around, latDeg });
+    out.push(scoreFrom(n, a, st, statsOf));
   }
   out.sort((x, y) => y.score - x.score || chunkKey(x.addr).localeCompare(chunkKey(y.addr)));
+  return out;
+}
+
+/** One chunk's start score (World Gen's hand pick), on the same scale as `rankStartChunks`. */
+export function scoreStartChunk(field: PlanetField, addr: ChunkAddr): StartCandidate {
+  const own = chunkStats(field, addr);
+  return scoreFrom(field.n, addr, own, (b) => chunkStats(field, b));
+}
+
+/**
+ * Starts for World Gen's "Reroll start": the best candidates, each at least
+ * two chunks from every earlier one so a reroll visibly moves.
+ */
+export function startChoices(ranked: readonly StartCandidate[], count = 12): StartCandidate[] {
+  const out: StartCandidate[] = [];
+  for (const c of ranked) {
+    if (out.length >= count) break;
+    if (c.score <= 0) break;
+    const near = out.some(
+      (o) =>
+        o.addr.face === c.addr.face &&
+        Math.abs(o.addr.cx - c.addr.cx) <= 2 &&
+        Math.abs(o.addr.cy - c.addr.cy) <= 2,
+    );
+    if (!near) out.push(c);
+  }
   return out;
 }
 

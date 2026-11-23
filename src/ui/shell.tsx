@@ -9,6 +9,7 @@ import {
 } from '../core/sim/map-pace';
 import type { HudPrefs } from '../core/state/settings';
 import { CreatorScreen } from './creator';
+import { WorldGenScreen } from './worldgen';
 import { skinText } from './glyphs';
 import { SettingsPanel } from './area-settings';
 import { DayCycleHud } from './day-cycle/hud';
@@ -226,6 +227,17 @@ function MoreMenu() {
       >
         <HudIcon name="person" />
         Avatar
+      </button>
+      <button
+        type="button"
+        class="menu-item"
+        onClick={() => {
+          hudMenuOpen.value = false;
+          commands.openWorldGen();
+        }}
+      >
+        <HudIcon name="globe" />
+        World Gen
       </button>
       <label class="menu-item skin">
         <span>Map</span>
@@ -685,6 +697,7 @@ export function Shell() {
   useHudKeys();
   if (screen.value === 'boot') return <BootScreen />;
   if (screen.value === 'creator') return <CreatorScreen />;
+  if (screen.value === 'worldgen') return <WorldGenScreen />;
   if (settingsOpen.value && screen.value !== 'play') return <SettingsPanel />;
   return (
     <>

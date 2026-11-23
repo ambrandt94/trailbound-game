@@ -12,7 +12,7 @@ import { Biome } from '../world/models';
 import landJson from './data/trailbound-land.json';
 import iceJson from './data/trailbound-ice.json';
 import type { Vec3 } from './cube-sphere';
-import type { PlanetField } from './field';
+import { NEUTRAL_SHAPE, SHAPE_CLIMATE_GAIN, type PlanetField, type PlanetShape } from './field';
 import { classify, type PlanetSample } from './global-layer';
 import { decodeRle, sampleField, signedDistance, type RleMask } from './mask';
 import { fbm3, ridged3 } from './noise3';
@@ -51,7 +51,14 @@ export interface TrailboundOptions {
   seaLevel?: number;
   /** Coast wobble, 0 = the reference's exact line, 1 = default. */
   roughness?: number;
+  /** World Gen sliders; `shape.sea` adds `TRAILBOUND_SEA_PER_UNIT` px per unit. */
+  shape?: PlanetShape;
 }
+
+/** Mask pixels of sea level per unit of the sea slider (±1 ≈ ±2.8°, the land share ±~15 points). */
+export const TRAILBOUND_SEA_PER_UNIT = 8;
+/** Ice-edge shift in mask pixels per unit of the temperature slider (warmer shrinks the caps). */
+const ICE_PER_TEMP = 10;
 
 function norm(x: number, y: number, z: number): Vec3 {
   const l = Math.hypot(x, y, z) || 1;
@@ -67,12 +74,15 @@ export class TrailboundLayer implements PlanetField {
   readonly n: number;
   readonly seaLevel: number;
   readonly roughness: number;
+  readonly shape: PlanetShape;
   private readonly m: MaskFields;
 
   constructor(opts: TrailboundOptions) {
     this.seed = opts.seed >>> 0;
     this.n = Math.max(1, Math.floor(opts.n));
-    this.seaLevel = opts.seaLevel ?? TRAILBOUND_SEA_LEVEL;
+    this.shape = opts.shape ?? NEUTRAL_SHAPE;
+    this.seaLevel =
+      (opts.seaLevel ?? TRAILBOUND_SEA_LEVEL) + this.shape.sea * TRAILBOUND_SEA_PER_UNIT;
     this.roughness = opts.roughness ?? 1;
     this.m = trailboundMasks();
   }
@@ -122,7 +132,7 @@ export class TrailboundLayer implements PlanetField {
     const px = this.maskPx(v);
     if (!px) return 1;
     const d = sampleField(this.m.ice, this.m.w, this.m.h, px.x, px.y);
-    return clamp01(d + 0.5);
+    return clamp01(d + 0.5 - this.shape.temp * ICE_PER_TEMP);
   }
 
   sample(v: Vec3): PlanetSample {
@@ -151,13 +161,13 @@ export class TrailboundLayer implements PlanetField {
     let temp = Math.pow(Math.cos(lat), 0.85);
     temp += (fbm3(v[0] * 3, v[1] * 3, v[2] * 3, s + 211, 2) - 0.5) * 0.3;
     temp -= Math.max(0, elevM) / 4200;
-    temp = clamp01(temp);
+    temp = clamp01(temp + this.shape.temp * SHAPE_CLIMATE_GAIN);
     let moist = 0.5 + (fbm3(v[0] * 3.4, v[1] * 3.4, v[2] * 3.4, s + 241, 4) - 0.5) * 1.3;
     moist += 0.14 * Math.exp(-((deg / 12) ** 2));
     moist -= 0.12 * Math.exp(-(((deg - 27) / 9) ** 2));
     moist += 0.05 * Math.exp(-(((deg - 52) / 10) ** 2));
     moist += clamp01(0.4 - inland) * 0.35;
-    moist = clamp01(moist);
+    moist = clamp01(moist + this.shape.moist * SHAPE_CLIMATE_GAIN);
 
     const biome = ice > 0.5 ? Biome.Snow : classify(elevM, temp, moist, belt, true);
     return { elevM, biome, temp, moist, belt };

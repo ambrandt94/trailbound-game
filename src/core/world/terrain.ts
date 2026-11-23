@@ -120,6 +120,8 @@ export function buildTerrain(opts: {
   latAt?: LatAt;
   /** Stamp the guaranteed main mountain range (classic maps). Default true. */
   mainRange?: boolean;
+  /** Added to land moisture (planet chunks: the World Gen moisture slider). */
+  moistBias?: number;
 }): TerrainField {
   const { seed, width, height, style, landAt, latAt } = opts;
   const stride = coarseStride(width);
@@ -217,7 +219,7 @@ export function buildTerrain(opts: {
     if (elev[i]! < TRENCH_FLOOR_M) elev[i] = TRENCH_FLOOR_M;
   }
 
-  const moist = moistureField(elev, land, cw, ch, seed, height, stride, latAt);
+  const moist = moistureField(elev, land, cw, ch, seed, height, stride, latAt, opts.moistBias);
 
   const heightM = new Float32Array(width * height);
   const heights = new Float32Array(width * height);
@@ -542,6 +544,7 @@ function moistureField(
   worldH: number,
   stride: number,
   latAt?: LatAt,
+  moistBias = 0,
 ): Float32Array {
   const moist = new Float32Array(cw * ch);
   const shadow = new Float32Array(cw * ch);
@@ -562,7 +565,9 @@ function moistureField(
       const i = x + y * cw;
       const n = valueNoise2(x * 0.11, y * 0.11, seed + 41);
       const base = 0.3 + lat * 0.32 + (n - 0.5) * 0.45;
-      moist[i] = land[i] ? clamp01(base - shadow[i]! * 0.62) : clamp01(0.55 + lat * 0.2);
+      moist[i] = land[i]
+        ? clamp01(base - shadow[i]! * 0.62 + moistBias)
+        : clamp01(0.55 + lat * 0.2);
     }
   }
   return moist;

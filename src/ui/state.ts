@@ -3,7 +3,7 @@ import type { WagonActionId, WagonRow } from '../core/sim/party';
 import { DEFAULT_SEASON, type SeasonId, type SeasonPreset } from '../core/sim/day-cycle';
 import { DEFAULT_SETTINGS, type GameSettings } from '../core/state/settings';
 
-export type UiScreen = 'boot' | 'title' | 'play' | 'creator';
+export type UiScreen = 'boot' | 'title' | 'play' | 'creator' | 'worldgen';
 
 export const screen = signal<UiScreen>('boot');
 export const bootMessage = signal('Loading the road…');
@@ -117,6 +117,8 @@ export interface UiCommands {
   changeSettings(partial: Partial<GameSettings>): void;
   save(): void;
   editAvatar(): void;
+  /** World Gen for the world in play, read-only (map More menu, pause menu). */
+  openWorldGen(): void;
   enterPlace(): void;
   wagonAct(id: WagonActionId): void;
   closeWagon(): void;
@@ -152,6 +154,9 @@ export const commands: UiCommands = {
     return;
   },
   editAvatar() {
+    return;
+  },
+  openWorldGen() {
     return;
   },
   enterPlace() {
@@ -197,6 +202,7 @@ export function bindCommands(next: UiCommands): void {
   commands.changeSettings = next.changeSettings;
   commands.save = next.save;
   commands.editAvatar = next.editAvatar;
+  commands.openWorldGen = next.openWorldGen;
   commands.enterPlace = next.enterPlace;
   commands.wagonAct = next.wagonAct;
   commands.closeWagon = next.closeWagon;

@@ -16,7 +16,7 @@
 import { Biome } from '../world/models';
 import { Rng } from '../world/noise';
 import { angleBetween, chunkToSphere, type ChunkAddr, type Vec3 } from './cube-sphere';
-import type { PlanetField } from './field';
+import { NEUTRAL_SHAPE, SHAPE_CLIMATE_GAIN, type PlanetField, type PlanetShape } from './field';
 import { fbm3, ridged3 } from './noise3';
 
 export interface PlanetSample {
@@ -44,7 +44,12 @@ export interface PlanetLayerOptions {
   /** The hand-tuned world's chunk. Omit for a planet with no home override. */
   home?: ChunkAddr;
   plates?: number;
+  /** World Gen sliders (sea level lowers the plate base; climate shifts temp / moist). */
+  shape?: PlanetShape;
 }
+
+/** Plate-base drop per unit of the sea slider (±1 moves the land share by roughly ±15 points). */
+const SEA_BASE_PER_UNIT = 0.22;
 
 const BELT_WIDTH = 0.07;
 const PEAK_M = 3000;
@@ -69,6 +74,7 @@ export class PlanetLayer implements PlanetField {
   readonly seed: number;
   readonly n: number;
   readonly home: ChunkAddr | null;
+  readonly shape: PlanetShape;
   private readonly plates: Plate[];
   private readonly homeCentre: Vec3 | null;
   /** Angular half-width of one chunk at the face centre. */
@@ -78,6 +84,7 @@ export class PlanetLayer implements PlanetField {
     this.seed = opts.seed >>> 0;
     this.n = Math.max(1, Math.floor(opts.n));
     this.home = opts.home ?? null;
+    this.shape = opts.shape ?? NEUTRAL_SHAPE;
     this.homeCentre = opts.home ? chunkToSphere(this.n, opts.home) : null;
     this.chunkHalf = Math.PI / 4 / this.n;
     const rng = new Rng((this.seed ^ 0x2c1b3c6d) >>> 0 || 1);
@@ -138,6 +145,7 @@ export class PlanetLayer implements PlanetField {
     base += (fbm3(v[0] * 1.7, v[1] * 1.7, v[2] * 1.7, s + 101, 4) - 0.5) * 0.95;
     base += (fbm3(v[0] * 5.5, v[1] * 5.5, v[2] * 5.5, s + 131, 3) - 0.5) * 0.32;
     base += (fbm3(v[0] * 17, v[1] * 17, v[2] * 17, s + 151, 2) - 0.5) * 0.1;
+    base -= this.shape.sea * SEA_BASE_PER_UNIT;
 
     let belt = 0;
     if (closing > 0) {
@@ -173,7 +181,7 @@ export class PlanetLayer implements PlanetField {
     let temp = Math.pow(Math.cos(lat), 0.85);
     temp += (fbm3(v[0] * 3, v[1] * 3, v[2] * 3, s + 211, 2) - 0.5) * 0.3;
     temp -= Math.max(0, elevM) / 4200;
-    temp = Math.max(0, Math.min(1, temp));
+    temp = Math.max(0, Math.min(1, temp + this.shape.temp * SHAPE_CLIMATE_GAIN));
 
     const deg = absLat * 90;
     let moist = 0.52 + (fbm3(v[0] * 3.4, v[1] * 3.4, v[2] * 3.4, s + 241, 4) - 0.5) * 1.3;
@@ -183,7 +191,7 @@ export class PlanetLayer implements PlanetField {
     moist += 0.05 * Math.exp(-(((deg - 52) / 10) ** 2));
     // Coasts are wetter than interiors.
     moist += Math.max(0, 0.25 - Math.abs(base)) * 0.6;
-    moist = Math.max(0, Math.min(1, moist));
+    moist = Math.max(0, Math.min(1, moist + this.shape.moist * SHAPE_CLIMATE_GAIN));
 
     return { elevM, biome: classify(elevM, temp, moist, belt, a.continental), temp, moist, belt };
   }

@@ -8,11 +8,13 @@ import {
   chunkSeed,
   chunkToSphere,
   defaultStartChunk,
+  homeChunk,
   makePlanetField,
   PLANET_PRESET_SPECS,
   sameChunk,
   type ChunkAddr,
   type PlanetField,
+  type PlanetShape,
 } from '../planet';
 import type { WorldSettings } from './models';
 import { landCut, type LatAt } from './terrain';
@@ -31,8 +33,17 @@ export interface PlanetFrame {
 /** The planet behind a world's settings and its home chunk (picked when the settings leave it open). */
 export function planetFrame(seed: number, settings: WorldSettings): PlanetFrame {
   const n = PLANET_PRESET_SPECS[settings.planet].n;
-  const source = settings.worldSource === 'island' ? 'trailbound' : settings.worldSource;
-  const field = makePlanetField({ source, seed, n });
+  if (settings.worldSource === 'island') {
+    // The classic island sits on face 0's centre chunk inside the procedural globe.
+    const home = homeChunk(n);
+    return { field: makePlanetField({ source: 'island', seed, n, home }), n, home };
+  }
+  const field = makePlanetField({
+    source: settings.worldSource,
+    seed,
+    n,
+    shape: settingsShape(settings),
+  });
   const picked = settings.homeChunk;
   // A hand-picked start must have room for towns; open sea falls back to the auto pick.
   const home =
@@ -40,6 +51,11 @@ export function planetFrame(seed: number, settings: WorldSettings): PlanetFrame 
       ? picked
       : defaultStartChunk(field);
   return { field, n, home };
+}
+
+/** The World Gen shape sliders stored in a world's settings. */
+export function settingsShape(settings: WorldSettings): PlanetShape {
+  return { sea: settings.seaLevel, temp: settings.tempBias, moist: settings.moistBias };
 }
 
 /** Least land share a picked home chunk needs (the auto pick asks for much more). */
@@ -104,10 +120,20 @@ export function climateLatitude(latRad: number): number {
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
 
-/** Each row's climate from its real latitude on the planet (read down the chunk's middle). */
-export function planetLatAt(n: number, addr: ChunkAddr): LatAt {
+/**
+ * Each row's climate from its real latitude on the planet (read down the
+ * chunk's middle). `tempBias` (the World Gen slider, −1..1) warms or cools it.
+ */
+export function planetLatAt(n: number, addr: ChunkAddr, tempBias = 0): LatAt {
+  const shift = tempBias * CHUNK_TEMP_GAIN;
   return (y, height) => {
     const p = chunkToSphere(n, addr, 0.5, Math.min(1, Math.max(0, y / Math.max(1, height))));
-    return climateLatitude(Math.asin(Math.max(-1, Math.min(1, p[1]))));
+    const t = climateLatitude(Math.asin(Math.max(-1, Math.min(1, p[1])))) + shift;
+    return t < 0 ? 0 : t > 1 ? 1 : t;
   };
 }
+
+/** Climate-latitude shift per unit of the temperature slider (±1 ≈ ±18° of latitude). */
+const CHUNK_TEMP_GAIN = 0.23;
+/** Land moisture shift per unit of the moisture slider. */
+export const CHUNK_MOIST_GAIN = 0.18;

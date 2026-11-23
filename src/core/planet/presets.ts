@@ -4,7 +4,7 @@
  * planet is 20 maps across a face; `tiny` (4 × 4 per face, 96 chunks) is for tests.
  * No imports, so `models.ts` can use these without a cycle.
  */
-export const PLANET_PRESETS = ['standard', 'tiny'] as const;
+export const PLANET_PRESETS = ['tiny', 'small', 'standard', 'large', 'huge'] as const;
 export type PlanetPreset = (typeof PLANET_PRESETS)[number];
 
 export interface PlanetPresetSpec {
@@ -16,8 +16,11 @@ export interface PlanetPresetSpec {
 }
 
 export const PLANET_PRESET_SPECS: Record<PlanetPreset, PlanetPresetSpec> = {
-  standard: { n: 20, faceTexels: 512, label: '20 maps across (2,400 chunks)' },
   tiny: { n: 4, faceTexels: 256, label: 'Tiny test (4 across, 96 chunks)' },
+  small: { n: 10, faceTexels: 512, label: '10 maps across (600 chunks)' },
+  standard: { n: 20, faceTexels: 512, label: '20 maps across (2,400 chunks)' },
+  large: { n: 30, faceTexels: 512, label: '30 maps across (5,400 chunks)' },
+  huge: { n: 40, faceTexels: 512, label: '40 maps across (9,600 chunks)' },
 };
 
 export const DEFAULT_PLANET_PRESET: PlanetPreset = 'standard';

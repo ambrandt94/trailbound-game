@@ -318,6 +318,14 @@ export interface WorldSettings {
    * the best start chunk; the generated world stores the resolved chunk.
    */
   homeChunk: ChunkAddr | null;
+  /**
+   * Planet worlds, set in World Gen: sea level, temperature and moisture
+   * shifts, each −1..1 (0 = the source as authored). Island worlds ignore them;
+   * saves without them read 0.
+   */
+  seaLevel: number;
+  tempBias: number;
+  moistBias: number;
 }
 
 /** Side length of `WorldSettings.landSketch`. */
@@ -390,6 +398,9 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   planet: DEFAULT_PLANET_PRESET,
   worldSource: 'trailbound',
   homeChunk: null,
+  seaLevel: 0,
+  tempBias: 0,
+  moistBias: 0,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -548,7 +559,17 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
       raw.homeChunk,
       PLANET_PRESET_SPECS[isPlanetPreset(raw.planet) ? raw.planet : DEFAULT_PLANET_PRESET].n,
     ),
+    seaLevel: clampBias(raw.seaLevel),
+    tempBias: clampBias(raw.tempBias),
+    moistBias: clampBias(raw.moistBias),
   };
+}
+
+/** A World Gen shape slider: −1..1 in steps of 0.05; anything else reads 0. */
+function clampBias(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return clamp(Math.round(n * 20) / 20, -1, 1);
 }
 
 function cleanHomeChunk(raw: unknown, n: number): ChunkAddr | null {

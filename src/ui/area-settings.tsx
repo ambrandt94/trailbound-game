@@ -444,6 +444,9 @@ export function SettingsPanel(props: { dock?: boolean }) {
           <button type="button" class="action secondary" onClick={() => commands.editAvatar()}>
             Edit avatar
           </button>
+          <button type="button" class="action secondary" onClick={() => commands.openWorldGen()}>
+            World Gen
+          </button>
           <button
             type="button"
             class="action secondary"
