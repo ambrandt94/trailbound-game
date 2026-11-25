@@ -39,7 +39,15 @@ function worldHash(w: WorldData): string {
 
 /** Settings exactly as saves wrote them before world sources existed. */
 function oldSave(seed: number, s: Partial<WorldSettings>): PackedWorld {
-  const { worldSource: _a, homeChunk: _b, ...old } = { ...DEFAULT_WORLD_SETTINGS, ...s };
+  const {
+    worldSource: _a,
+    homeChunk: _b,
+    settlementGen: _c,
+    ...old
+  } = {
+    ...DEFAULT_WORLD_SETTINGS,
+    ...s,
+  };
   return { worldSeed: seed, worldSettings: old } as unknown as PackedWorld;
 }
 

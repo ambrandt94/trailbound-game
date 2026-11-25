@@ -41,7 +41,10 @@ export function CityPlanPanel() {
   return (
     <aside class="wg-city-panel tb-scroll" aria-label="City plans">
       <h3>City plans</h3>
-      <p class="note">Synthetic only. The map and saves stay on settlement generation 1.</p>
+      <p class="note">
+        Ward cut for this class and seed. New worlds use settlement generation 2; older saves stay
+        on 1.
+      </p>
       <label class="field">
         <span>Class</span>
         <select

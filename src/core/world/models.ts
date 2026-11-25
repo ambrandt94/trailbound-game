@@ -334,9 +334,9 @@ export interface WorldSettings {
    */
   terrainGen: TerrainGen;
   /**
-   * Settlement layout. 1 is today's authored places. 2 is reserved for the
-   * city plan and is not used by world generation yet. Saves without the
-   * field read 1.
+   * Settlement layout. 1 is today's authored places. 2 scores sites, grows
+   * class footprints, and adds outskirts and satellites. Saves without the
+   * field read 1, so an old world keeps today's towns. New worlds are 2.
    */
   settlementGen: SettlementGen;
 }
@@ -344,9 +344,9 @@ export interface WorldSettings {
 export type TerrainGen = 1 | 2;
 
 /**
- * How settlements are laid out. 1 is today's authored places. 2 is the city
- * plan (wards, walls, districts), which is not applied to the map yet.
- * Missing reads 1, so a save from before this field keeps today's towns.
+ * How settlements are laid out. 1 is today's authored places. 2 is scored
+ * siting (hamlets through metropolis, outskirts, satellites). Missing reads
+ * 1, so a save from before this field keeps today's towns.
  */
 export type SettlementGen = 1 | 2;
 
@@ -424,8 +424,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   tempBias: 0,
   moistBias: 0,
   terrainGen: 2,
-  // City plans exist for tests and the World Gen debug overlay. The map stays on 1.
-  settlementGen: 1,
+  // New worlds. A save that omits the field still reads as 1 in clampSettings.
+  settlementGen: 2,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -839,6 +839,19 @@ export interface MapNode {
   tiles: Vec2[];
   seed: number;
   poiKind?: PoiKind;
+  /**
+   * Generation 2 size class. Capitals and metropolises stay `kind: 'city'`
+   * so older readers still treat them as cities. Missing on generation 1.
+   */
+  settlementClass?: 'hamlet' | 'village' | 'town' | 'city' | 'capital' | 'metropolis';
+  /** Farm ring outside the core. Map placeholder only; not part of the 3D mask. */
+  outskirts?: Vec2[];
+  /** Placeholder farmland fill for `outskirts` (wheat, pasture, reed, …). */
+  landUse?: string;
+  /** Parent settlement id when this node was placed as a satellite. */
+  satelliteOf?: string;
+  /** Biome land-use role, such as `farm hamlet` or `fishing hamlet`. */
+  satelliteRole?: string;
 }
 
 export interface PointOfInterest {

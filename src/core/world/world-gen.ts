@@ -16,6 +16,7 @@ import {
 } from './models';
 import { fbm, hash2, Rng } from './noise';
 import { edgeGates, seamlessTerrain } from './seamless-terrain';
+import { placeSettlementsGen2 } from './settlement-siting';
 import { placePois } from './pois';
 import { prepareLandSketch, sampleLandSketch } from './land-sketch';
 import {
@@ -585,6 +586,7 @@ function generateSeamlessChunk(
   const rng = new Rng(terrainSeed);
   const paths = new Uint8Array(w * h);
   const terrain = seamlessTerrain(frame.field, frame.n, target, w);
+  const gates = edgeGates(frame.field, frame.n, target, w);
   const world = populateWorld(
     terrainSeed,
     { ...settings, mapStyle: 'continent', homeChunk: frame.home },
@@ -594,12 +596,13 @@ function generateSeamlessChunk(
     terrain,
     paths,
     largestLandmass(terrain.biomes, w, h),
+    gates,
   );
   const towns = world.nodes.filter(
     (n) => n.kind === 'city' || n.kind === 'town' || n.kind === 'village',
   );
   if (towns.length > 0) {
-    for (const gate of edgeGates(frame.field, frame.n, target, w)) {
+    for (const gate of gates) {
       let best = towns[0]!;
       let bestD = Infinity;
       for (const t of towns) {
@@ -648,8 +651,8 @@ export function generateChunkAt(
  * Towns, roads, decorations and points of interest on a finished terrain.
  * `mainland` (planet chunks) keeps the towns on the largest landmass so the
  * roads can join them, and guarantees Ashfen even when no tile suits it.
- * `settings.settlementGen` is stored with the world. Generation 2 is not
- * applied here, so a 2 still lays out today's authored places.
+ * `settings.settlementGen` 1 lays out the authored places. Generation 2
+ * scores sites and adds hamlets, outskirts and satellites. Missing reads 1.
  */
 function populateWorld(
   seed: number,
@@ -660,57 +663,76 @@ function populateWorld(
   terrain: { heightM: Float32Array; heights: Float32Array; biomes: Uint8Array },
   paths: Uint8Array,
   mainland?: Uint8Array,
+  gates?: ReadonlyArray<{ x: number; y: number }>,
 ): WorldData {
   const { heightM, heights, biomes } = terrain;
   const nodes: MapNode[] = [];
-  const blocked = new Set<string>();
-  for (const spec of AUTHORED) {
-    let site = findSite(biomes, w, h, spec.want, rng, nodes, spec.radius, mainland);
-    if (!site && mainland && spec.id === 'ashfen') site = mainlandHeart(biomes, w, h, mainland);
-    if (!site) continue;
-    const blob = growTileBlob(site.x + 0.5, site.y + 0.5, spec.radius, {
-      kind: spec.kind,
-      seed: spec.seed,
-      biomes,
-      width: w,
-      height: h,
-      blocked,
-      avoid: nodes.map((n) => ({ cx: n.cx, cy: n.cy })),
-    });
-    for (const t of blob.tiles) blocked.add(`${t.x},${t.y}`);
-    nodes.push({
-      id: spec.id,
-      name: spec.name,
-      origin: spec.origin,
-      kind: spec.kind,
-      radius: spec.radius,
-      seed: spec.seed,
-      cx: site.x + 0.5,
-      cy: site.y + 0.5,
-      biome: site.biome,
-      tiles: blob.tiles,
-      x0: blob.x0,
-      y0: blob.y0,
-      x1: blob.x1,
-      y1: blob.y1,
-    });
-  }
-
-  const towns = nodes.filter((n) => n.kind === 'city' || n.kind === 'town');
-  for (let i = 0; i < towns.length; i++) {
-    const a = towns[i]!;
-    const b = towns[(i + 1) % towns.length]!;
-    stampPath(
-      paths,
-      biomes,
-      w,
-      h,
-      Math.floor(a.cx),
-      Math.floor(a.cy),
-      Math.floor(b.cx),
-      Math.floor(b.cy),
-      rng,
+  if (settings.settlementGen === 2) {
+    nodes.push(
+      ...placeSettlementsGen2({
+        seed,
+        width: w,
+        height: h,
+        biomes,
+        heightM,
+        rng,
+        mainland,
+        gates,
+        paths,
+        stampRoad: (x0, y0, x1, y1, roadRng) =>
+          stampPath(paths, biomes, w, h, x0, y0, x1, y1, roadRng),
+      }),
     );
+  } else {
+    const blocked = new Set<string>();
+    for (const spec of AUTHORED) {
+      let site = findSite(biomes, w, h, spec.want, rng, nodes, spec.radius, mainland);
+      if (!site && mainland && spec.id === 'ashfen') site = mainlandHeart(biomes, w, h, mainland);
+      if (!site) continue;
+      const blob = growTileBlob(site.x + 0.5, site.y + 0.5, spec.radius, {
+        kind: spec.kind,
+        seed: spec.seed,
+        biomes,
+        width: w,
+        height: h,
+        blocked,
+        avoid: nodes.map((n) => ({ cx: n.cx, cy: n.cy })),
+      });
+      for (const t of blob.tiles) blocked.add(`${t.x},${t.y}`);
+      nodes.push({
+        id: spec.id,
+        name: spec.name,
+        origin: spec.origin,
+        kind: spec.kind,
+        radius: spec.radius,
+        seed: spec.seed,
+        cx: site.x + 0.5,
+        cy: site.y + 0.5,
+        biome: site.biome,
+        tiles: blob.tiles,
+        x0: blob.x0,
+        y0: blob.y0,
+        x1: blob.x1,
+        y1: blob.y1,
+      });
+    }
+
+    const towns = nodes.filter((n) => n.kind === 'city' || n.kind === 'town');
+    for (let i = 0; i < towns.length; i++) {
+      const a = towns[i]!;
+      const b = towns[(i + 1) % towns.length]!;
+      stampPath(
+        paths,
+        biomes,
+        w,
+        h,
+        Math.floor(a.cx),
+        Math.floor(a.cy),
+        Math.floor(b.cx),
+        Math.floor(b.cy),
+        rng,
+      );
+    }
   }
 
   const features: WorldFeature[] = [];

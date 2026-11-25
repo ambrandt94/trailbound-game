@@ -38,6 +38,7 @@ test('seed 7741 at worldScale 16 matches the settlement fixture and Ironmarch ha
     ...DEFAULT_WORLD_SETTINGS,
     worldSource: 'island',
     worldScale: 16,
+    settlementGen: 1,
   });
   expect(world.width).toBe(golden.width);
   expect(world.height).toBe(golden.height);

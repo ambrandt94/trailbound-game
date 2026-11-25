@@ -141,7 +141,7 @@ describe('ward partition', () => {
   });
 
   test('missing settlementGen is 1 and old saves load unchanged', () => {
-    expect(DEFAULT_WORLD_SETTINGS.settlementGen).toBe(1);
+    expect(DEFAULT_WORLD_SETTINGS.settlementGen).toBe(2);
     expect(clampSettings({}).settlementGen).toBe(1);
     expect(clampSettings({ settlementGen: 2 }).settlementGen).toBe(2);
     expect(clampSettings({ settlementGen: undefined }).settlementGen).toBe(1);
@@ -155,6 +155,7 @@ describe('ward partition', () => {
       wanderers: 0,
       caravans: 0,
       armies: 0,
+      settlementGen: 1,
     });
     const world = generateWorld(4401, settings);
     expect(world.settings.settlementGen).toBe(1);
@@ -168,11 +169,11 @@ describe('ward partition', () => {
     expect(again.nodes.map(nodeSignature)).toEqual(world.nodes.map(nodeSignature));
     expect(again.heightM.length).toBe(world.heightM.length);
 
-    // Generation 2 is recorded and compared, but C0 still builds today's places.
+    // Generation 2 keeps the terrain and replaces the authored dart layout.
     const flagged = generateWorld(4401, { ...settings, settlementGen: 2 });
     expect(flagged.settings.settlementGen).toBe(2);
     expect(Buffer.from(flagged.biomes).equals(Buffer.from(world.biomes))).toBe(true);
-    expect(flagged.nodes.map(nodeSignature)).toEqual(world.nodes.map(nodeSignature));
+    expect(flagged.nodes.map(nodeSignature)).not.toEqual(world.nodes.map(nodeSignature));
 
     const packed = {
       worldSeed: 4401,
