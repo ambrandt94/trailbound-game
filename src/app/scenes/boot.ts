@@ -1,9 +1,10 @@
-import { parsePlace } from '../../core/content/parse';
-import { createWorld } from '../../core/state/world-state';
 import { preloadForge } from '../../render/characters/forge';
-import { bootError, bootMessage, canContinue } from '../../ui/state';
+import { bootError, bootMessage } from '../../ui/state';
+import { bootRoute } from '../boot-route';
 import type { GameHost } from '../host';
+import { loadRoad } from '../load-road';
 import type { Scene } from '../scene-stack';
+import { DojoScene } from './dojo';
 import { TitleScene } from './title';
 
 export class BootScene implements Scene {
@@ -16,21 +17,19 @@ export class BootScene implements Scene {
     bootMessage.value = 'Loading the road…';
     bootError.value = null;
     try {
-      const [index] = await Promise.all([this.host.content.loadIndex(), preloadForge()]);
-      if (!index.entries.some((entry) => entry.id === 'places/waystead')) {
-        throw new Error('content index is missing places/waystead');
+      const search = globalThis.location?.search ?? '';
+      if (bootRoute(search) === 'dojo') {
+        bootMessage.value = 'Opening the dojo…';
+        try {
+          await preloadForge();
+        } catch {
+          // The room still opens. Bodies fall back to placeholder pawns.
+        }
+        await this.host.stack.replace(new DojoScene(this.host));
+        return;
       }
-      const place = parsePlace(await this.host.content.load('places/waystead'));
-      this.host.place = place;
-      this.host.world = createWorld({
-        id: place.id,
-        name: place.name,
-        x: place.map.x,
-        y: place.map.y,
-      });
-      const slots = await this.host.saves.listSlots();
-      canContinue.value = slots.some((slot) => slot.manifest.schema > 0);
-      const town = new URLSearchParams(globalThis.location?.search ?? '').get('town');
+      await Promise.all([loadRoad(this.host), preloadForge()]);
+      const town = new URLSearchParams(search).get('town');
       if (town) {
         await this.host.enterTownNow(town);
         return;

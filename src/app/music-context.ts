@@ -22,7 +22,7 @@ export interface MusicContextInput {
 export function buildMusicContext(input: MusicContextInput): MusicContext | null {
   const { mode, view, world } = input;
   if (mode === 'boot') return null;
-  if (mode === 'title' || mode === 'creator') {
+  if (mode === 'title' || mode === 'creator' || mode === 'dojo') {
     return {
       scene: 'title',
       place: null,

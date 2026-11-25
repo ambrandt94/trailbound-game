@@ -193,6 +193,8 @@ export interface AvatarPose {
   fade: number;
 }
 
+export type AvatarSocket = 'hand_l' | 'hand_r' | 'back' | 'belt' | 'head';
+
 export interface AvatarBody {
   object3D: THREE.Object3D;
   source: 'forge' | 'placeholder';
@@ -201,6 +203,8 @@ export interface AvatarBody {
   play(name: 'Idle' | 'Walk'): void;
   /** Area locomotion. Blends when the clip changes and sets the mixer rate. */
   present(pose: AvatarPose): void;
+  /** Attachment point. Null on the placeholder pawn and on runtimes without sockets. */
+  socket(name: AvatarSocket): THREE.Object3D | null;
   update(dt: number): void;
   dispose(): void;
 }
@@ -485,6 +489,9 @@ export function placeholderAvatar(seed: number): AvatarBody {
       state.rate = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
       body.clip = pose.clip;
     },
+    socket() {
+      return null;
+    },
     update(dt) {
       if (state.disposed) return;
       state.time += dt * state.rate;
@@ -660,6 +667,9 @@ function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
         body.clip = pose.clip;
       }
       built.mixer.timeScale = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
+    },
+    socket(name) {
+      return built.socket?.(name) ?? null;
     },
     update(dt) {
       if (!state.disposed) built.mixer.update(dt);

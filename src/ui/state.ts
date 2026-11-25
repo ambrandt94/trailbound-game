@@ -3,7 +3,7 @@ import type { WagonActionId, WagonRow } from '../core/sim/party';
 import { DEFAULT_SEASON, type SeasonId, type SeasonPreset } from '../core/sim/day-cycle';
 import { DEFAULT_SETTINGS, type GameSettings } from '../core/state/settings';
 
-export type UiScreen = 'boot' | 'title' | 'play' | 'creator' | 'worldgen';
+export type UiScreen = 'boot' | 'title' | 'play' | 'creator' | 'worldgen' | 'dojo';
 
 export const screen = signal<UiScreen>('boot');
 export const bootMessage = signal('Loading the road…');
@@ -136,6 +136,10 @@ export interface UiCommands {
   toggleBench(): void;
   /** 3D convoy: walk back to the wagon. */
   rejoinWagon(): void;
+  /** Title → the combat dojo. Does not load a save. */
+  openDojo(): void;
+  /** Dojo → title. */
+  leaveDojo(): void;
 }
 
 export const commands: UiCommands = {
@@ -199,6 +203,12 @@ export const commands: UiCommands = {
   openWagon() {
     return;
   },
+  openDojo() {
+    return;
+  },
+  leaveDojo() {
+    return;
+  },
 };
 
 export function bindCommands(next: UiCommands): void {
@@ -222,4 +232,6 @@ export function bindCommands(next: UiCommands): void {
   commands.openWagon = next.openWagon;
   commands.toggleBench = next.toggleBench;
   commands.rejoinWagon = next.rejoinWagon;
+  commands.openDojo = next.openDojo;
+  commands.leaveDojo = next.leaveDojo;
 }
