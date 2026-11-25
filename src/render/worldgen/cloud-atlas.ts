@@ -1,8 +1,11 @@
 /**
- * Alex's pixel-art cloud set ("Cloud & Mist Map Assets"), sliced by a box-side
- * script into one 1× atlas + rects JSON under `assets/worldgen/clouds/`.
- * Always drawn with nearest filtering at a whole-number scale. When the atlas
- * fails to load the Regions view falls back to procedural clouds.
+ * Pixel-art cloud set for the Regions map, one atlas plus rects JSON under
+ * `assets/worldgen/clouds/`. Cover, haze and veil are 64px tiles; the map puffs
+ * are the 48×32 stamps at native size. Rims, poof frames, clearing-rim frames
+ * and the shadow sprites are the earlier art, copied as-is. Every consumer
+ * draws from the rect's own width and height. Nearest filtering, whole-number
+ * scale. When the atlas fails to load the Regions view falls back to procedural
+ * value-noise clouds.
  */
 export interface AtlasRect {
   x: number;
@@ -68,6 +71,9 @@ export function loadCloudAtlas(): Promise<CloudAtlas | null> {
       const image = new Image();
       image.src = `${base}cloud-atlas.png`;
       await image.decode();
+      if (image.naturalWidth !== meta.size[0] || image.naturalHeight !== meta.size[1]) {
+        throw new Error('cloud atlas: png size');
+      }
       return {
         meta,
         image,
