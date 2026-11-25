@@ -14,7 +14,7 @@ const SPAN: Record<SettlementClass, number> = {
   hamlet: 0.55,
   village: 1.15,
   town: 1.85,
-  city: 3.4,
+  city: 2.15,
   capital: 5.4,
   metropolis: 8.2,
 };
@@ -44,6 +44,13 @@ const GAP: Record<SettlementClass, number> = {
  * often steeper than 0.5), so the cap keeps cliff faces out and the score
  * still prefers the flattest shelf.
  */
+/**
+ * Fine-tile box for a place that still plays as one 3D zone. A 3×3 display
+ * city is 48 tiles on a side and about nine times the old Ashfen bake, so the
+ * single-zone classes stay inside this until wards (C4) split them.
+ */
+const SINGLE_ZONE_BOX = 32;
+
 const SLOPE_MAX: Record<SettlementClass, number> = {
   hamlet: 2.4,
   village: 2,
@@ -535,7 +542,7 @@ function placeClass(
     if (!tiles) continue;
     if (!insideMargin(ctx, tiles, cls)) continue;
     const node = makeNode(ctx, cls, site, tiles, named);
-    claim(ctx, tiles);
+    claim(ctx, node.tiles);
     ctx.nodes.push(node);
     ctx.names.add(node.name);
     return node;
@@ -772,7 +779,7 @@ function placeSatellites(
         node.satelliteRole = role;
         node.id = `sat-${parent.id}-${index}`;
         if (!satelliteFits(ctx, parent, node)) continue;
-        claim(ctx, tiles);
+        claim(ctx, node.tiles);
         ctx.nodes.push(node);
         ctx.names.add(node.name);
         ctx.stampRoad(
@@ -888,7 +895,9 @@ function makeNode(
   tiles: Vec2[],
   named: Anchor | null,
 ): MapNode {
-  const bounds = boundsFromTiles(tiles);
+  const fitted =
+    cls === 'capital' || cls === 'metropolis' ? tiles : clipToBox(tiles, SINGLE_ZONE_BOX);
+  const bounds = boundsFromTiles(fitted);
   const kind = named?.kind ?? kindFor(cls);
   const id = named?.id ?? `${cls}-${ctx.nodes.length}`;
   const name = named?.name ?? generatedName(ctx.rng, ctx.names, kind);
@@ -903,9 +912,28 @@ function makeNode(
     cy: site.y + 0.5,
     radius: Math.max(ctx.q, (bounds.x1 - bounds.x0) / 2, (bounds.y1 - bounds.y0) / 2),
     seed: named?.seed ?? (ctx.seed ^ (site.x * 19 + site.y * 131)) >>> 0,
-    tiles,
+    tiles: fitted,
     ...bounds,
   };
+}
+
+function clipToBox(tiles: readonly Vec2[], span: number): Vec2[] {
+  if (!tiles.length) return [];
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const tile of tiles) {
+    if (tile.x < x0) x0 = tile.x;
+    if (tile.y < y0) y0 = tile.y;
+    if (tile.x > x1) x1 = tile.x;
+    if (tile.y > y1) y1 = tile.y;
+  }
+  if (x1 - x0 < span && y1 - y0 < span) return tiles.slice();
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  const half = span / 2;
+  return tiles.filter((tile) => Math.abs(tile.x - cx) <= half && Math.abs(tile.y - cy) <= half);
 }
 
 function kindFor(cls: SettlementClass): NodeKind {
