@@ -517,9 +517,6 @@ async function ensureServer(): Promise<{ stop: () => Promise<void> }> {
   const server = await createServer({
     mode: 'development',
     server: { host: '127.0.0.1', port: PORT, strictPort: true },
-    // The cold dep scan has hung for the whole test budget on CI. The page
-    // loads the same modules without it.
-    optimizeDeps: { noDiscovery: true },
   });
   await server.listen();
   if (!(await serverUp())) {
