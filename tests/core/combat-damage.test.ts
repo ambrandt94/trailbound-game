@@ -26,6 +26,9 @@ function down(button: 'x' | 'y'): FighterInput {
     xDown: button === 'x',
     yDown: button === 'y',
     counterPressed: false,
+    lockDown: false,
+    forward: 0,
+    strafe: 0,
   };
 }
 

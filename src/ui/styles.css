@@ -1609,6 +1609,15 @@ input:focus-visible {
   font-weight: 700;
 }
 
+.dojo-lock {
+  margin: 0.2rem 0 0;
+  font-family: Palatino, Georgia, serif;
+  font-size: 1.2rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #146080;
+}
+
 .dojo-cue {
   margin: 0.45rem 0 0;
   font-family: Palatino, Georgia, serif;

@@ -17,6 +17,8 @@ export interface DojoPad {
   stickZ: number;
   padX: boolean;
   padY: boolean;
+  /** Tab, middle mouse, or right-stick click. Held, so a long press can clear the lock. */
+  lockHeld: boolean;
 }
 
 export interface DojoStick {
@@ -27,6 +29,7 @@ export interface DojoStick {
   xDown: boolean;
   yDown: boolean;
   counterPressed: boolean;
+  lockDown: boolean;
 }
 
 export function mapDojoInput(pad: DojoPad): DojoStick {
@@ -43,6 +46,7 @@ export function mapDojoInput(pad: DojoPad): DojoStick {
     xDown: pad.j || pad.mouseX || pad.padX,
     yDown: pad.k || pad.mouseY || pad.padY,
     counterPressed: pad.counterEdge,
+    lockDown: pad.lockHeld,
   };
 }
 
@@ -53,12 +57,15 @@ export function stickToInput(stick: DojoStick, wish: { x: number; z: number }): 
     xDown: stick.xDown,
     yDown: stick.yDown,
     counterPressed: stick.counterPressed,
+    lockDown: stick.lockDown,
+    forward: stick.iz,
+    strafe: stick.ix,
   };
 }
 
 /**
  * Keyboard, mouse, and the standard gamepad into one stick.
- * Gamepad X and Y are the two attacks. B is the counter. The left stick moves.
+ * Gamepad X and Y are the two attacks. B is the counter. R3 locks on. The left stick moves.
  */
 export class DojoInput {
   private readonly buttons = new Set<number>();
@@ -74,6 +81,7 @@ export class DojoInput {
     canvas.addEventListener('pointerup', this.onUp);
     canvas.addEventListener('pointercancel', this.onUp);
     window.addEventListener('pointerup', this.onUp);
+    window.addEventListener('keydown', this.onKey);
     canvas.addEventListener('contextmenu', this.onContext);
   }
 
@@ -84,6 +92,7 @@ export class DojoInput {
     canvas.removeEventListener('pointerup', this.onUp);
     canvas.removeEventListener('pointercancel', this.onUp);
     window.removeEventListener('pointerup', this.onUp);
+    window.removeEventListener('keydown', this.onKey);
     canvas.removeEventListener('contextmenu', this.onContext);
     this.canvas = null;
     this.buttons.clear();
@@ -109,15 +118,20 @@ export class DojoInput {
       stickZ: pad.z,
       padX: pad.xDown,
       padY: pad.yDown,
+      lockHeld: this.keyboard.isDown('Tab') || this.buttons.has(1) || pad.lock,
     });
   }
+
+  private readonly onKey = (event: KeyboardEvent): void => {
+    if (event.code === 'Tab') event.preventDefault();
+  };
 
   private readonly onContext = (event: Event): void => {
     event.preventDefault();
   };
 
   private readonly onDown = (event: PointerEvent): void => {
-    if (event.button !== 0 && event.button !== 2) return;
+    if (event.button !== 0 && event.button !== 1 && event.button !== 2) return;
     this.buttons.add(event.button);
     if (event.button === 2) event.preventDefault();
   };
@@ -132,8 +146,9 @@ export class DojoInput {
     xDown: boolean;
     yDown: boolean;
     counterEdge: boolean;
+    lock: boolean;
   } {
-    const empty = { x: 0, z: 0, xDown: false, yDown: false, counterEdge: false };
+    const empty = { x: 0, z: 0, xDown: false, yDown: false, counterEdge: false, lock: false };
     const nav = globalThis.navigator;
     if (!nav?.getGamepads) return empty;
     let list: Array<Gamepad | null> = [];
@@ -157,6 +172,7 @@ export class DojoInput {
       xDown: !!pad.buttons[2]?.pressed,
       yDown: !!pad.buttons[3]?.pressed,
       counterEdge,
+      lock: !!pad.buttons[11]?.pressed,
     };
   }
 }
@@ -176,6 +192,7 @@ function blankPad(): DojoPad {
     stickZ: 0,
     padX: false,
     padY: false,
+    lockHeld: false,
   };
 }
 

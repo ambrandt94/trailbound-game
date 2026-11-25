@@ -7,6 +7,7 @@ import { AttackBuffer, type AttackEdge } from './buffer';
 import { createComboResolver } from './combo';
 import { hitDamage } from './damage';
 import { weaponById } from './registry';
+import { LockGestureBuffer, applyLockTap, retargetLock, type LockFoe } from './lock';
 import type { CombatHooks, FighterInput, MoveSpec, SpecialRequest } from './types';
 
 export type { FighterInput } from './types';
@@ -30,6 +31,9 @@ export const IDLE_INPUT: FighterInput = {
   xDown: false,
   yDown: false,
   counterPressed: false,
+  lockDown: false,
+  forward: 0,
+  strafe: 0,
 };
 
 export interface FightTuning {
@@ -45,6 +49,10 @@ export interface FightTuning {
   linkMs: number;
   respawnSec: number;
   playerRespawnSec: number;
+  /** Hold length that clears a lock. A shorter press is a tap. */
+  lockHoldMs: number;
+  /** Radians per second the body turns toward a lock. */
+  lockTurnRate: number;
   script: readonly { at: number; enemy?: number }[] | null;
 }
 
@@ -72,6 +80,8 @@ export interface FighterView {
   motion: string;
   phase: number;
   staggered: boolean;
+  /** This body is the player's lock target. */
+  locked: boolean;
   telegraph: TelegraphPhase;
   timing: MoveTiming | null;
 }
@@ -90,6 +100,8 @@ export interface FightSnapshot {
   paused: boolean;
   hitStop: number;
   weaponId: string;
+  /** Living foe the player is locked to, or null. */
+  lockId: string | null;
   player: FighterView;
   enemies: FighterView[];
   events: CombatEvent[];
@@ -164,6 +176,8 @@ export function createFight(
   let script: ScriptItem[] = copyScript(tuning.script);
   const player = makeActor('player', 'player', 0, 0.35, Math.PI, PLAYER_MAX_HP);
   let enemies = spawnEnemies(tuning.enemyCount);
+  const lockBuffer = new LockGestureBuffer(tuning.lockHoldMs);
+  let lockId: string | null = null;
 
   function defaults(patch: Partial<FightTuning>): FightTuning {
     const weaponId = patch.weaponId ?? 'fists';
@@ -179,6 +193,8 @@ export function createFight(
       linkMs: patch.linkMs ?? 750,
       respawnSec: patch.respawnSec ?? 2.2,
       playerRespawnSec: patch.playerRespawnSec ?? 1.4,
+      lockHoldMs: patch.lockHoldMs ?? 250,
+      lockTurnRate: patch.lockTurnRate ?? 6,
       script: patch.script === undefined ? null : patch.script,
     };
   }
@@ -320,7 +336,7 @@ export function createFight(
   }
 
   function startMove(spec: MoveSpec, suppress: boolean): void {
-    faceNearest();
+    if (!lockId) faceNearest();
     player.move = spec;
     player.moveStart = now;
     player.hitsDone = 0;
@@ -333,6 +349,13 @@ export function createFight(
 
   function openTarget(): Actor | null {
     const spec = counterMove();
+    if (lockId) {
+      const locked = enemies.find((enemy) => enemy.id === lockId && enemy.hp > 0);
+      if (!locked || locked.telegraphStart < 0 || locked.countered || locked.struck) return null;
+      if (now < locked.windowOpenAt || now >= locked.strikeAt) return null;
+      const dist = Math.hypot(locked.x - player.x, locked.z - player.z);
+      return dist <= spec.range ? locked : null;
+    }
     let best: Actor | null = null;
     let bestDist = spec.range;
     for (const enemy of enemies) {
@@ -352,7 +375,7 @@ export function createFight(
     enemy.countered = true;
     enemy.telegraphStart = -1;
     enemy.struck = true;
-    player.yaw = Math.atan2(enemy.x - player.x, enemy.z - player.z);
+    if (!lockId) player.yaw = Math.atan2(enemy.x - player.x, enemy.z - player.z);
     startMove(spec, true);
     hurt(
       enemy,
@@ -461,14 +484,64 @@ export function createFight(
     }
   }
 
+  function livingFoes(): LockFoe[] {
+    return enemies
+      .filter((enemy) => enemy.hp > 0)
+      .map((enemy) => ({ id: enemy.id, x: enemy.x, z: enemy.z }));
+  }
+
+  function refreshLock(): void {
+    lockId = retargetLock(lockId, player, livingFoes());
+  }
+
+  function readLock(input: FighterInput): void {
+    const gesture = lockBuffer.update(now * 1000, input.lockDown);
+    if (gesture === 'hold') {
+      lockId = null;
+      return;
+    }
+    lockId = retargetLock(lockId, player, livingFoes());
+    if (gesture === 'tap') lockId = applyLockTap(lockId, player, livingFoes());
+  }
+
+  function faceLock(dt: number): void {
+    if (!lockId) return;
+    const target = enemies.find((enemy) => enemy.id === lockId && enemy.hp > 0);
+    if (!target) return;
+    const want = Math.atan2(target.x - player.x, target.z - player.z);
+    const delta = wrap(want - player.yaw);
+    const max = Math.max(0, tuning.lockTurnRate) * dt;
+    if (Math.abs(delta) <= max) player.yaw = want;
+    else player.yaw += Math.sign(delta) * max;
+  }
+
   function movePlayer(dt: number, input: FighterInput): void {
-    const locked =
+    const rooted =
       player.hp <= 0 ||
       player.move !== null ||
       now < player.staggerUntil ||
       now < player.whiffUntil;
-    if (locked) {
+    if (rooted) {
       player.moving = false;
+      return;
+    }
+    if (lockId) {
+      const target = enemies.find((enemy) => enemy.id === lockId && enemy.hp > 0);
+      const mag = Math.hypot(input.strafe, input.forward);
+      if (!target || mag < 0.08) {
+        player.moving = false;
+        return;
+      }
+      const dist = Math.hypot(target.x - player.x, target.z - player.z) || 1;
+      const fx = (target.x - player.x) / dist;
+      const fz = (target.z - player.z) / dist;
+      const rx = fz;
+      const rz = -fx;
+      const sx = input.strafe / mag;
+      const sz = input.forward / mag;
+      player.x += (fx * sz + rx * sx) * style.moveSpeed * dt;
+      player.z += (fz * sz + rz * sx) * style.moveSpeed * dt;
+      player.moving = true;
       return;
     }
     const mag = Math.hypot(input.moveX, input.moveZ);
@@ -605,6 +678,7 @@ export function createFight(
       motion,
       phase,
       staggered,
+      locked: actor.id === lockId,
       telegraph,
       timing: spec
         ? { elapsed, startup: spec.startup, active: spec.active, recovery: spec.recovery }
@@ -618,6 +692,7 @@ export function createFight(
       paused,
       hitStop,
       weaponId: style.id,
+      lockId,
       player: view(player),
       enemies: enemies.map(view),
       events: events.slice(),
@@ -631,9 +706,11 @@ export function createFight(
       if (hitStop > 0) {
         hitStop = Math.max(0, hitStop - stepDt);
         buffer.update(now * 1000, { x: input.xDown, y: input.yDown });
+        readLock(input);
         return snapshot();
       }
       now += stepDt;
+      readLock(input);
       const edges = buffer.update(now * 1000, { x: input.xDown, y: input.yDown });
       queue.push(...edges);
       const nowMs = now * 1000;
@@ -656,7 +733,10 @@ export function createFight(
       }
 
       advanceMove(player);
-      if (hitStop > 0) return snapshot();
+      if (hitStop > 0) {
+        refreshLock();
+        return snapshot();
+      }
 
       if (queue.length > 0 && canAccept()) {
         const edge = queue.shift();
@@ -678,9 +758,13 @@ export function createFight(
         resolveStrike(enemy);
         enemy.telegraphStart = -1;
       }
-      if (hitStop > 0) return snapshot();
+      if (hitStop > 0) {
+        refreshLock();
+        return snapshot();
+      }
       runAi(stepDt);
       movePlayer(stepDt, input);
+      faceLock(stepDt);
       approach(stepDt);
       lunge(player);
       slide(player, stepDt);
@@ -690,6 +774,7 @@ export function createFight(
       for (const enemy of enemies) contain(enemy);
       revive(player, tuning.playerRespawnSec);
       for (const enemy of enemies) revive(enemy, tuning.respawnSec);
+      refreshLock();
       return snapshot();
     },
     snapshot,
@@ -717,6 +802,7 @@ export function createFight(
         if (patch.counterWindowMs === undefined) next.counterWindowMs = style.counterWindowMs;
       }
       if (patch.holdThresholdMs !== undefined) buffer.setThreshold(patch.holdThresholdMs);
+      if (patch.lockHoldMs !== undefined) lockBuffer.setThreshold(patch.lockHoldMs);
       if (patch.script !== undefined) script = copyScript(patch.script);
       Object.assign(tuning, next);
       const windowSec = Math.min(TELEGRAPH_SEC, Math.max(0.04, tuning.counterWindowMs / 1000));
@@ -727,6 +813,7 @@ export function createFight(
         enemies.push(makeEnemy(enemies.length, tuning.enemyCount));
       }
       if (enemies.length > tuning.enemyCount) enemies = enemies.slice(0, tuning.enemyCount);
+      refreshLock();
     },
     resume(): void {
       paused = false;

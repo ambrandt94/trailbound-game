@@ -103,6 +103,14 @@ export interface FighterInput {
   xDown: boolean;
   yDown: boolean;
   counterPressed: boolean;
+  /** Lock button held. The fight turns this into a tap or a hold. */
+  lockDown: boolean;
+  /**
+   * Stick axes kept for lock-on. `forward` is W (toward the locked foe).
+   * `strafe` is D (clockwise around them). Ignored while unlocked.
+   */
+  forward: number;
+  strafe: number;
 }
 
 export type MoveInit = Partial<MoveSpec> &

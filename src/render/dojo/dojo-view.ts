@@ -54,6 +54,7 @@ interface ActorNodes {
   leftAnchor: Group;
   marker: Mesh;
   hitbox: Mesh;
+  lockRing: Mesh;
 }
 
 const RACES = ['human', 'orc', 'dwarf', 'goblin', 'tiefling'];
@@ -157,6 +158,7 @@ export class DojoView {
       actor.body?.dispose();
       disposeMesh(actor.marker);
       disposeMesh(actor.hitbox);
+      disposeMesh(actor.lockRing);
     }
     this.arena.traverse((node) => {
       const mesh = node as Mesh;
@@ -239,6 +241,11 @@ export class DojoView {
       !!timing &&
       timing.elapsed >= timing.startup &&
       timing.elapsed <= timing.startup + timing.active;
+    actor.lockRing.visible = fighter.locked;
+    if (fighter.locked) {
+      const pulse = 1 + Math.sin(this.clock.t * 7) * 0.12;
+      actor.lockRing.scale.setScalar(pulse);
+    }
     actor.hitbox.visible = showHitboxes && (active || cue === 'open');
     if (actor.hitbox.visible) {
       const reach = timing ? 0.7 : 0.9;
@@ -327,7 +334,14 @@ function createActor(id: string): ActorNodes {
     new MeshLambertMaterial({ color: '#ff5a4a', transparent: true, opacity: 0.45 }),
   );
   hitbox.visible = false;
-  root.add(pivot, marker, hitbox);
+  const lockRing = new Mesh(
+    new RingGeometry(0.42, 0.55, 28),
+    new MeshLambertMaterial({ color: '#7ee0ff', emissive: '#146080' }),
+  );
+  lockRing.rotation.x = -Math.PI / 2;
+  lockRing.position.y = 0.03;
+  lockRing.visible = false;
+  root.add(pivot, marker, hitbox, lockRing);
   return {
     id,
     root,
@@ -339,6 +353,7 @@ function createActor(id: string): ActorNodes {
     leftAnchor,
     marker,
     hitbox,
+    lockRing,
   };
 }
 

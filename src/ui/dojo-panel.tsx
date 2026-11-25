@@ -7,6 +7,7 @@ import {
   dojoEnemies,
   dojoHitboxes,
   dojoHoldMs,
+  dojoLockHoldMs,
   dojoHud,
   dojoNotice,
   dojoTimeScale,
@@ -47,6 +48,7 @@ export function DojoScreen() {
           ))}
         </ul>
         {counterOpen ? <p class="dojo-cue">Counter</p> : null}
+        {hud?.lockId ? <p class="dojo-lock">Locked</p> : null}
         {hud && hud.ready < 5 ? (
           <p class="dojo-loading">{skinText(`Forging bodies ${hud.ready}/5`)}</p>
         ) : null}
@@ -141,6 +143,19 @@ export function DojoScreen() {
           />
         </label>
         <label class="dojo-field">
+          <span>Lock hold {dojoLockHoldMs.value} ms</span>
+          <input
+            type="range"
+            min="120"
+            max="600"
+            step="10"
+            value={dojoLockHoldMs.value}
+            onInput={(event) => {
+              dojoLockHoldMs.value = Number((event.currentTarget as HTMLInputElement).value);
+            }}
+          />
+        </label>
+        <label class="dojo-field">
           <span>Time scale {dojoTimeScale.value.toFixed(2)}</span>
           <input
             type="range"
@@ -184,6 +199,8 @@ export function DojoScreen() {
             <li>J or left click — X</li>
             <li>K or right click — Y</li>
             <li>Space or L — counter</li>
+            <li>Tab, middle click, or R3 — lock on</li>
+            <li>Tap cycles foes. Hold clears the lock.</li>
             <li>Q / E orbit</li>
             <li>Pad: stick, X, Y, B counter</li>
           </ul>

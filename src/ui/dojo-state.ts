@@ -8,6 +8,7 @@ export const dojoCounterMs = signal(280);
 export const dojoTimeScale = signal(1);
 export const dojoHitboxes = signal(false);
 export const dojoHoldMs = signal(300);
+export const dojoLockHoldMs = signal(250);
 export const dojoNotice = signal('');
 
 export interface DojoHudEnemy {
@@ -23,6 +24,7 @@ export interface DojoHud {
   enemies: DojoHudEnemy[];
   move: string | null;
   ready: number;
+  lockId: string | null;
 }
 
 export const dojoHud = signal<DojoHud | null>(null);
