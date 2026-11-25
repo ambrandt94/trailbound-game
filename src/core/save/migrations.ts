@@ -15,6 +15,8 @@ export function savedWorldSettings(core: PackedWorld): WorldSettings {
     worldSource: 'island' as const,
     homeChunk: null,
     terrainGen: 1 as const,
+    // Saves from before city plans keep today's settlements.
+    settlementGen: 1 as const,
   };
   if (!raw || typeof raw !== 'object') return clampSettings(classic);
   return clampSettings({ ...classic, ...raw });

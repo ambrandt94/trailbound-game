@@ -242,7 +242,8 @@ export function sameWorldSettings(have: WorldSettings, want: WorldSettings, seed
     have.armies === want.armies &&
     have.residentsMode === want.residentsMode &&
     have.avgPerHouse === want.avgPerHouse &&
-    have.avgPerPlace === want.avgPerPlace
+    have.avgPerPlace === want.avgPerPlace &&
+    have.settlementGen === want.settlementGen
   );
 }
 
@@ -647,6 +648,8 @@ export function generateChunkAt(
  * Towns, roads, decorations and points of interest on a finished terrain.
  * `mainland` (planet chunks) keeps the towns on the largest landmass so the
  * roads can join them, and guarantees Ashfen even when no tile suits it.
+ * `settings.settlementGen` is stored with the world. Generation 2 is not
+ * applied here, so a 2 still lays out today's authored places.
  */
 function populateWorld(
   seed: number,
