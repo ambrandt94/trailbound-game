@@ -309,6 +309,8 @@ T.flowerY=authored("flower_yellow_16.png","#e8c040");
 T.flowerW=authored("flower_white_16.png","#f4f0e8");
 T.tuft=authored("tuft_32.png","#5aaa48");
 T.cloud=authored("cloud_96.png","#ffffff",{clamp:1});
+T.cloudPaint=authored("cloud_96_painterly.png","#ffffff",{clamp:1});
+T.cloudTall=authored("cloud_96_tall.png","#ffffff",{clamp:1});
 T.signInn=authored("sign_inn.png","#ecd6aa",{clamp:1});
 T.signMarket=authored("sign_market.png","#ecd6aa",{clamp:1});
 T.signWell=authored("sign_well.png","#d6cebe",{clamp:1});
@@ -328,6 +330,9 @@ T.cluster=authored("leaf_cluster_32.png","#5aaa48");
 T.clusterP=authored("pine_cluster_32.png","#3a8a48");
 T.clusterA=authored("autumn_cluster_32.png","#e09030");
 
+function cloudMat(map){
+return new THREE.MeshBasicMaterial({map:map,transparent:true,alphaTest:.25,depthWrite:false,fog:false,side:THREE.DoubleSide});
+}
 const MAT={
 plaster:lambert(T.plaster),
 timber:lambert(T.timber),
@@ -348,7 +353,9 @@ flowerR:lambert(T.flowerR,{transparent:true,alphaTest:.4,side:THREE.DoubleSide})
 flowerY:lambert(T.flowerY,{transparent:true,alphaTest:.4,side:THREE.DoubleSide}),
 flowerW:lambert(T.flowerW,{transparent:true,alphaTest:.4,side:THREE.DoubleSide}),
 tuft:lambert(T.tuft,{transparent:true,alphaTest:.35,side:THREE.DoubleSide}),
-cloud:new THREE.MeshBasicMaterial({map:T.cloud,transparent:true,alphaTest:.25,depthWrite:false,fog:false,side:THREE.DoubleSide}),
+cloud:cloudMat(T.cloud),
+cloudPaint:cloudMat(T.cloudPaint),
+cloudTall:cloudMat(T.cloudTall),
 signInn:lambert(T.signInn),
 signMarket:lambert(T.signMarket),
 signWell:lambert(T.signWell),
@@ -1821,8 +1828,11 @@ fragmentShader:[
 ].join("\n")
 });
 sky=new THREE.Mesh(geo,mat);sky.frustumCulled=false;sky.renderOrder=-1;sky.userData.surface=1;
+/* Default v2, painterly v1, tall stack. i%3 spreads them across the 12 planes. */
+const cloudMats=[MAT.cloud,MAT.cloudPaint,MAT.cloudTall];
 for(let i=0;i<12;i++){
-const c=new THREE.Mesh(new THREE.PlaneGeometry(34+(i%4)*12,16+(i%3)*8),MAT.cloud);
+const c=new THREE.Mesh(new THREE.PlaneGeometry(34+(i%4)*12,16+(i%3)*8),cloudMats[i%3]);
+c.userData.tbCloud=1;
 const a=i/12*6.28+0.35,rad=80+(i%5)*26;
 c.position.set(Math.sin(a)*rad,32+(i%5)*14,Math.cos(a)*rad);
 c.lookAt(0,8,0);sky.add(c);
@@ -1833,7 +1843,7 @@ function followSky(cam){if(sky&&cam)sky.position.copy(cam.position);}
 function setClouds(d){
 if(!sky)return;
 const clouds=[];
-sky.children.forEach(function(c){if(c.material===MAT.cloud)clouds.push(c);});
+sky.children.forEach(function(c){if(c.userData&&c.userData.tbCloud)clouds.push(c);});
 const n=Math.round(Math.max(0,Math.min(1,d))*clouds.length);
 clouds.forEach(function(c,i){c.visible=i<n;});
 }

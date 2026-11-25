@@ -68,6 +68,9 @@ export function loadCloudAtlas(): Promise<CloudAtlas | null> {
       const image = new Image();
       image.src = `${base}cloud-atlas.png`;
       await image.decode();
+      if (image.naturalWidth !== meta.size[0] || image.naturalHeight !== meta.size[1]) {
+        throw new Error('cloud atlas: png size');
+      }
       return {
         meta,
         image,
