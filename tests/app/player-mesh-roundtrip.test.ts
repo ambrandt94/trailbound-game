@@ -320,15 +320,21 @@ async function inspectPlayer(page: Page): Promise<PlayerReport> {
         for (let i = 0; i < pixels.length; i += 1) sum += pixels[i] ?? 0;
         return sum;
       };
-      avatar.visible = true;
-      if (body) body.visible = true;
-      const shown = readCenter();
-      avatar.visible = false;
-      if (body) body.visible = false;
-      const hidden = readCenter();
-      avatar.visible = true;
-      if (body) body.visible = true;
-      pixelDelta = Math.abs(shown - hidden);
+      // SwiftShader sometimes returns the framebuffer a frame late. Sample until
+      // hiding the body actually changes the picture, then keep the strongest read.
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        avatar.visible = true;
+        if (body) body.visible = true;
+        const shown = readCenter();
+        avatar.visible = false;
+        if (body) body.visible = false;
+        const hidden = readCenter();
+        avatar.visible = true;
+        if (body) body.visible = true;
+        pixelDelta = Math.max(pixelDelta, Math.abs(shown - hidden));
+        if (pixelDelta > 200) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
     }
     const sample = () =>
       bones.flatMap((bone) => [

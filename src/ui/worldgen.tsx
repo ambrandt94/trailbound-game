@@ -4,6 +4,7 @@
  * itself is drawn by the World Gen scene behind this panel.
  */
 import { BiomeLegend } from './biome-legend';
+import { CityPlanPanel, CityPlanToggle } from './city-plan-panel';
 import { RegionsPanel } from './regions-panel';
 import {
   chunkKey,
@@ -252,6 +253,7 @@ export function WorldGenScreen() {
       <ModeToggle />
       {layers.overlay && wgMode.value !== 'regions' ? <BiomeLegend class="wg-legend" /> : null}
       {wgMode.value === 'regions' ? <RegionsPanel /> : null}
+      <CityPlanPanel />
       {wgMode.value === 'chunk' ? (
         <button
           type="button"
@@ -445,6 +447,7 @@ export function WorldGenScreen() {
               {l.label}
             </label>
           ))}
+          <CityPlanToggle />
         </div>
 
         <h3 class="tb-heading">Start</h3>

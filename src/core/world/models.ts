@@ -333,9 +333,22 @@ export interface WorldSettings {
    * stays exactly as it was; new worlds get 2.
    */
   terrainGen: TerrainGen;
+  /**
+   * Settlement layout. 1 is today's authored places. 2 is reserved for the
+   * city plan and is not used by world generation yet. Saves without the
+   * field read 1.
+   */
+  settlementGen: SettlementGen;
 }
 
 export type TerrainGen = 1 | 2;
+
+/**
+ * How settlements are laid out. 1 is today's authored places. 2 is the city
+ * plan (wards, walls, districts), which is not applied to the map yet.
+ * Missing reads 1, so a save from before this field keeps today's towns.
+ */
+export type SettlementGen = 1 | 2;
 
 /** Side length of `WorldSettings.landSketch`. */
 export const LAND_SKETCH_SIZE = 40;
@@ -411,6 +424,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   tempBias: 0,
   moistBias: 0,
   terrainGen: 2,
+  // City plans exist for tests and the World Gen debug overlay. The map stays on 1.
+  settlementGen: 1,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -574,6 +589,8 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
     moistBias: clampBias(raw.moistBias),
     // Missing means a world made before seamless chunks: keep its map.
     terrainGen: raw.terrainGen === 2 ? 2 : 1,
+    // Missing means a save from before city plans: keep today's settlements.
+    settlementGen: raw.settlementGen === 2 ? 2 : 1,
   };
 }
 
