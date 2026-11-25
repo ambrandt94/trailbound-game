@@ -31,6 +31,7 @@ describe('buildMusicContext', () => {
     expect(buildMusicContext(input({ mode: 'boot' }))).toBeNull();
     expect(buildMusicContext(input({ mode: 'title' }))?.scene).toBe('title');
     expect(buildMusicContext(input({ mode: 'creator' }))?.scene).toBe('title');
+    expect(buildMusicContext(input({ mode: 'dojo' }))?.scene).toBe('title');
     expect(buildMusicContext(input({ mode: 'worldgen' }))?.scene).toBe('worldgen');
   });
 

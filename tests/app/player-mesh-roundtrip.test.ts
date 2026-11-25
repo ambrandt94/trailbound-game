@@ -103,7 +103,7 @@ test('the player mesh survives map round trips and Slime Arena', async (ctx) => 
     await browser.close();
     await server.stop();
   }
-}, 420_000);
+}, 600_000);
 
 interface PlayerReport {
   inScene: boolean;

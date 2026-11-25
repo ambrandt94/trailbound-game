@@ -9,6 +9,7 @@ import {
 } from '../core/sim/map-pace';
 import type { HudPrefs } from '../core/state/settings';
 import { CreatorScreen } from './creator';
+import { DojoScreen } from './dojo-panel';
 import { WorldGenScreen } from './worldgen';
 import { BiomeLegend } from './biome-legend';
 import { clearBiomeFocus, mapBiomeOverlay } from './biome-overlay-state';
@@ -94,6 +95,9 @@ function TitleScreen() {
           </button>
           <button type="button" class="action secondary" onClick={() => commands.openSettings()}>
             Settings
+          </button>
+          <button type="button" class="action secondary" onClick={() => commands.openDojo()}>
+            Dojo
           </button>
         </div>
       </div>
@@ -769,6 +773,7 @@ export function Shell() {
   if (screen.value === 'boot') return <BootScreen />;
   if (screen.value === 'creator') return <CreatorScreen />;
   if (screen.value === 'worldgen') return <WorldGenScreen />;
+  if (screen.value === 'dojo') return <DojoScreen />;
   if (settingsOpen.value && screen.value !== 'play') return <SettingsPanel />;
   return (
     <>

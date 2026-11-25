@@ -113,6 +113,7 @@ import { SceneStack } from './scene-stack';
 import { AreaView } from './scenes/area-view';
 import { MinigameScene } from './scenes/minigame-scene';
 import { BootScene } from './scenes/boot';
+import { DojoScene } from './scenes/dojo';
 import { CharacterCreatorScene } from './scenes/character-creator';
 import { MapView } from './scenes/map-view';
 import { WorldGenScene } from './scenes/world-gen';
@@ -272,6 +273,7 @@ export class Game implements GameHost {
     else if (mode === 'title') screen.value = 'title';
     else if (mode === 'creator') screen.value = 'creator';
     else if (mode === 'worldgen') screen.value = 'worldgen';
+    else if (mode === 'dojo') screen.value = 'dojo';
     else screen.value = 'play';
   }
 
@@ -834,6 +836,15 @@ export class Game implements GameHost {
       },
       editAvatar: () => {
         void this.editAvatar();
+      },
+      openDojo: () => {
+        if (this.stack.current()?.id === 'dojo') return;
+        settingsOpen.value = false;
+        void this.stack.replace(new DojoScene(this));
+      },
+      leaveDojo: () => {
+        const current = this.stack.current();
+        if (current instanceof DojoScene) void current.leave();
       },
     });
   }

@@ -1571,3 +1571,136 @@ input:focus-visible {
   color: #ffe7a8;
   border-radius: 4px;
 }
+
+.dojo-readout {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  max-width: 18rem;
+  pointer-events: none;
+  color: #241e18;
+  text-shadow: 0 1px 0 rgba(255, 250, 240, 0.75);
+}
+
+.dojo-hp {
+  margin: 0;
+  font-family: Palatino, Georgia, serif;
+  font-size: 1.4rem;
+}
+
+.dojo-hp small,
+.dojo-loading,
+.dojo-notice,
+.dojo-timing {
+  display: block;
+  margin-top: 0.2rem;
+  font-family: Candara, 'Segoe UI', sans-serif;
+  font-size: 0.85rem;
+}
+
+.dojo-enemies {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dojo-enemies li[data-telegraph='open'] {
+  color: #1f6a56;
+  font-weight: 700;
+}
+
+.dojo-cue {
+  margin: 0.45rem 0 0;
+  font-family: Palatino, Georgia, serif;
+  font-size: 2.2rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f7fbff;
+  text-shadow:
+    0 0 14px #1f6a56,
+    0 2px 0 #16382f;
+}
+
+.dojo-panel {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  width: min(22rem, calc(100vw - 1.2rem));
+  overflow: auto;
+  pointer-events: auto;
+  padding: 0.9rem 1rem 1.2rem;
+  background: rgba(246, 241, 230, 0.94);
+  border: 2px solid #1f6a56;
+  border-radius: 1rem;
+  box-shadow: 0 12px 40px rgba(36, 30, 24, 0.18);
+}
+
+.dojo-panel h2 {
+  font-size: 1.55rem;
+  margin-bottom: 0.25rem;
+}
+
+.dojo-head p:last-child {
+  margin: 0.2rem 0 0.4rem;
+  color: #3d4338;
+}
+
+.dojo-weapons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.4rem 0 0.7rem;
+}
+
+.dojo-weapons .action,
+.dojo-panel > .action {
+  min-width: 0;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+}
+
+.dojo-field,
+.dojo-check {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.4rem 0;
+  font-size: 0.92rem;
+}
+
+.dojo-field {
+  flex-direction: column;
+}
+
+.dojo-check {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dojo-panel input[type='range'] {
+  width: 100%;
+}
+
+.dojo-combos ul,
+.dojo-controls ul,
+.dojo-combos,
+.dojo-controls {
+  margin: 0;
+  padding: 0;
+}
+
+.dojo-combos ul,
+.dojo-controls ul {
+  list-style: none;
+  margin: 0.25rem 0 0.8rem;
+}
+
+.dojo-combos li,
+.dojo-controls li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.18rem 0;
+  border-bottom: 1px solid rgba(31, 106, 86, 0.16);
+  font-size: 0.84rem;
+}
