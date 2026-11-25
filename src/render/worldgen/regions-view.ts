@@ -175,7 +175,6 @@ vec3 rumorsAt(vec3 p, float jitter) {
   return o;
 }
 
-// The tile period is the sprite rect (cover, haze and veil are 64). Not a fixed 55.
 vec4 atlasTexel(vec4 rect, vec2 art) {
   vec2 t = mod(art, rect.zw);
   return texture2D(uAtlas, (rect.xy + floor(t) + 0.5) / uAtlasSize);

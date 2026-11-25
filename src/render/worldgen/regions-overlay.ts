@@ -201,19 +201,6 @@ function hash2(a: number, b: number): number {
   return s - Math.floor(s);
 }
 
-/**
- * How many puff stamps fit around a clearing. The pitch is the sprite's width:
- * the shipped puffs are 48px, and the old fixed 14px step (the medium puff)
- * would stack them into a solid disc. Returns 0 when the clearing is too small
- * for a ring of at least four.
- */
-export function puffRingCount(radiusPx: number, pixel: number, puffW: number): number {
-  const pitch = Math.max(1, puffW) * Math.max(1, pixel) * 0.85;
-  const n = Math.round((2 * Math.PI * radiusPx) / pitch);
-  if (n < 4) return 0;
-  return Math.min(24, n);
-}
-
 /** A rumour's believed look, for the codex card and tests. */
 export function iconIds(): string[] {
   return Object.keys(ICONS);
@@ -318,12 +305,9 @@ export class RegionsOverlay {
         const fadeIn = Math.min(1, t * 6, (1 - t) * 6);
         const p = proj(chunkToSphere(o.n, a, t, 0.1 + hy * 0.8));
         if (!p) continue;
-        const pk = Math.floor(hash2(hx * 9, hy * 7) * atlas.meta.puffs.length);
-        const puff = atlas.rect(atlas.meta.puffs[pk]!);
-        // Shadows stay the earlier sprites (several sizes). Index them on their
-        // own so a short puff list still draws every shadow.
-        const sk = Math.floor(hash2(hx * 9 + 1, hy * 7 + 3) * atlas.meta.shadows.length);
-        const shadow = atlas.rect(atlas.meta.shadows[sk]!);
+        const k = Math.floor(hash2(hx * 9, hy * 7) * o.atlas!.meta.puffs.length);
+        const puff = atlas.rect(atlas.meta.puffs[k]!);
+        const shadow = atlas.rect(atlas.meta.shadows[k]!);
         ctx.globalAlpha = 0.45 * fadeIn;
         this.sprite(
           ctx,
@@ -423,8 +407,7 @@ export class RegionsOverlay {
         if (!v) continue;
         const ax = this.axis(o, a, proj);
         if (!ax) continue;
-        // The hole's corner in the unchanged corner art (drawn beside the old
-        // 55px cover). Still art pixels, so the rim shares the cover's grid.
+        // Anchor: the hole's corner sits ~10 art px in from the piece's cloud sides.
         const anchorX = dx > 0 ? 10 : r.w - 10;
         const anchorY = dy > 0 ? 10 : r.h - 10;
         ctx.setTransform(ax.ux, ax.uy, ax.vx, ax.vy, v.x, v.y);
@@ -479,13 +462,11 @@ export class RegionsOverlay {
       const rad = Math.hypot(edge.x - c.x, edge.y - c.y);
       if (rad < 6) continue;
       const puffs = atlas.meta.puffs.map((s) => atlas.rect(s));
-      const pitch = puffs.reduce((widest, rect) => Math.max(widest, rect.w), 1);
-      const count = puffRingCount(rad, P, pitch);
-      if (count < 1) continue;
+      const count = Math.max(6, Math.min(40, Math.round((2 * Math.PI * rad) / (14 * P))));
       for (let i = 0; i < count; i++) {
         const t = (i / count) * Math.PI * 2 + r.id;
-        const k = Math.floor(hash2(r.id * 13 + i, i * 7) * puffs.length);
-        const pr = puffs[k]!;
+        const k = Math.floor(hash2(r.id * 13 + i, i * 7) * 3) + 1;
+        const pr = puffs[Math.min(puffs.length - 1, k)]!;
         const wob = 1 + (hash2(i, r.id) - 0.5) * 0.12;
         const x = c.x + Math.cos(t) * rad * wob - (pr.w * P) / 2;
         const y = c.y + Math.sin(t) * rad * wob - (pr.h * P) / 2;
@@ -672,7 +653,6 @@ export class RegionsOverlay {
       const t = a.t / 0.6;
       const f = rim.frames[Math.min(rim.frames.length - 1, Math.floor(t * rim.frames.length))]!;
       const rr = atlas.rect(f);
-      // 0.32 is the hole in the unchanged 25px clearing-rim frame, not the cover tile.
       const s = Math.min(
         o.pixel * 3,
         Math.max(1, Math.round((radius * (1.1 + t * 1.2)) / (rr.w * 0.32))),
