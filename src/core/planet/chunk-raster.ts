@@ -5,6 +5,7 @@
  * generator and only a few MB cross to the main thread.
  */
 import { Biome, type NodeKind, type WorldData } from '../world/models';
+import { landUseRgb, settlementFillRgb } from '../world/settlement-siting';
 import { biomeRgb } from './atlas';
 import { hypsoRgb } from './world-bake';
 
@@ -38,6 +39,31 @@ export interface ChunkRaster {
 const CHUNK_GROUND_M = 3072 * 8;
 
 const ROAD: readonly [number, number, number] = [196, 150, 96];
+
+/** Placeholder roofs and farmland so World Gen shows the generation-2 footprint. */
+function paintSettlements(
+  world: WorldData,
+  biome: Uint8ClampedArray,
+  size: number,
+  step: number,
+): void {
+  const paint = (x: number, y: number, rgb: readonly [number, number, number]) => {
+    const px = Math.min(size - 1, Math.max(0, Math.floor(x / step)));
+    const py = Math.min(size - 1, Math.max(0, Math.floor(y / step)));
+    const o = (py * size + px) * 4;
+    biome[o] = rgb[0];
+    biome[o + 1] = rgb[1];
+    biome[o + 2] = rgb[2];
+    biome[o + 3] = 255;
+  };
+  for (const node of world.nodes) {
+    if (node.kind === 'grove') continue;
+    const farm = landUseRgb(node.landUse);
+    for (const tile of node.outskirts ?? []) paint(tile.x, tile.y, farm);
+    const roof = settlementFillRgb(node.settlementClass);
+    for (const tile of node.tiles ?? []) paint(tile.x, tile.y, roof);
+  }
+}
 
 /** Rasterise a generated map at up to `maxSize` px a side (nearest tile, max-pooled roads). */
 export function chunkRaster(world: WorldData, maxSize: number): ChunkRaster {
@@ -98,6 +124,7 @@ export function chunkRaster(world: WorldData, maxSize: number): ChunkRaster {
       height[o + 3] = 255;
     }
   }
+  paintSettlements(world, biome, size, step);
   const counts = new Map<Biome, number>();
   let land = 0;
   let minM = Infinity;

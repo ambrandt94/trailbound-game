@@ -169,13 +169,23 @@ export function setNewWorldGen(patch: Partial<NewWorldGen>): void {
   };
 }
 
-/** Full settings for the next new world: land shape plus the generation choices. */
+/**
+ * Full settings for the next new world: land shape plus the generation choices.
+ * `?settlementGen=1` keeps the screenshot harness on the old layout.
+ */
 export function newWorldSettings(): WorldSettings {
-  return clampSettings({
+  const settings = clampSettings({
     ...DEFAULT_WORLD_SETTINGS,
     ...newWorldGen.value,
     mapStyle: newWorldLand.value,
   });
+  try {
+    const flag = new URLSearchParams(globalThis.location?.search ?? '').get('settlementGen');
+    if (flag === '1') return clampSettings({ ...settings, settlementGen: 1 });
+  } catch {
+    /* location is absent in some test runners */
+  }
+  return settings;
 }
 export const creatorBusy = signal(false);
 export const creatorSource = signal<'forge' | 'placeholder' | ''>('');

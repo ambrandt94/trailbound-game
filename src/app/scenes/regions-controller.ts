@@ -261,6 +261,13 @@ export class RegionsController {
       set: (patch: Partial<RegionsDebug>) => {
         regionsDebug.value = { ...regionsDebug.value, ...patch };
       },
+      /** Absolute zoom for screenshot harnesses. 1 is the fitted view. */
+      setZoom: (mul: number) => {
+        if (!this.cur) return;
+        const next = Math.max(0.25, Math.min(8, mul));
+        const factor = next / Math.max(1e-6, this.zoomMul);
+        this.zoom(factor);
+      },
       commands: regionsCommands,
       rumors: () => regionsRumors.value,
       /** Add a rumour `east` / `north` chunk widths from the centre chunk. */

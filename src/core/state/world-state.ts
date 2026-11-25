@@ -236,11 +236,17 @@ export class WorldState {
     this.entryPose = null;
     this.zones = [];
     this.areaCache.clear();
-    // No settings: the classic 16x island. The game always passes settings (new games
-    // default to the Trailbound world); tools and tests rely on this fixed island.
+    // No settings: the classic 16x island on settlement generation 1. The game
+    // always passes settings (new games use generation 2); tools and tests
+    // rely on this fixed island.
     const settings =
       options?.settings ??
-      clampSettings({ ...DEFAULT_WORLD_SETTINGS, worldSource: 'island', worldScale: 16 });
+      clampSettings({
+        ...DEFAULT_WORLD_SETTINGS,
+        worldSource: 'island',
+        worldScale: 16,
+        settlementGen: 1,
+      });
     this.data = generateWorld(seed, settings);
     this.chunks.clear();
     this.entities = [...spawnEntities(this.data, seed), ...spawnResidents(this.data, seed)];

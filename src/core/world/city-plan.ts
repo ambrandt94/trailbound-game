@@ -1,8 +1,8 @@
 /**
  * City plans for settlement generation 2. A plan is deterministic from its seed,
- * cached in memory, and never written to a save. Generation 1 (today's authored
- * places) stays in charge until a later milestone; tests and the World Gen
- * debug overlay are the only callers.
+ * cached in memory, and never written to a save. World generation places the
+ * footprints; this cutter is what the World Gen debug overlay draws. Layout
+ * still comes later.
  */
 import type { Vec2 } from './models';
 import { fbm, hash2, Rng } from './noise';

@@ -12,6 +12,7 @@ import {
   type PoiKind,
   type PlayerState,
   TILE,
+  type Vec2,
   type WorldData,
   ZONE_SCALE,
   BIOME_COUNT,
@@ -31,6 +32,7 @@ import {
   mapPinScreenPx,
   markerDisplay,
 } from '../../core/world/map-grid';
+import { landUseRgb } from '../../core/world/settlement-siting';
 import { type ChatBubble, peerMarkerColor } from './markers';
 import { LOCAL_PLAYER_ID } from '../../core/sim/player';
 import { pixelSnapScale } from './map-camera';
@@ -2095,35 +2097,74 @@ export class WorldRenderer {
     return fineToDisplay(fine, this.mapStep);
   }
 
-  private addNodeTiles(ctx: CanvasRenderingContext2D, node: MapNode, exact = false): void {
-    if (exact && node.tiles?.length) {
-      const cell = Math.max(0.35, this.toMap(1) * TILE);
-      for (const t of node.tiles) {
-        ctx.rect(this.toMap(t.x) * TILE, this.toMap(t.y) * TILE, cell, cell);
-      }
+  /**
+   * Quadrant mask of a footprint. One quadrant is half a display tile
+   * (8 fine tiles on a 16× world). The same cells are filled and stroked,
+   * at every map step, so the outline is the footprint rather than its box.
+   */
+  private maskCells(tiles: readonly Vec2[] | undefined): {
+    cells: Array<{ x: number; y: number }>;
+    seen: Set<number>;
+    q: number;
+    cell: number;
+  } | null {
+    if (!tiles?.length) return null;
+    const step = this.mapStep > 0 ? this.mapStep : 1;
+    const q = Math.max(1, Math.floor(step / 2));
+    const seen = new Set<number>();
+    const cells: Array<{ x: number; y: number }> = [];
+    for (const tile of tiles) {
+      const x = Math.floor(tile.x / q);
+      const y = Math.floor(tile.y / q);
+      const key = (x + 4096) * 8192 + (y + 4096);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cells.push({ x, y });
+    }
+    return { cells, seen, q, cell: (q / step) * TILE };
+  }
+
+  private addMask(ctx: CanvasRenderingContext2D, tiles: readonly Vec2[] | undefined): void {
+    const mask = this.maskCells(tiles);
+    if (!mask) {
       return;
     }
-    if (this.mapStep > 1) {
-      const b = nodeBounds(node);
-      const x = this.toMap(b.x0) * TILE;
-      const y = this.toMap(b.y0) * TILE;
+    for (const cell of mask.cells) {
       ctx.rect(
-        x,
-        y,
-        Math.max(TILE, this.toMap(b.x1 - b.x0) * TILE),
-        Math.max(TILE, this.toMap(b.y1 - b.y0) * TILE),
+        this.toMap(cell.x * mask.q) * TILE,
+        this.toMap(cell.y * mask.q) * TILE,
+        mask.cell,
+        mask.cell,
       );
-      return;
     }
-    const tiles = node.tiles;
-    if (tiles?.length) {
-      for (const t of tiles) {
-        ctx.rect(t.x * TILE, t.y * TILE, TILE, TILE);
+  }
+
+  private traceMask(ctx: CanvasRenderingContext2D, tiles: readonly Vec2[] | undefined): void {
+    ctx.beginPath();
+    const mask = this.maskCells(tiles);
+    if (!mask) return;
+    const has = (x: number, y: number) => mask.seen.has((x + 4096) * 8192 + (y + 4096));
+    for (const cell of mask.cells) {
+      const x = this.toMap(cell.x * mask.q) * TILE;
+      const y = this.toMap(cell.y * mask.q) * TILE;
+      const edge = mask.cell;
+      if (!has(cell.x, cell.y - 1)) {
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + edge, y);
       }
-      return;
+      if (!has(cell.x + 1, cell.y)) {
+        ctx.moveTo(x + edge, y);
+        ctx.lineTo(x + edge, y + edge);
+      }
+      if (!has(cell.x, cell.y + 1)) {
+        ctx.moveTo(x + edge, y + edge);
+        ctx.lineTo(x, y + edge);
+      }
+      if (!has(cell.x - 1, cell.y)) {
+        ctx.moveTo(x, y + edge);
+        ctx.lineTo(x, y);
+      }
     }
-    const b = nodeBounds(node);
-    ctx.rect(b.x0 * TILE, b.y0 * TILE, (b.x1 - b.x0) * TILE, (b.y1 - b.y0) * TILE);
   }
 
   private drawFeatures(
@@ -2259,13 +2300,20 @@ export class WorldRenderer {
           ? 0.66
           : 0.5
         : overlay * streetFade * (hovered ? 0.28 + political * 0.62 : 0.16 + political * 0.72);
+      if (node.outskirts?.length && (hovered || instanced || overlay > 0.04 || context || close)) {
+        const farm = landUseRgb(node.landUse);
+        ctx.beginPath();
+        this.addMask(ctx, node.outskirts);
+        ctx.fillStyle = `rgba(${farm[0]}, ${farm[1]}, ${farm[2]}, ${0.42 + overlay * 0.4})`;
+        ctx.fill();
+      }
       if (hovered || instanced || overlay > 0.04 || context || close) {
         ctx.beginPath();
-        this.addNodeTiles(ctx, node, close);
+        this.addMask(ctx, node.tiles);
         ctx.fillStyle = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${fillA})`;
         ctx.fill();
       }
-      this.traceNode(ctx, node, close);
+      this.traceMask(ctx, node.tiles);
       const strokeA = 0.12 + overlay * 0.88;
       ctx.lineJoin = 'miter';
       ctx.miterLimit = 2.4;
@@ -2311,59 +2359,6 @@ export class WorldRenderer {
         );
       }
       ctx.restore();
-    }
-  }
-
-  private traceNode(ctx: CanvasRenderingContext2D, node: MapNode, exact = false): void {
-    ctx.beginPath();
-    if (exact) {
-      const b = nodeBounds(node);
-      ctx.rect(
-        this.toMap(b.x0) * TILE,
-        this.toMap(b.y0) * TILE,
-        Math.max(0.35, this.toMap(b.x1 - b.x0) * TILE),
-        Math.max(0.35, this.toMap(b.y1 - b.y0) * TILE),
-      );
-      return;
-    }
-    if (this.mapStep > 1) {
-      const b = nodeBounds(node);
-      const x = this.toMap(b.x0) * TILE;
-      const y = this.toMap(b.y0) * TILE;
-      ctx.rect(
-        x,
-        y,
-        Math.max(TILE, this.toMap(b.x1 - b.x0) * TILE),
-        Math.max(TILE, this.toMap(b.y1 - b.y0) * TILE),
-      );
-      return;
-    }
-    const tiles = node.tiles;
-    if (!tiles?.length) {
-      const b = nodeBounds(node);
-      ctx.rect(b.x0 * TILE, b.y0 * TILE, (b.x1 - b.x0) * TILE, (b.y1 - b.y0) * TILE);
-      return;
-    }
-    const set = new Set(tiles.map((t) => `${t.x},${t.y}`));
-    for (const t of tiles) {
-      const x = t.x * TILE;
-      const y = t.y * TILE;
-      if (!set.has(`${t.x},${t.y - 1}`)) {
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + TILE, y);
-      }
-      if (!set.has(`${t.x + 1},${t.y}`)) {
-        ctx.moveTo(x + TILE, y);
-        ctx.lineTo(x + TILE, y + TILE);
-      }
-      if (!set.has(`${t.x},${t.y + 1}`)) {
-        ctx.moveTo(x + TILE, y + TILE);
-        ctx.lineTo(x, y + TILE);
-      }
-      if (!set.has(`${t.x - 1},${t.y}`)) {
-        ctx.moveTo(x, y + TILE);
-        ctx.lineTo(x, y);
-      }
     }
   }
 

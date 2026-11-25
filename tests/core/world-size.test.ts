@@ -103,6 +103,7 @@ test('saves carry the world settings and older saves load the default world', ()
       worldSource: 'island',
       homeChunk: null,
       terrainGen: 1,
+      settlementGen: 1,
     }),
   );
   // Planet saves from before seamless chunks keep the classic home map.
