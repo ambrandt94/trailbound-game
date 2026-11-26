@@ -1,6 +1,11 @@
 /**
- * Character Forge 2.1.1 backend. This is the only file that imports the v2
+ * Character Forge 2.2.1 backend. This is the only file that imports the v2
  * runtime or calls `CF.*` for api 2. v1 stays in `backends/v1.ts`.
+ *
+ * Public builds keep animation policy `cf`. Locomotion defaults to `full`, so
+ * Idle, Walk, and Run are the CC0 Quaternius clips. `VITE_CF_PRIVATE_ANIM_URL`
+ * is the only switch to the private Kevin Iglesias pack (`cf+ki`). That pack
+ * is never vendored.
  */
 import * as THREE from 'three';
 import type { PlayerProfileEntry } from '../../../core/people/avatar';
@@ -325,13 +330,22 @@ export function createV2Backend(): CharacterBackend {
       const raceId = body.info?.race;
       const metrics = raceId ? catalog?.raceMetrics?.[raceId] : undefined;
       const walk = body.clips?.Walk;
+      const run = body.clips?.Run;
+      const flyer = !!raceId && (catalog?.flyerRaces.includes(raceId) ?? false);
+      // Catalog stride matches the old KayKit walk. Quaternius (and a private
+      // KI walk) plant the foot on a different length, so the mixer rate uses
+      // the clip's own stride. Flyers keep Walk and do not take the ground Run.
+      const walkStride = walk ? plantedStride(body, walk) : null;
+      const runStride = !flyer && run ? plantedStride(body, run) : null;
+      restoreIdle(body);
       const humanM = catalog?.raceMetrics?.human?.heightM;
       body.object3D.userData.cfMetrics = {
         heightM: body.info?.heightM ?? metrics?.heightM ?? 0,
-        strideM: metrics?.strideM ?? 0,
+        strideM: walkStride ?? metrics?.strideM ?? 0,
         walkDuration: walk?.duration ?? metrics?.walkDuration ?? 0,
         // One uniform factor for every race, from the human catalog height.
         scale: humanM && humanM > 0 ? HERO_HEIGHT_M / humanM : 1,
+        ...(run && runStride ? { runDuration: run.duration, runStrideM: runStride } : {}),
       };
       return {
         object3D: body.object3D,
@@ -442,6 +456,77 @@ export function createV2Backend(): CharacterBackend {
       await api.preload(api.races());
     },
   };
+}
+
+/**
+ * Metres the planted foot travels backward in one cycle, in character space.
+ * The lower foot's backward speed, while it is near the ground, times the
+ * clip length. Null keeps the catalog stride.
+ */
+function plantedStride(body: CfBody, clip: THREE.AnimationClip): number | null {
+  const mesh = skinnedMesh(body.object3D);
+  if (!mesh || !(clip.duration > 0)) return null;
+  const left = mesh.skeleton.bones.find((bone) => bone.name === 'Foot_L');
+  const right = mesh.skeleton.bones.find((bone) => bone.name === 'Foot_R');
+  if (!left || !right) return null;
+  const steps = 60;
+  const dt = clip.duration / steps;
+  const mixer = body.mixer;
+  mixer.stopAllAction();
+  mixer.clipAction(clip).reset().play();
+  mixer.update(0);
+  const pos = new THREE.Vector3();
+  left.getWorldPosition(pos);
+  let prevL = pos.z;
+  right.getWorldPosition(pos);
+  let prevR = pos.z;
+  const samples: Array<{ ly: number; ry: number; dl: number; dr: number }> = [];
+  for (let i = 0; i < steps; i += 1) {
+    mixer.update(dt);
+    left.getWorldPosition(pos);
+    const lz = pos.z;
+    const ly = pos.y;
+    right.getWorldPosition(pos);
+    const rz = pos.z;
+    const ry = pos.y;
+    samples.push({ ly, ry, dl: -(lz - prevL) / dt, dr: -(rz - prevR) / dt });
+    prevL = lz;
+    prevR = rz;
+  }
+  const minL = Math.min(...samples.map((sample) => sample.ly));
+  const maxL = Math.max(...samples.map((sample) => sample.ly));
+  const minR = Math.min(...samples.map((sample) => sample.ry));
+  const maxR = Math.max(...samples.map((sample) => sample.ry));
+  const speeds: number[] = [];
+  for (const sample of samples) {
+    const leftPlanted = sample.ly <= sample.ry;
+    const speed = leftPlanted ? sample.dl : sample.dr;
+    const span = leftPlanted ? maxL - minL : maxR - minR;
+    const height = leftPlanted ? sample.ly : sample.ry;
+    const floor = leftPlanted ? minL : minR;
+    if (speed > 0.05 && height <= floor + Math.max(0.01, span * 0.35)) speeds.push(speed);
+  }
+  if (speeds.length < 8) return null;
+  speeds.sort((a, b) => a - b);
+  const mid = speeds[Math.floor(speeds.length / 2)] ?? 0;
+  const stride = mid * clip.duration;
+  return stride > 0.05 ? stride : null;
+}
+
+/** Put the body back on the Idle frame CF.build posed, after a stride sample. */
+function restoreIdle(body: CfBody): void {
+  body.mixer.stopAllAction();
+  body.play('Idle', { fade: 0 });
+  body.mixer.update(0);
+}
+
+function skinnedMesh(root: THREE.Object3D): THREE.SkinnedMesh | null {
+  let found: THREE.SkinnedMesh | null = null;
+  root.traverse((node) => {
+    const mesh = node as THREE.SkinnedMesh;
+    if (!found && mesh.isSkinnedMesh) found = mesh;
+  });
+  return found;
 }
 
 function resolvePrivateAnimUrl(explicit: string | undefined): string | undefined {
@@ -637,7 +722,7 @@ function optionsForCreator(value: unknown, gender: 'm' | 'f', age: 'adult' | 'ch
   };
 }
 
-/** Recipe fields plus the aliases CF 2.1.1 accepts. Anything else is rejected. */
+/** Recipe fields plus the aliases CF 2 accepts. Anything else is rejected. */
 const V2_EDIT_KEYS = new Set([
   'race',
   'bodyType',

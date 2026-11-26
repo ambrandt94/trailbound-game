@@ -5,9 +5,9 @@ import { verifyShaManifest } from '../../tools/cf-asset-manifest.mjs';
 
 const root = `public/${characterForgeV2Paths().base}`;
 
-test('Character Forge 2.1.1 is vendored beside the v1 pin and matches its sha256 manifests', () => {
-  expect(CF2_PIN).toEqual({ version: '2.1.1', generatorVersion: '1' });
-  expect(characterForgeV2Paths().runtime).toBe('vendor/character-forge/2.1.1/cf-runtime.mjs');
+test('Character Forge 2.2.1 is vendored beside the v1 pin and matches its sha256 manifests', () => {
+  expect(CF2_PIN).toEqual({ version: '2.2.1', generatorVersion: '1' });
+  expect(characterForgeV2Paths().runtime).toBe('vendor/character-forge/2.2.1/cf-runtime.mjs');
   expect(existsSync(`${root}cf-runtime.mjs`)).toBe(true);
   expect(existsSync(`${root}LICENSES.md`)).toBe(true);
   expect(existsSync(`${root}licenses.json`)).toBe(true);

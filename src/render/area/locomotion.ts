@@ -86,8 +86,13 @@ export function locomotionSample(input: LocoSampleInput): LocoSample {
   };
 }
 
-/** Forge and the placeholder only expose Idle and Walk. Run and sneak map onto Walk. */
-export function forgeClip(sample: LocoSample, current: 'Idle' | 'Walk'): 'Idle' | 'Walk' {
+/** Forge presents Idle, Walk, and Run. Anything else folds into Walk or the clip already playing. */
+export function forgeClip(
+  sample: LocoSample,
+  current: 'Idle' | 'Walk' | 'Run',
+): 'Idle' | 'Walk' | 'Run' {
   if (!sample.clip) return current;
-  return sample.clip === 'Idle' ? 'Idle' : 'Walk';
+  if (sample.clip === 'Idle') return 'Idle';
+  if (sample.clip === 'Run') return 'Run';
+  return 'Walk';
 }

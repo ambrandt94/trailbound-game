@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { AvatarEngine, PlayerAvatar, PlayerProfileEntry } from '../../core/people/avatar';
 import { clipTimeScale } from '../../core/state/area-pace';
-import { applyKaykitLocomotion } from '../kaykit-locomotion';
+import { WALK_MAX_MPS } from '../area/locomotion';
 import { createCharacterBackend } from './backends/select';
 import type { BuiltCharacter, CharacterBackend, CharacterPlatform } from './backends/types';
 import { createV1Backend } from './backends/v1';
@@ -47,15 +47,22 @@ export interface ForgeCatalog {
 }
 
 /**
- * Metres from a v2 catalog row, used to time the Walk clip.
- * `scale` is the one town factor, 1.4 / the v2 human height, shared by every race.
+ * Metres used to time locomotion. `strideM` and `walkDuration` come from the
+ * Walk clip (planted-foot travel and the clip length). `scale` is the one town
+ * factor, 1.4 / the v2 human height, shared by every race. `runDuration` and
+ * `runStrideM` are set when the body has a ground Run clip.
  */
 export interface ForgeRaceMetrics {
   heightM: number;
   strideM: number;
   walkDuration: number;
   scale?: number;
+  runDuration?: number;
+  runStrideM?: number;
 }
+
+/** Clips a forged body can present. Flyers still use Idle and Walk. */
+export type BodyClip = 'Idle' | 'Walk' | 'Run';
 
 /** Public fields the API documents, plus the untouched engine recipe. */
 export interface CharacterRecipe {
@@ -186,8 +193,11 @@ export interface EditSnapshot {
 }
 
 export interface AvatarPose {
-  clip: 'Idle' | 'Walk';
-  /** Mixer rate. Walk uses speed / 1.4 so the feet stay with the body. */
+  clip: BodyClip;
+  /**
+   * Mixer rate. With v2 metrics this is speed × clip duration / (stride × scale),
+   * using the clip's own stride. Without metrics, a moving body uses speed / 1.4.
+   */
   timeScale: number;
   /** Crossfade in seconds. 0 restarts the clip only when the name changes. */
   fade: number;
@@ -199,8 +209,8 @@ export interface AvatarBody {
   object3D: THREE.Object3D;
   source: 'forge' | 'placeholder';
   recipeHash: string;
-  clip: 'Idle' | 'Walk';
-  play(name: 'Idle' | 'Walk'): void;
+  clip: BodyClip;
+  play(name: BodyClip): void;
   /** Area locomotion. Blends when the clip changes and sets the mixer rate. */
   present(pose: AvatarPose): void;
   /** Attachment point. Null on the placeholder pawn and on runtimes without sockets. */
@@ -349,24 +359,44 @@ export function recipeForAvatar(
 }
 
 /**
- * Scale and Walk mixer rate. Without v2 metrics this is the v1 rule:
+ * Scale, clip, and mixer rate. Without v2 metrics this is the v1 rule:
  * scale 1, and `speed / 1.4` once the body is moving.
  * v2 uses one uniform scale for every race (`metrics.scale`), from the human
- * catalog height, so a dwarf stays shorter than a human.
+ * catalog height, so a dwarf stays shorter than a human. Walk and Run rates
+ * follow that clip's duration and planted stride. Run starts once speed reaches
+ * the same ceiling the town uses for a walk clip.
  */
 export function forgePresentation(
   metrics: ForgeRaceMetrics | null,
   speed: number,
-): { scale: number; timeScale: number } {
+): { scale: number; timeScale: number; clip: BodyClip } {
   const moving = speed > 0.4;
   if (!metrics || !(metrics.heightM > 0) || !(metrics.strideM > 0) || !(metrics.walkDuration > 0)) {
-    return { scale: 1, timeScale: moving ? Math.max(0.6, speed / 1.4) : 1 };
+    return {
+      scale: 1,
+      timeScale: moving ? Math.max(0.6, speed / 1.4) : 1,
+      clip: moving ? 'Walk' : 'Idle',
+    };
   }
   const scale = metrics.scale && metrics.scale > 0 ? metrics.scale : 1;
-  if (!moving) return { scale, timeScale: 1 };
+  if (!moving) return { scale, timeScale: 1, clip: 'Idle' };
+  if (
+    metrics.runDuration &&
+    metrics.runStrideM &&
+    metrics.runDuration > 0 &&
+    metrics.runStrideM > 0 &&
+    speed >= WALK_MAX_MPS * scale
+  ) {
+    return {
+      scale,
+      timeScale: clipTimeScale(speed, metrics.runDuration, metrics.runStrideM, scale),
+      clip: 'Run',
+    };
+  }
   return {
     scale,
     timeScale: clipTimeScale(speed, metrics.walkDuration, metrics.strideM, scale),
+    clip: 'Walk',
   };
 }
 
@@ -444,8 +474,6 @@ export async function buildAvatar(
       budgetMs: options.budgetMs ?? (backend.id === 'cf2' ? 6 : BUDGET_MS),
       atlasSize: 256,
     });
-    // v2's authored Idle/Walk are a near T-pose. Swap in the vendored KayKit clips.
-    if (backend.id === 'cf2') await applyKaykitLocomotion(built);
     buildMs = now() - started;
     return wrapForge(built, backend.recipeHash(recipe.engine));
   } catch (error) {
@@ -469,7 +497,7 @@ export function placeholderAvatar(seed: number): AvatarBody {
   group.add(bob);
 
   const state = {
-    clip: 'Idle' as 'Idle' | 'Walk',
+    clip: 'Idle' as BodyClip,
     time: 0,
     rate: 1,
     disposed: false,
@@ -495,7 +523,7 @@ export function placeholderAvatar(seed: number): AvatarBody {
     update(dt) {
       if (state.disposed) return;
       state.time += dt * state.rate;
-      const moving = state.clip === 'Walk';
+      const moving = state.clip !== 'Idle';
       bob.position.y = moving
         ? Math.sin(state.time * 8) * 0.05
         : Math.sin(state.time * 2.4) * 0.012;
@@ -625,14 +653,14 @@ function feature(name: 'describe' | 'options' | 'checkEdit' | 'edit' | 'editCata
   return backend.features()[name];
 }
 
-function actionFor(built: BuiltCharacter, name: 'Idle' | 'Walk'): THREE.AnimationAction | null {
+function actionFor(built: BuiltCharacter, name: BodyClip): THREE.AnimationAction | null {
   const clip = built.clips?.[name];
   if (!clip) return null;
   return built.mixer.clipAction(clip);
 }
 
 function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
-  const state = { clip: 'Idle' as 'Idle' | 'Walk', disposed: false };
+  const state = { clip: 'Idle' as BodyClip, disposed: false };
   built.object3D.name = 'CF_avatar';
   // The town, the creator, and instance games all borrow this one object.
   // Teardown detaches it. It must not be disposed with a scene.

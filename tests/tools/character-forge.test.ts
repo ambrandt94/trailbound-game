@@ -3,7 +3,9 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import type { Object3D, SkinnedMesh } from 'three';
 import { expect, test } from 'vitest';
+import type { BuiltCharacter } from '../../src/render/characters/backends/types';
 import { readWardrobeCatalog } from '../../src/app/wardrobe-edit';
 import { createCharacterBackend } from '../../src/render/characters/backends/select';
 import { createV2Backend } from '../../src/render/characters/backends/v2';
@@ -140,7 +142,7 @@ test('a v2 preload failure falls back to v1 and warns', async () => {
     [
       'const api = {',
       '  api: 2,',
-      "  version: '2.1.1',",
+      "  version: '2.2.1',",
       '  generatorVersion: 1,',
       '  freeCpuGeometry: true,',
       '  async init() {},',
@@ -367,9 +369,9 @@ test('the trailbound profile validates, and the same seed and entry hash the sam
 }, 180_000);
 
 test('a v1 body keeps the old scale rule, and v2 metrics scale toward the 1.4 m hero', () => {
-  expect(forgePresentation(null, 0)).toEqual({ scale: 1, timeScale: 1 });
-  expect(forgePresentation(null, 1.4)).toEqual({ scale: 1, timeScale: 1 });
-  expect(forgePresentation(null, 2.8)).toEqual({ scale: 1, timeScale: 2 });
+  expect(forgePresentation(null, 0)).toEqual({ scale: 1, timeScale: 1, clip: 'Idle' });
+  expect(forgePresentation(null, 1.4)).toEqual({ scale: 1, timeScale: 1, clip: 'Walk' });
+  expect(forgePresentation(null, 2.8)).toEqual({ scale: 1, timeScale: 2, clip: 'Walk' });
   const shared = 1.4 / 0.946;
   const human = forgePresentation(
     { heightM: 0.946, strideM: 0.539, walkDuration: 1.375, scale: shared },
@@ -380,10 +382,30 @@ test('a v1 body keeps the old scale rule, and v2 metrics scale toward the 1.4 m 
     1.6,
   );
   expect(human.scale).toBeCloseTo(shared, 5);
+  expect(human.clip).toBe('Walk');
   expect(dwarf.scale).toBe(human.scale);
   expect(human.timeScale).toBeGreaterThan(0.2);
   expect(human.timeScale).not.toBe(Math.max(0.6, 1.6 / 1.4));
   expect(dwarf.timeScale).not.toBe(human.timeScale);
+  const fastWalk = forgePresentation(
+    { heightM: 0.946, strideM: 0.539, walkDuration: 1.375, scale: shared },
+    5.5,
+  );
+  expect(fastWalk.clip).toBe('Walk');
+  const sprint = forgePresentation(
+    {
+      heightM: 0.946,
+      strideM: 0.468,
+      walkDuration: 1.333,
+      scale: shared,
+      runDuration: 0.667,
+      runStrideM: 0.537,
+    },
+    5.5,
+  );
+  expect(sprint.clip).toBe('Run');
+  expect(sprint.scale).toBeCloseTo(shared, 5);
+  expect(sprint.timeScale).toBeGreaterThan(human.timeScale);
 });
 
 test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unless asked', async () => {
@@ -399,7 +421,7 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
       platform: platformWithFetch(platform),
     });
     const catalog = backend.catalog();
-    expect(catalog?.version).toBe('2.1.1');
+    expect(catalog?.version).toBe('2.2.1');
     expect(catalog?.raceMetrics?.human).toMatchObject({ heightM: 0.946, strideM: 0.539 });
     expect(catalog?.raceMetrics?.human?.walkDuration).toBeCloseTo(1.375, 3);
     expect(catalog?.flyerRaces).toEqual(expect.arrayContaining(['pixie', 'imp']));
@@ -470,13 +492,42 @@ test('v2 builds a character, migrates a cf1 recipe in memory, and ignores KI unl
     expect(built.info?.heightM).toBeCloseTo(0.762, 3);
     expect(built.object3D).toBeTruthy();
     expect(built.clips?.Idle).toBeTruthy();
-    expect(built.clips?.Walk?.duration).toBeCloseTo(1.375, 3);
+    expect(built.clips?.Walk?.duration).toBeCloseTo(1.333, 2);
+    expect(built.clips?.Walk?.userData).toMatchObject({ locomotion: 'quaternius' });
+    expect(built.clips?.Run?.duration).toBeCloseTo(0.667, 2);
+    const metrics = built.object3D.userData.cfMetrics as {
+      strideM: number;
+      runDuration?: number;
+      runStrideM?: number;
+    };
+    expect(metrics.strideM).toBeGreaterThan(0.32);
+    expect(metrics.strideM).toBeLessThan(0.39);
+    expect(metrics.runDuration).toBeCloseTo(0.667, 2);
+    expect(metrics.runStrideM ?? 0).toBeGreaterThan(0.2);
     expect(built.object3D.userData.cfMetrics).toMatchObject({
       heightM: expect.closeTo(0.762, 3),
-      strideM: expect.any(Number),
-      walkDuration: expect.closeTo(1.375, 3),
+      walkDuration: expect.closeTo(1.333, 2),
       scale: expect.closeTo(1.4 / 0.946, 5),
     });
+    const armDrop = poseDelta(built, 'CF_Idle', 'Idle', 'UpperArm_L');
+    expect(armDrop, 'Idle arms stayed on the CF A-pose').toBeGreaterThan(20);
+    const walkSwing = maxBoneSwing(built, 'Walk', 1.2);
+    expect(walkSwing.Thigh_L ?? 0).toBeGreaterThan(30);
+    expect(walkSwing.UpperArm_L ?? 0).toBeGreaterThan(20);
+    const pixie = await backend.build(
+      backend.generate({
+        seed: 4,
+        profileEntry: { ages: { adult: 1 } },
+        race: 'pixie',
+        gender: 'f',
+      }),
+      { budgetMs: 0 },
+    );
+    expect(
+      (pixie.object3D.userData.cfMetrics as { runDuration?: number }).runDuration,
+    ).toBeUndefined();
+    expect(pixie.clips?.Hover).toBeTruthy();
+    pixie.dispose();
     const aliased = backend.checkEdit(first, { hairStyle: 'arc_bob', skin: 1 });
     expect(aliased.ok, JSON.stringify(aliased.errors)).toBe(true);
     const stripped = backend.checkEdit(first, { name: 'nope', cape: 'red' });
@@ -792,4 +843,70 @@ function installFetch(root: string, marker: string, seen: string[]): () => void 
   return () => {
     globalThis.fetch = original;
   };
+}
+
+function poseDelta(built: BuiltCharacter, from: string, to: string, boneName: string): number {
+  const fromQuat = posedQuaternion(built, from, boneName);
+  const toQuat = posedQuaternion(built, to, boneName);
+  const dot = Math.min(
+    1,
+    Math.abs(
+      fromQuat.x * toQuat.x + fromQuat.y * toQuat.y + fromQuat.z * toQuat.z + fromQuat.w * toQuat.w,
+    ),
+  );
+  return (2 * Math.acos(dot) * 180) / Math.PI;
+}
+
+function posedQuaternion(built: BuiltCharacter, clipName: string, boneName: string) {
+  const clip = built.clips?.[clipName];
+  if (!clip) throw new Error(`missing ${clipName}`);
+  built.mixer.stopAllAction();
+  built.mixer.clipAction(clip).reset().play();
+  built.mixer.update(0);
+  const mesh = firstSkinned(built.object3D);
+  const bone = mesh?.skeleton.bones.find((item) => item.name === boneName);
+  if (!bone) throw new Error(`missing ${boneName}`);
+  return bone.quaternion.clone();
+}
+
+function maxBoneSwing(
+  built: BuiltCharacter,
+  clip: 'Idle' | 'Walk',
+  seconds: number,
+): Record<string, number> {
+  const mesh = firstSkinned(built.object3D);
+  const bones = mesh?.skeleton.bones ?? [];
+  const rest = bones.map((bone) => bone.quaternion.clone());
+  built.mixer.stopAllAction();
+  built.play(clip);
+  const swings: Record<string, number> = {};
+  const step = 1 / 30;
+  for (let time = 0; time < seconds; time += step) {
+    built.mixer.update(step);
+    bones.forEach((bone, index) => {
+      const start = rest[index];
+      if (!start) return;
+      const dot = Math.min(
+        1,
+        Math.abs(
+          start.x * bone.quaternion.x +
+            start.y * bone.quaternion.y +
+            start.z * bone.quaternion.z +
+            start.w * bone.quaternion.w,
+        ),
+      );
+      const deg = (2 * Math.acos(dot) * 180) / Math.PI;
+      swings[bone.name] = Math.max(swings[bone.name] ?? 0, deg);
+    });
+  }
+  return swings;
+}
+
+function firstSkinned(root: Object3D): SkinnedMesh | null {
+  let found: SkinnedMesh | null = null;
+  root.traverse((node) => {
+    const mesh = node as SkinnedMesh;
+    if (!found && mesh.isSkinnedMesh) found = mesh;
+  });
+  return found;
 }
