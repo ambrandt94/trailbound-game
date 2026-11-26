@@ -227,12 +227,6 @@ async function frameWall(kind) {
   return info;
 }
 
-async function backToMap() {
-  await page.keyboard.press('Escape');
-  await waitMode('map', 90_000);
-  await page.waitForTimeout(400);
-}
-
 async function shootPlace(seed, query, pred, names) {
   await reachMap(seed, query);
   const nodes = await listSettlements();
