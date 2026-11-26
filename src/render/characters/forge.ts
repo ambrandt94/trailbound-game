@@ -201,6 +201,22 @@ export interface AvatarPose {
   timeScale: number;
   /** Crossfade in seconds. 0 restarts the clip only when the name changes. */
   fade: number;
+  /**
+   * Optional Idle/Walk/Run weights. When set, the mixer rate stays 1 and each
+   * clip carries `timeScale` on its own action so an overlay is not sped up.
+   */
+  blend?: { idle: number; walk: number; run: number };
+}
+
+/** Additive or phase-locked clip on top of locomotion. Dojo attacks and stances. */
+export interface AvatarLayer {
+  name: string;
+  clip: THREE.AnimationClip;
+  /** Seconds into the clip. Ignored unless `paused` pins the pose. */
+  time: number;
+  weight: number;
+  /** Pin `time` instead of letting the mixer advance. */
+  paused: boolean;
 }
 
 export type AvatarSocket = 'hand_l' | 'hand_r' | 'back' | 'belt' | 'head';
@@ -213,6 +229,8 @@ export interface AvatarBody {
   play(name: BodyClip): void;
   /** Area locomotion. Blends when the clip changes and sets the mixer rate. */
   present(pose: AvatarPose): void;
+  /** Replace the overlay set. Missing names are stopped. */
+  layers(stack: readonly AvatarLayer[]): void;
   /** Attachment point. Null on the placeholder pawn and on runtimes without sockets. */
   socket(name: AvatarSocket): THREE.Object3D | null;
   update(dt: number): void;
@@ -513,10 +531,11 @@ export function placeholderAvatar(seed: number): AvatarBody {
       body.clip = name;
     },
     present(pose) {
-      state.clip = pose.clip;
+      state.clip = pose.blend ? dominantClip(pose.blend) : pose.clip;
       state.rate = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
-      body.clip = pose.clip;
+      body.clip = state.clip;
     },
+    layers() {},
     socket() {
       return null;
     },
@@ -659,8 +678,15 @@ function actionFor(built: BuiltCharacter, name: BodyClip): THREE.AnimationAction
   return built.mixer.clipAction(clip);
 }
 
+function dominantClip(blend: { idle: number; walk: number; run: number }): BodyClip {
+  if (blend.run >= blend.walk && blend.run >= blend.idle && blend.run > 0.2) return 'Run';
+  if (blend.walk >= blend.idle && blend.walk > 0.2) return 'Walk';
+  return 'Idle';
+}
+
 function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
   const state = { clip: 'Idle' as BodyClip, disposed: false };
+  const overlays = new Map<string, THREE.AnimationAction>();
   built.object3D.name = 'CF_avatar';
   // The town, the creator, and instance games all borrow this one object.
   // Teardown detaches it. It must not be disposed with a scene.
@@ -680,6 +706,27 @@ function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
     },
     present(pose) {
       const fade = Math.max(0, pose.fade);
+      const rate = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
+      if (pose.blend && built.clips?.Idle && built.clips.Walk) {
+        const weights = { Idle: pose.blend.idle, Walk: pose.blend.walk, Run: pose.blend.run };
+        for (const name of ['Idle', 'Walk', 'Run'] as const) {
+          const action = actionFor(built, name);
+          if (!action) continue;
+          const weight = weights[name];
+          action.enabled = true;
+          if (weight > 0.001) {
+            if (!action.isRunning()) action.reset().fadeIn(fade).play();
+            action.setEffectiveWeight(weight);
+            action.setEffectiveTimeScale(name === 'Idle' ? 1 : rate);
+          } else if (action.isRunning()) {
+            action.setEffectiveWeight(0);
+          }
+        }
+        state.clip = dominantClip(pose.blend);
+        body.clip = state.clip;
+        built.mixer.timeScale = 1;
+        return;
+      }
       if (pose.clip !== state.clip) {
         const next = actionFor(built, pose.clip);
         const prev = actionFor(built, state.clip);
@@ -694,7 +741,46 @@ function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
         state.clip = pose.clip;
         body.clip = pose.clip;
       }
-      built.mixer.timeScale = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
+      built.mixer.timeScale = rate;
+    },
+    layers(stack) {
+      const keep = new Set(stack.map((layer) => layer.name));
+      for (const [name, action] of overlays) {
+        if (keep.has(name)) continue;
+        action.setEffectiveWeight(0);
+        action.stop();
+        overlays.delete(name);
+      }
+      for (const layer of stack) {
+        if (!(layer.weight > 0)) {
+          const idle = overlays.get(layer.name);
+          if (idle) {
+            idle.setEffectiveWeight(0);
+            idle.stop();
+            overlays.delete(layer.name);
+          }
+          continue;
+        }
+        let action = overlays.get(layer.name);
+        if (!action || action.getClip() !== layer.clip) {
+          action = built.mixer.clipAction(layer.clip);
+          action.clampWhenFinished = true;
+          overlays.set(layer.name, action);
+        }
+        action.enabled = true;
+        action.paused = layer.paused;
+        action.setLoop(
+          layer.paused ? THREE.LoopOnce : THREE.LoopRepeat,
+          layer.paused ? 1 : Infinity,
+        );
+        action.setEffectiveWeight(layer.weight);
+        action.setEffectiveTimeScale(1);
+        if (!action.isRunning()) action.play();
+        if (layer.paused) {
+          const duration = Math.max(0.001, layer.clip.duration);
+          action.time = Math.min(duration - 0.0001, Math.max(0, layer.time));
+        }
+      }
     },
     socket(name) {
       return built.socket?.(name) ?? null;

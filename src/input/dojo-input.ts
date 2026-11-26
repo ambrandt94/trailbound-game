@@ -19,6 +19,8 @@ export interface DojoPad {
   padY: boolean;
   /** Tab, middle mouse, or right-stick click. Held, so a long press can clear the lock. */
   lockHeld: boolean;
+  /** Shift or L3. Sprint while free. A tap while locked is the short dodge. */
+  shift: boolean;
 }
 
 export interface DojoStick {
@@ -30,6 +32,7 @@ export interface DojoStick {
   yDown: boolean;
   counterPressed: boolean;
   lockDown: boolean;
+  shiftDown: boolean;
 }
 
 export function mapDojoInput(pad: DojoPad): DojoStick {
@@ -47,6 +50,7 @@ export function mapDojoInput(pad: DojoPad): DojoStick {
     yDown: pad.k || pad.mouseY || pad.padY,
     counterPressed: pad.counterEdge,
     lockDown: pad.lockHeld,
+    shiftDown: pad.shift,
   };
 }
 
@@ -60,12 +64,14 @@ export function stickToInput(stick: DojoStick, wish: { x: number; z: number }): 
     lockDown: stick.lockDown,
     forward: stick.iz,
     strafe: stick.ix,
+    shiftDown: stick.shiftDown,
   };
 }
 
 /**
  * Keyboard, mouse, and the standard gamepad into one stick.
- * Gamepad X and Y are the two attacks. B is the counter. R3 locks on. The left stick moves.
+ * Gamepad X and Y are the two attacks. B (Circle) is the counter. R3 locks on.
+ * L3 is sprint while unlocked and a short dodge tap while locked. The left stick moves.
  */
 export class DojoInput {
   private readonly buttons = new Set<number>();
@@ -119,6 +125,7 @@ export class DojoInput {
       padX: pad.xDown,
       padY: pad.yDown,
       lockHeld: this.keyboard.isDown('Tab') || this.buttons.has(1) || pad.lock,
+      shift: this.keyboard.isDown('ShiftLeft') || this.keyboard.isDown('ShiftRight') || pad.shift,
     });
   }
 
@@ -147,8 +154,17 @@ export class DojoInput {
     yDown: boolean;
     counterEdge: boolean;
     lock: boolean;
+    shift: boolean;
   } {
-    const empty = { x: 0, z: 0, xDown: false, yDown: false, counterEdge: false, lock: false };
+    const empty = {
+      x: 0,
+      z: 0,
+      xDown: false,
+      yDown: false,
+      counterEdge: false,
+      lock: false,
+      shift: false,
+    };
     const nav = globalThis.navigator;
     if (!nav?.getGamepads) return empty;
     let list: Array<Gamepad | null> = [];
@@ -173,6 +189,7 @@ export class DojoInput {
       yDown: !!pad.buttons[3]?.pressed,
       counterEdge,
       lock: !!pad.buttons[11]?.pressed,
+      shift: !!pad.buttons[10]?.pressed,
     };
   }
 }
@@ -193,6 +210,7 @@ function blankPad(): DojoPad {
     padX: false,
     padY: false,
     lockHeld: false,
+    shift: false,
   };
 }
 

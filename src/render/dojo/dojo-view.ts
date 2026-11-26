@@ -31,7 +31,10 @@ import {
   type AvatarBody,
   type ForgeRaceMetrics,
 } from '../characters/forge';
-import { motionPose } from './motion';
+import { attackClipTime, chargeWeight, type ChargeLevel } from '../../core/combat/charge';
+import type { DodgeKind, Gait } from '../../core/combat/motor';
+import { attackClip, dodgeClip, stanceClip } from './clips';
+import { motionPose, type MotionPose } from './motion';
 import { createWeaponKit, type WeaponKit } from './weapons';
 
 const VIEW = AREA_VIEWS[5] ?? {
@@ -208,16 +211,22 @@ export class DojoView {
     actor.root.visible = true;
     actor.root.position.set(fighter.x, 0, fighter.z);
     actor.root.rotation.y = fighter.yaw;
-    const pose = motionPose(fighter.motion, fighter.phase);
+    const skeletal = fighter.id === 'player' && actor.body?.source === 'forge';
+    const pose = skeletal ? REST_POSE : motionPose(fighter.motion, fighter.phase);
     actor.pivot.position.set(0, pose.hop, pose.lunge);
     actor.pivot.rotation.x = pose.lean;
     actor.kit?.apply(pose);
-    const moving = fighter.state === 'move';
+    const moving =
+      fighter.state === 'move' || fighter.gait === 'strafe' || fighter.gait === 'backpedal';
+    const speed = fighter.speed;
     actor.body?.present({
       clip: moving ? 'Walk' : 'Idle',
-      timeScale: moving ? 1.2 : 1,
+      timeScale: locomotionRate(speed),
       fade: 0.12,
+      blend: skeletal ? locomotionBlend(speed, fighter.gait) : undefined,
     });
+    if (skeletal) actor.body?.layers(playerLayers(fighter));
+    else actor.body?.layers([]);
     actor.body?.update(dt);
     const cue = fighter.telegraph;
     actor.marker.visible = cue !== 'none';
@@ -298,6 +307,133 @@ async function loadBody(seed: number, race: string): Promise<AvatarBody> {
   } catch {
     return placeholderAvatar(seed);
   }
+}
+
+const REST_POSE: MotionPose = {
+  lunge: 0,
+  lean: 0,
+  hop: 0,
+  weaponPitch: 0,
+  weaponYaw: 0,
+  weaponRoll: 0,
+  offPitch: 0,
+};
+
+function clamp01(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(high, value));
+}
+
+function locomotionRate(speed: number): number {
+  if (speed < 0.25) return 1;
+  return clamp01(speed / 1.7, 0.65, 1.65);
+}
+
+function locomotionBlend(speed: number, gait: Gait): { idle: number; walk: number; run: number } {
+  if (gait === 'idle' || gait === 'guard' || speed < 0.25) return { idle: 1, walk: 0, run: 0 };
+  if (gait === 'sprint' || gait === 'run' || speed >= 3.05) {
+    const run = clamp01((speed - 2.2) / 2.4, 0, 1);
+    return { idle: 0, walk: 1 - run, run };
+  }
+  const walk = clamp01((speed - 0.25) / 2, 0, 1);
+  return { idle: 1 - walk, walk, run: 0 };
+}
+
+function playerLayers(fighter: FighterView): {
+  name: string;
+  clip: ReturnType<typeof attackClip>;
+  time: number;
+  weight: number;
+  paused: boolean;
+}[] {
+  if (
+    fighter.archetype &&
+    (fighter.state === 'attack' || fighter.state === 'counter') &&
+    !fighter.windup
+  ) {
+    const charge = (fighter.attackCharge === 0 ? 1 : fighter.attackCharge) as ChargeLevel;
+    const clip = attackClip(fighter.archetype);
+    return [
+      {
+        name: `attack-${fighter.archetype}`,
+        clip,
+        time: attackClipTime(fighter.phase, fighter.strikePhase || 0.42, charge) * clip.duration,
+        weight: chargeWeight(charge),
+        paused: true,
+      },
+    ];
+  }
+  if (fighter.windup && fighter.archetype) {
+    const clip = attackClip(fighter.archetype);
+    return [
+      {
+        name: `windup-${fighter.archetype}`,
+        clip,
+        time: 0.22 * clip.duration,
+        weight: 0.35 + fighter.windupPose * 0.6,
+        paused: true,
+      },
+    ];
+  }
+  if (fighter.evade) {
+    const clip = dodgeClip(fighter.evade as DodgeKind);
+    return [
+      {
+        name: `dodge-${fighter.evade}`,
+        clip,
+        time: fighter.evadePhase * clip.duration,
+        weight: 1,
+        paused: true,
+      },
+    ];
+  }
+  const layers: {
+    name: string;
+    clip: ReturnType<typeof stanceClip>;
+    time: number;
+    weight: number;
+    paused: boolean;
+  }[] = [];
+  if (fighter.stance === 'guard') {
+    const clip = stanceClip('guard');
+    layers.push({
+      name: 'guard',
+      clip,
+      time: 0,
+      weight: fighter.gait === 'guard' || fighter.gait === 'idle' ? 1 : 0.7,
+      paused: false,
+    });
+  }
+  const lean = leanFor(fighter.gait, fighter.strafeSide);
+  if (lean) {
+    const clip = stanceClip(lean.name);
+    layers.push({
+      name: lean.name,
+      clip,
+      time: lean.time * clip.duration,
+      weight: lean.weight,
+      paused: true,
+    });
+  }
+  return layers;
+}
+
+function leanFor(
+  gait: Gait,
+  side: -1 | 0 | 1,
+): {
+  name: 'strafe-left' | 'strafe-right' | 'backpedal' | 'start' | 'stop' | 'skid' | 'sprint';
+  time: number;
+  weight: number;
+} | null {
+  if (gait === 'strafe') {
+    return { name: side >= 0 ? 'strafe-right' : 'strafe-left', time: 0.5, weight: 0.85 };
+  }
+  if (gait === 'backpedal') return { name: 'backpedal', time: 0.5, weight: 0.85 };
+  if (gait === 'start') return { name: 'start', time: 0.45, weight: 0.75 };
+  if (gait === 'stop') return { name: 'stop', time: 0.4, weight: 0.8 };
+  if (gait === 'skid') return { name: 'skid', time: 0.35, weight: 1 };
+  if (gait === 'sprint') return { name: 'sprint', time: 0.5, weight: 0.85 };
+  return null;
 }
 
 function metricsOf(object: Object3D): ForgeRaceMetrics | null {

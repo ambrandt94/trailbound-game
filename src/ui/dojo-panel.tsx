@@ -8,12 +8,48 @@ import {
   dojoHitboxes,
   dojoHoldMs,
   dojoLockHoldMs,
+  dojoAccel,
+  dojoBrake,
+  dojoTurn,
+  dojoSprint,
+  dojoLockedSpeed,
+  dojoLockedAccel,
+  dojoDodgeDistance,
+  dojoDodgeTime,
+  dojoDodgeCooldown,
+  dojoIFrames,
   dojoHud,
   dojoNotice,
   dojoTimeScale,
   dojoWeapon,
 } from './dojo-state';
 import { commands } from './state';
+
+function MotorSlider(props: {
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  set: (value: number) => void;
+}) {
+  const shown = Number.isInteger(props.step) ? String(props.value) : props.value.toFixed(2);
+  return (
+    <label class="dojo-field">
+      <span>
+        {props.label} {shown}
+      </span>
+      <input
+        type="range"
+        min={props.min}
+        max={props.max}
+        step={props.step}
+        value={props.value}
+        onInput={(event) => props.set(Number((event.currentTarget as HTMLInputElement).value))}
+      />
+    </label>
+  );
+}
 
 function stepLabel(combo: ComboSpec): string {
   return combo.sequence
@@ -49,6 +85,19 @@ export function DojoScreen() {
         </ul>
         {counterOpen ? <p class="dojo-cue">Counter</p> : null}
         {hud?.lockId ? <p class="dojo-lock">Locked</p> : null}
+        {hud ? (
+          <p class="dojo-gait">
+            {skinText(
+              [
+                hud.gait,
+                hud.evade ? `dodge ${hud.evade}` : '',
+                hud.charge ? `charge ${hud.charge}` : '',
+              ]
+                .filter(Boolean)
+                .join(' · '),
+            )}
+          </p>
+        ) : null}
         {hud && hud.ready < 5 ? (
           <p class="dojo-loading">{skinText(`Forging bodies ${hud.ready}/5`)}</p>
         ) : null}
@@ -168,6 +217,87 @@ export function DojoScreen() {
             }}
           />
         </label>
+        <p class="eyebrow">Movement</p>
+        <MotorSlider
+          label="Accel"
+          min={4}
+          max={30}
+          step={1}
+          value={dojoAccel.value}
+          set={(value) => (dojoAccel.value = value)}
+        />
+        <MotorSlider
+          label="Brake"
+          min={8}
+          max={48}
+          step={1}
+          value={dojoBrake.value}
+          set={(value) => (dojoBrake.value = value)}
+        />
+        <MotorSlider
+          label="Turn"
+          min={2}
+          max={14}
+          step={0.5}
+          value={dojoTurn.value}
+          set={(value) => (dojoTurn.value = value)}
+        />
+        <MotorSlider
+          label="Sprint"
+          min={1.1}
+          max={2.2}
+          step={0.02}
+          value={dojoSprint.value}
+          set={(value) => (dojoSprint.value = value)}
+        />
+        <MotorSlider
+          label="Locked speed"
+          min={0.35}
+          max={0.9}
+          step={0.01}
+          value={dojoLockedSpeed.value}
+          set={(value) => (dojoLockedSpeed.value = value)}
+        />
+        <MotorSlider
+          label="Locked accel"
+          min={12}
+          max={60}
+          step={1}
+          value={dojoLockedAccel.value}
+          set={(value) => (dojoLockedAccel.value = value)}
+        />
+        <MotorSlider
+          label="Dodge distance"
+          min={1.5}
+          max={2.5}
+          step={0.05}
+          value={dojoDodgeDistance.value}
+          set={(value) => (dojoDodgeDistance.value = value)}
+        />
+        <MotorSlider
+          label="Dodge time"
+          min={0.12}
+          max={0.35}
+          step={0.01}
+          value={dojoDodgeTime.value}
+          set={(value) => (dojoDodgeTime.value = value)}
+        />
+        <MotorSlider
+          label="Dodge cooldown"
+          min={0.15}
+          max={0.9}
+          step={0.01}
+          value={dojoDodgeCooldown.value}
+          set={(value) => (dojoDodgeCooldown.value = value)}
+        />
+        <MotorSlider
+          label="I-frames"
+          min={0}
+          max={0.25}
+          step={0.01}
+          value={dojoIFrames.value}
+          set={(value) => (dojoIFrames.value = value)}
+        />
         <label class="dojo-check">
           <input
             type="checkbox"
@@ -195,14 +325,15 @@ export function DojoScreen() {
         <div class="dojo-controls">
           <p class="eyebrow">Controls</p>
           <ul>
-            <li>WASD move</li>
+            <li>WASD move with the camera, locked or not</li>
+            <li>Shift or L3 — sprint. Locked, a tap dodges</li>
             <li>J or left click — X</li>
             <li>K or right click — Y</li>
             <li>Space or L — counter</li>
             <li>Tab, middle click, or R3 — lock on</li>
             <li>Tap cycles foes. Hold clears the lock.</li>
             <li>Q / E orbit</li>
-            <li>Pad: stick, X, Y, B counter</li>
+            <li>Pad: stick, X, Y, B counter, L3 sprint or dodge, R3 lock</li>
           </ul>
         </div>
         <button type="button" class="action secondary" onClick={() => commands.leaveDojo()}>

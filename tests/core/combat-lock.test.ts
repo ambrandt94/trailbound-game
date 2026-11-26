@@ -107,19 +107,19 @@ test('a dead or despawned lock retargets the nearest survivor, and the last foe 
   expect(last.snapshot().lockId).toBeNull();
 });
 
-test('while locked the player turns smoothly toward the foe and strafes around them', () => {
+test('while locked the body turns toward the foe and raw strafe does not orbit', () => {
   const fight = createFight({ enemyCount: 1, aggression: 0, attackRate: 0, lockTurnRate: 6 });
   fight.teleport('player', 0, 0);
   fight.teleport('enemy-0', 3, 0);
   fight.step(1 / 60, { ...IDLE_INPUT, lockDown: true });
   fight.step(1 / 60, IDLE_INPUT);
-  const start = fight.snapshot().player.yaw;
-  fight.step(0.05, { ...IDLE_INPUT, strafe: 1, forward: 0 });
+  const start = fight.snapshot().player;
+  fight.step(0.05, { ...IDLE_INPUT, strafe: 1, forward: 1 });
   const moved = fight.snapshot().player;
   const targetYaw = Math.atan2(3, 0);
   expect(Math.abs(moved.yaw - targetYaw)).toBeGreaterThan(0.2);
-  expect(Math.abs(moved.yaw - start)).toBeGreaterThan(0.05);
-  expect(Math.abs(moved.yaw - start)).toBeLessThan(0.5);
-  expect(moved.z).toBeLessThan(-0.05);
+  expect(Math.abs(moved.yaw - start.yaw)).toBeGreaterThan(0.05);
+  expect(Math.abs(moved.yaw - start.yaw)).toBeLessThan(0.5);
+  expect(Math.hypot(moved.x - start.x, moved.z - start.z)).toBeLessThan(0.02);
   expect(fight.snapshot().enemies[0]?.locked).toBe(true);
 });
