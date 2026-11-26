@@ -36,7 +36,7 @@ import {
   type BuildingRotation,
   type RoofStyle,
 } from '../world/building-templates';
-import { generateChunk, neighborMap } from '../world/chunk-gen';
+import { bakeFastSettlementChunks, generateChunk, neighborMap } from '../world/chunk-gen';
 import { hash2 } from '../world/noise';
 import { SEASON, biomeSeason } from '../world/tileset';
 import { residentCountFor } from '../sim/entities';
@@ -1480,6 +1480,8 @@ function plazaCenter(
 /** Bake every tile of a place in a fixed order, twice, into a fresh chunk map. */
 export function bakeAreaChunks(world: WorldData, tiles: Vec2[]): Map<string, ChunkData> {
   const sorted = uniqueTiles(tiles);
+  const fast = bakeFastSettlementChunks(world, sorted);
+  if (fast) return fast;
   const chunks = new Map<string, ChunkData>();
   // A capital core is thousands of fine tiles. The second pass only stitches
   // chunk edges, and the settlement plan repaints those streets anyway.

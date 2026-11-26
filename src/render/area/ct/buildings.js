@@ -1173,6 +1173,42 @@ changed=true;
 }
 if(changed)st.mesh.instanceMatrix.needsUpdate=true;
 }
+function instanceTownhouses(holder,rows,groundY){
+const body=new THREE.BoxGeometry(1,1,1);
+body.translate(0,0.5,0);
+const roof=gableGeometry(1,1,0.72);
+const timber=pixelMaterial("#c4a574","cabin");
+const stone=pixelMaterial("#d6ccba","block");
+const roofMat=pixelMaterial("#8d4b3a","roof");
+function civic(row){
+return row.role==="keep"||row.role==="temple"||row.role==="town_hall"||row.role==="guildhall"||row.role==="bank";
+}
+function add(list,geo,mat,heightOf,baseOf){
+if(!list.length)return;
+const mesh=new THREE.InstancedMesh(geo,mat,list.length);
+const dummy=new THREE.Object3D();
+for(let i=0;i<list.length;i++){
+const row=list[i];
+const y=groundY(row.cx,row.cz)||0;
+const w=Math.max(4.6,row.houseW||row.fw||6);
+const d=Math.max(6.2,row.houseD||row.fd||8);
+dummy.position.set(row.cx,y+baseOf(row),row.cz);
+dummy.rotation.set(0,(row.yawDeg||0)*Math.PI/180,0);
+dummy.scale.set(w,heightOf(row),d);
+dummy.updateMatrix();
+mesh.setMatrixAt(i,dummy.matrix);
+}
+mesh.instanceMatrix.needsUpdate=true;
+mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;
+mesh.userData.tbKeep=1;
+holder.add(mesh);
+}
+const wood=[],rock=[];
+rows.forEach(function(row){(civic(row)?rock:wood).push(row);});
+add(wood,body,timber,function(){return 3.3;},function(){return 0;});
+add(rock,body,stone,function(){return 4.6;},function(){return 0;});
+add(rows,roof,roofMat,function(){return 1.2;},function(row){return civic(row)?4.6:3.3;});
+}
 function place(parent,groundY,buildings,origin,meters,blocks){
 window.TBBuildings._lod=null;
 const rows=layout(buildings,origin,meters,groundY);
@@ -1247,10 +1283,9 @@ sendBlocks(row);
 addRoleDress(holder,row,groundY);
 }
 if(rows.length>90){
-const mesh=instanceBoxes(holder,rows,groundY);
+instanceTownhouses(holder,rows,groundY);
 rows.forEach(sendBlocks);
-window.TBBuildings._lod={holder:holder,rows:rows,groundY:groundY,blocks:blocks,mesh:mesh,anchor:null,placeBody:placeBody};
-if(rows.length)console.info("tb buildings",rows.length,"instanced");
+if(rows.length)console.info("tb buildings",rows.length,"townhouses");
 return rows;
 }
 rows.forEach(function(row){placeBody(holder,row);});

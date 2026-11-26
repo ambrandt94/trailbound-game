@@ -10,7 +10,7 @@ import {
 import { type SettlementClass } from '../../src/core/world/city-plan';
 import { ORC_VILLAGE_RATE, rollCulture } from '../../src/core/world/culture';
 import { ensureKitTemplate, kitBuilding } from '../../src/core/world/kit-catalog';
-import { buildLayoutV3 } from '../../src/core/world/layout-v3';
+import { buildLayoutV3, polylineCrossesSelf } from '../../src/core/world/layout-v3';
 import { settlementPlan, type SettlementPlan } from '../../src/core/world/layout-v2';
 import { LAYOUT_STYLES, resolveLayoutStyle } from '../../src/core/world/layout-styles';
 import { placedMask, placedMaskAtYaw } from '../../src/core/world/building-templates';
@@ -461,6 +461,15 @@ describe('generation gates', () => {
     expect(plan.wards && plan.wards.length).toBeGreaterThan(1);
     expect(plan.wards?.some((ward) => ward.kind === 'keep')).toBe(true);
     expect(plan.buildings.some((b) => b.role === 'keep')).toBe(true);
+    expect(plan.buildings.every((b) => b.form === 'house')).toBe(true);
+    const closedRank1 = plan.roads.filter((road) => {
+      if (road.rank !== 1 || road.points.length < 4) return false;
+      const a = road.points[0]!;
+      const b = road.points[road.points.length - 1]!;
+      return Math.hypot(a[0] - b[0], a[1] - b[1]) < 1.5;
+    });
+    expect(closedRank1.length).toBeLessThanOrEqual(1);
+    for (const road of plan.roads) expect(polylineCrossesSelf(road.points)).toBe(false);
     const yaws = plan.buildings.map((b) => b.yawDeg ?? 0);
     expect(yaws.filter((yaw) => yaw % 90 !== 0).length).toBeGreaterThan(3);
     expect(plan.segments.some((segment) => segment.id.startsWith('keep'))).toBe(true);

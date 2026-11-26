@@ -346,15 +346,17 @@ export function keepGatePoints(
   for (const road of roads) {
     if (road.rank !== 1) continue;
     let prev = false;
+    let prevPt: [number, number] | null = null;
     for (const p of road.points) {
       const now = inside(p[0], p[1]);
-      if (now !== prev) {
-        const snap = nearest(loop, p[0], p[1]);
+      if (prevPt && now !== prev) {
+        const snap = loopHit(prevPt, p, loop) ?? nearest(loop, p[0], p[1]);
         if (!gates.some((g) => Math.hypot(g.x - snap[0], g.y - snap[1]) < 12)) {
           gates.push({ x: snap[0], y: snap[1] });
         }
       }
       prev = now;
+      prevPt = p;
     }
   }
   if (!gates.length && loop.length) {
@@ -374,6 +376,28 @@ export function keepGatePoints(
     gates.push({ x: best[0], y: best[1] });
   }
   return gates;
+}
+
+function loopHit(
+  a: readonly [number, number],
+  b: readonly [number, number],
+  loop: readonly [number, number][],
+): [number, number] | null {
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  for (let i = 1; i < loop.length; i++) {
+    const c = loop[i - 1]!;
+    const d = loop[i]!;
+    const sx = d[0] - c[0];
+    const sy = d[1] - c[1];
+    const den = rx * sy - ry * sx;
+    if (Math.abs(den) < 1e-8) continue;
+    const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den;
+    const u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den;
+    if (t < -0.02 || t > 1.02 || u < -0.02 || u > 1.02) continue;
+    return [a[0] + rx * t, a[1] + ry * t];
+  }
+  return null;
 }
 
 function nearest(loop: readonly [number, number][], x: number, y: number): [number, number] {

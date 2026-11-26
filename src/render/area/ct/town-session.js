@@ -439,6 +439,7 @@ export async function createTownSession(canvas, hooks) {
     P.camDist = view.camDist;
     P.camFov = view.camFov;
     P.camLag = view.camLag;
+    P.overview = false;
   }
   function cycleView() {
     goView(cycleZoom(vi));
@@ -1102,6 +1103,14 @@ export async function createTownSession(canvas, hooks) {
     const bg = z ? BGI : BGO;
     scene.background = bg;
     scene.fog.color.copy(bg);
+    if (P.overview && !z) {
+      scene.fog.near = 1e5;
+      scene.fog.far = 1e6;
+      c.far = P.camFar || 1600;
+      c.updateProjectionMatrix();
+      c.layers.set(0);
+      return;
+    }
     if (z) {
       scene.fog.near = d;
       scene.fog.far = d + 18;
@@ -1715,6 +1724,24 @@ export async function createTownSession(canvas, hooks) {
         return { fps, calls, triangles, colorCalls, colorTriangles };
       },
       setView: goView,
+      widen(dist, pitch, fov) {
+        P.camDist = dist;
+        P.camPitch = pitch == null ? 58 : pitch;
+        if (fov != null) P.camFov = fov;
+        P.overview = dist >= 80;
+        const far = Math.max(900, dist * 5);
+        P.camFar = far;
+        cq.d = cs.d = dist;
+        cq.p = cs.p = P.camPitch;
+        if (fov != null) cq.f = cs.f = fov;
+        for (const c of [cam, camA, camB]) {
+          c.far = far;
+          c.updateProjectionMatrix();
+        }
+      },
+      aim(deg) {
+        P.camYaw = deg;
+      },
       pawn: () => (forgePawn ? 'forge' : 'block'),
       player: () => ({
         x: PLS[0].x,
