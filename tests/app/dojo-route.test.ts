@@ -27,6 +27,7 @@ test('dojo inputs map X, Y, and counter without mixing them', () => {
     padX: false,
     padY: false,
     lockHeld: false,
+    shift: false,
   };
   expect(mapDojoInput({ ...base, lockHeld: true })).toMatchObject({
     xDown: false,
@@ -47,6 +48,11 @@ test('dojo inputs map X, Y, and counter without mixing them', () => {
   expect(diagonal.ix).toBeCloseTo(Math.SQRT1_2, 5);
   expect(diagonal.iz).toBeCloseTo(Math.SQRT1_2, 5);
   expect(mapDojoInput({ ...base, w: true })).toMatchObject({ ix: 0, iz: 1 });
+  expect(mapDojoInput({ ...base, shift: true })).toMatchObject({
+    shiftDown: true,
+    counterPressed: false,
+    lockDown: false,
+  });
 });
 
 test('the dojo camera matches the town stick and follow placement', () => {
@@ -59,4 +65,21 @@ test('the dojo camera matches the town stick and follow placement', () => {
   expect(placed.y).toBeCloseTo(1.35 + Math.sin((28 * Math.PI) / 180) * 9, 5);
   expect(placed.lookY).toBeCloseTo(1.35, 5);
   expect(placed.y).toBeGreaterThan(0.4);
+});
+
+test('locked midpoint framing keeps the camera yaw that the stick uses', () => {
+  for (const yawDeg of [0, 40, 90, 180, 270, 315]) {
+    for (const focus of [
+      { x: 0, z: 0 },
+      { x: 2, z: -1 },
+      { x: -3, z: 4 },
+    ]) {
+      const placed = followCamera({ x: focus.x, y: 0, z: focus.z }, yawDeg, 28, 9, 1.35);
+      const look = Math.atan2(focus.x - placed.x, focus.z - placed.z);
+      const th = (yawDeg * Math.PI) / 180;
+      const basis = Math.atan2(-Math.sin(th), -Math.cos(th));
+      const delta = Math.atan2(Math.sin(look - basis), Math.cos(look - basis));
+      expect(Math.abs(delta)).toBeLessThan(1e-6);
+    }
+  }
 });

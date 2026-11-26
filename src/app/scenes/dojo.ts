@@ -1,3 +1,4 @@
+import { DEFAULT_MOTOR } from '../../core/combat/motor';
 import { cameraWish } from '../../core/combat/space';
 import { createFight, type Fight } from '../../core/combat/fight';
 import { DojoInput, stickToInput } from '../../input/dojo-input';
@@ -10,6 +11,16 @@ import {
   dojoHitboxes,
   dojoHoldMs,
   dojoLockHoldMs,
+  dojoAccel,
+  dojoBrake,
+  dojoTurn,
+  dojoSprint,
+  dojoLockedSpeed,
+  dojoLockedAccel,
+  dojoDodgeDistance,
+  dojoDodgeTime,
+  dojoDodgeCooldown,
+  dojoIFrames,
   dojoHud,
   dojoNotice,
   dojoTimeScale,
@@ -20,6 +31,22 @@ import { loadRoad } from '../load-road';
 import type { GameHost } from '../host';
 import type { Scene } from '../scene-stack';
 import { TitleScene } from './title';
+
+function motorTuning() {
+  return {
+    ...DEFAULT_MOTOR,
+    accel: dojoAccel.value,
+    brake: dojoBrake.value,
+    turnRate: dojoTurn.value,
+    sprintMul: dojoSprint.value,
+    lockedSpeed: dojoLockedSpeed.value,
+    lockedAccel: dojoLockedAccel.value,
+    evadeDistance: dojoDodgeDistance.value,
+    evadeDuration: dojoDodgeTime.value,
+    evadeCooldown: dojoDodgeCooldown.value,
+    evadeIFrames: dojoIFrames.value,
+  };
+}
 
 /**
  * Combat test room. It never writes a save, never travels, and never enters a town.
@@ -54,6 +81,7 @@ export class DojoScene implements Scene {
         counterWindowMs: dojoCounterMs.value,
         holdThresholdMs: dojoHoldMs.value,
         lockHoldMs: dojoLockHoldMs.value,
+        motor: motorTuning(),
       },
       {
         onSpecial: (request) => {
@@ -84,8 +112,11 @@ export class DojoScene implements Scene {
       counterWindowMs: dojoCounterMs.value,
       holdThresholdMs: dojoHoldMs.value,
       lockHoldMs: dojoLockHoldMs.value,
+      motor: motorTuning(),
     });
     const stick = this.input.sample();
+    // Yaw only changes when Q or E orbit. Locked framing moves the look point
+    // to the midpoint and does not rotate, so a held stick keeps one direction.
     const wish = cameraWish(stick.ix, stick.iz, this.yaw);
     const snap = this.fight.step(dt * scale, stickToInput(stick, wish));
     this.view.sync(snap, dojoHitboxes.value, dojoWeapon.value, dt * scale);
@@ -101,6 +132,11 @@ export class DojoScene implements Scene {
       move: snap.player.moveId,
       ready: this.view.readyCount,
       lockId: snap.lockId,
+      gait: snap.player.gait,
+      charge:
+        snap.player.attackCharge ||
+        (snap.player.windup ? Math.ceil(snap.player.windupPose * 2) : 0),
+      evade: snap.player.evade,
     };
     const locked = snap.enemies.find((enemy) => enemy.id === snap.lockId);
     this.focus = locked

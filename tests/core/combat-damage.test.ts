@@ -29,6 +29,7 @@ function down(button: 'x' | 'y'): FighterInput {
     lockDown: false,
     forward: 0,
     strafe: 0,
+    shiftDown: false,
   };
 }
 

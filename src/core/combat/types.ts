@@ -106,11 +106,16 @@ export interface FighterInput {
   /** Lock button held. The fight turns this into a tap or a hold. */
   lockDown: boolean;
   /**
-   * Stick axes kept for lock-on. `forward` is W (toward the locked foe).
-   * `strafe` is D (clockwise around them). Ignored while unlocked.
+   * Raw stick, before the camera basis. Movement reads `moveX` and `moveZ`
+   * whether or not the player is locked. These axes do not orbit the target.
    */
   forward: number;
   strafe: number;
+  /**
+   * Shift, or gamepad L3. Held while unlocked, this sprints. A tap while
+   * locked is a short dodge. B / Circle stays the counter.
+   */
+  shiftDown: boolean;
 }
 
 export type MoveInit = Partial<MoveSpec> &

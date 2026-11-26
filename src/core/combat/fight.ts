@@ -7,7 +7,19 @@ import { AttackBuffer, type AttackEdge } from './buffer';
 import { createComboResolver } from './combo';
 import { hitDamage } from './damage';
 import { weaponById } from './registry';
+import { archetypeFor, type Archetype } from './archetype';
+import { chargeImpact, chargeLevel, moveStrikePhase, type ChargeLevel } from './charge';
 import { LockGestureBuffer, applyLockTap, retargetLock, type LockFoe } from './lock';
+import {
+  DEFAULT_MOTOR,
+  dodgeDirection,
+  dodgeEase,
+  dodgeKind,
+  stepMotor,
+  type DodgeKind,
+  type Gait,
+  type MotorTuning,
+} from './motor';
 import type { CombatHooks, FighterInput, MoveSpec, SpecialRequest } from './types';
 
 export type { FighterInput } from './types';
@@ -34,6 +46,7 @@ export const IDLE_INPUT: FighterInput = {
   lockDown: false,
   forward: 0,
   strafe: 0,
+  shiftDown: false,
 };
 
 export interface FightTuning {
@@ -53,6 +66,8 @@ export interface FightTuning {
   lockHoldMs: number;
   /** Radians per second the body turns toward a lock. */
   lockTurnRate: number;
+  /** Free-run momentum and the locked dodge. */
+  motor: MotorTuning;
   script: readonly { at: number; enemy?: number }[] | null;
 }
 
@@ -84,6 +99,24 @@ export interface FighterView {
   locked: boolean;
   telegraph: TelegraphPhase;
   timing: MoveTiming | null;
+  /** Planar speed, metres per second. */
+  speed: number;
+  gait: Gait;
+  /** -1 strafe left, +1 strafe right, 0 otherwise. */
+  strafeSide: -1 | 0 | 1;
+  stance: 'free' | 'guard';
+  attackCharge: 0 | ChargeLevel;
+  /** Button gathering a heavy before the swing starts. */
+  windup: 'x' | 'y' | null;
+  /** 0..1 cocking of that wind-up. */
+  windupPose: number;
+  /** Archetype of the active swing, or of the wind-up. */
+  archetype: Archetype | null;
+  evade: DodgeKind | null;
+  evadePhase: number;
+  iframe: boolean;
+  /** 0 when this body is not swinging. Otherwise the hit's place in the clip phase. */
+  strikePhase: number;
 }
 
 export interface CombatEvent {
@@ -178,6 +211,23 @@ export function createFight(
   let enemies = spawnEnemies(tuning.enemyCount);
   const lockBuffer = new LockGestureBuffer(tuning.lockHoldMs);
   let lockId: string | null = null;
+  const motor = { vx: 0, vz: 0, skid: 0, startT: 0 };
+  let evadeKind: DodgeKind | null = null;
+  let evadeStart = 0;
+  let evadeDirX = 0;
+  let evadeDirZ = 0;
+  let evadeCd = 0;
+  let invulnUntil = 0;
+  let attackCharge: 0 | ChargeLevel = 0;
+  let gait: Gait = 'idle';
+  let planarSpeed = 0;
+  let strafeSide: -1 | 0 | 1 = 0;
+  let xAt = -1;
+  let yAt = -1;
+  let xHeld = 0;
+  let yHeld = 0;
+  let shiftWas = false;
+  let shiftEdge = false;
 
   function defaults(patch: Partial<FightTuning>): FightTuning {
     const weaponId = patch.weaponId ?? 'fists';
@@ -195,6 +245,7 @@ export function createFight(
       playerRespawnSec: patch.playerRespawnSec ?? 1.4,
       lockHoldMs: patch.lockHoldMs ?? 250,
       lockTurnRate: patch.lockTurnRate ?? 6,
+      motor: { ...DEFAULT_MOTOR, ...patch.motor },
       script: patch.script === undefined ? null : patch.script,
     };
   }
@@ -236,7 +287,12 @@ export function createFight(
     stop: number,
     kind: 'hit' | 'counter',
   ): void {
+    if (target.team === 'player' && now < invulnUntil) return;
     if (target.hp <= 0 || damage <= 0) return;
+    const impact =
+      source.team === 'player' ? chargeImpact(attackCharge === 0 ? 1 : attackCharge) : 1;
+    knockback *= impact;
+    stop *= impact;
     target.hp = Math.max(0, target.hp - damage);
     const impulse = push(source, target, knockback);
     target.kbx = impulse.x;
@@ -515,46 +571,127 @@ export function createFight(
     else player.yaw += Math.sign(delta) * max;
   }
 
+  function heldMs(button: 'x' | 'y'): number {
+    const at = button === 'x' ? xAt : yAt;
+    if (at >= 0) return (now - at) * 1000;
+    return (button === 'x' ? xHeld : yHeld) * 1000;
+  }
+
+  function trackButtons(input: FighterInput): void {
+    shiftEdge = input.shiftDown && !shiftWas;
+    shiftWas = input.shiftDown;
+    if (input.xDown) {
+      if (xAt < 0) xAt = now;
+    } else if (xAt >= 0) {
+      xHeld = now - xAt;
+      xAt = -1;
+    }
+    if (input.yDown) {
+      if (yAt < 0) yAt = now;
+    } else if (yAt >= 0) {
+      yHeld = now - yAt;
+      yAt = -1;
+    }
+  }
+
+  function refreshCharge(): void {
+    const spec = player.move;
+    if (!spec || (spec.button !== 'x' && spec.button !== 'y')) {
+      attackCharge = 0;
+      return;
+    }
+    attackCharge = chargeLevel(
+      heldMs(spec.button),
+      tuning.holdThresholdMs,
+      spec.kind === 'hold' ? 'hold' : 'tap',
+    );
+  }
+
+  function rooted(): boolean {
+    return (
+      player.hp <= 0 || player.move !== null || now < player.staggerUntil || now < player.whiffUntil
+    );
+  }
+
+  function clearGlide(): void {
+    motor.vx = 0;
+    motor.vz = 0;
+    motor.skid = 0;
+    planarSpeed = 0;
+    player.moving = false;
+  }
+
+  function stepEvade(dt: number): void {
+    const duration = Math.max(0.05, tuning.motor.evadeDuration);
+    const t0 = (now - dt - evadeStart) / duration;
+    const t1 = (now - evadeStart) / duration;
+    const delta = (dodgeEase(t1) - dodgeEase(Math.max(0, t0))) * tuning.motor.evadeDistance;
+    player.x += evadeDirX * delta;
+    player.z += evadeDirZ * delta;
+    player.moving = t1 < 1;
+    gait = 'guard';
+    strafeSide = evadeKind === 'left' ? -1 : evadeKind === 'right' ? 1 : 0;
+    planarSpeed = duration > 0 ? tuning.motor.evadeDistance / duration : 0;
+    if (t1 >= 1) {
+      evadeKind = null;
+      player.moving = false;
+      planarSpeed = 0;
+    }
+  }
+
+  function beginEvade(input: FighterInput): boolean {
+    const locked = enemies.some((enemy) => enemy.id === lockId && enemy.hp > 0);
+    if (!locked || !shiftEdge || rooted() || now < evadeCd) return false;
+    const kind = dodgeKind(input.moveX, input.moveZ, player.yaw);
+    const dir = dodgeDirection(kind, player.yaw);
+    evadeKind = kind;
+    evadeStart = now;
+    evadeDirX = dir.x;
+    evadeDirZ = dir.z;
+    evadeCd = now + tuning.motor.evadeDuration + tuning.motor.evadeCooldown;
+    invulnUntil = now + Math.max(0, tuning.motor.evadeIFrames);
+    clearGlide();
+    return true;
+  }
+
   function movePlayer(dt: number, input: FighterInput): void {
-    const rooted =
-      player.hp <= 0 ||
-      player.move !== null ||
-      now < player.staggerUntil ||
-      now < player.whiffUntil;
-    if (rooted) {
-      player.moving = false;
+    if (evadeKind) {
+      stepEvade(dt);
       return;
     }
-    if (lockId) {
-      const target = enemies.find((enemy) => enemy.id === lockId && enemy.hp > 0);
-      const mag = Math.hypot(input.strafe, input.forward);
-      if (!target || mag < 0.08) {
-        player.moving = false;
-        return;
-      }
-      const dist = Math.hypot(target.x - player.x, target.z - player.z) || 1;
-      const fx = (target.x - player.x) / dist;
-      const fz = (target.z - player.z) / dist;
-      const rx = fz;
-      const rz = -fx;
-      const sx = input.strafe / mag;
-      const sz = input.forward / mag;
-      player.x += (fx * sz + rx * sx) * style.moveSpeed * dt;
-      player.z += (fz * sz + rz * sx) * style.moveSpeed * dt;
-      player.moving = true;
+    if (beginEvade(input)) {
+      stepEvade(dt);
       return;
     }
-    const mag = Math.hypot(input.moveX, input.moveZ);
-    if (mag < 0.08) {
-      player.moving = false;
+    if (rooted()) {
+      clearGlide();
+      gait = 'idle';
+      strafeSide = 0;
       return;
     }
-    const nx = input.moveX / mag;
-    const nz = input.moveZ / mag;
-    player.x += nx * style.moveSpeed * dt;
-    player.z += nz * style.moveSpeed * dt;
-    player.yaw = Math.atan2(nx, nz);
-    player.moving = true;
+    const locked = enemies.some((enemy) => enemy.id === lockId && enemy.hp > 0);
+    const stepped = stepMotor(
+      { vx: motor.vx, vz: motor.vz, yaw: player.yaw, skid: motor.skid, startT: motor.startT },
+      input.moveX,
+      input.moveZ,
+      dt,
+      style.moveSpeed,
+      locked,
+      input.shiftDown,
+      player.yaw,
+      tuning.motor,
+    );
+    motor.vx = stepped.vx;
+    motor.vz = stepped.vz;
+    motor.skid = stepped.skid;
+    motor.startT = stepped.startT;
+    player.x += stepped.dx;
+    player.z += stepped.dz;
+    if (!locked) player.yaw = stepped.yaw;
+    player.moving = stepped.speed > 0.2;
+    planarSpeed = stepped.speed;
+    gait = stepped.gait;
+    strafeSide = stepped.strafeSide;
   }
 
   function slide(actor: Actor, dt: number): void {
@@ -647,6 +784,21 @@ export function createFight(
     const spec = actor.move;
     const elapsed = spec ? Math.max(0, now - actor.moveStart) : 0;
     const duration = spec ? spec.startup + spec.active + spec.recovery : 1;
+    let windup: 'x' | 'y' | null = null;
+    let windupPose = 0;
+    let archetype: Archetype | null = null;
+    if (actor.team === 'player') {
+      if (spec && (spec.button === 'x' || spec.button === 'y' || spec.button === 'counter')) {
+        archetype = archetypeFor(style.id, spec.button);
+      } else if (!spec && actor.hp > 0) {
+        const button = xAt >= 0 ? 'x' : yAt >= 0 ? 'y' : null;
+        if (button) {
+          windup = button;
+          windupPose = Math.min(1, heldMs(button) / Math.max(1, tuning.holdThresholdMs));
+          archetype = archetypeFor(style.id, button);
+        }
+      }
+    }
     let motion = '';
     let phase = 0;
     if (spec) {
@@ -683,6 +835,24 @@ export function createFight(
       timing: spec
         ? { elapsed, startup: spec.startup, active: spec.active, recovery: spec.recovery }
         : null,
+      speed: actor.team === 'player' ? planarSpeed : actor.moving ? 2 : 0,
+      gait: actor.team === 'player' ? gait : actor.moving ? 'walk' : 'idle',
+      strafeSide: actor.team === 'player' ? strafeSide : 0,
+      stance: actor.team === 'player' && lockId ? 'guard' : 'free',
+      attackCharge: actor.team === 'player' ? attackCharge : 0,
+      windup,
+      windupPose,
+      archetype,
+      strikePhase: actor.team === 'player' && spec ? moveStrikePhase(spec) : 0,
+      evade: actor.team === 'player' ? evadeKind : null,
+      evadePhase:
+        actor.team === 'player' && evadeKind
+          ? Math.min(
+              1,
+              Math.max(0, (now - evadeStart) / Math.max(0.05, tuning.motor.evadeDuration)),
+            )
+          : 0,
+      iframe: actor.team === 'player' && now < invulnUntil,
     };
   }
 
@@ -705,11 +875,13 @@ export function createFight(
       const stepDt = Math.max(0, dt);
       if (hitStop > 0) {
         hitStop = Math.max(0, hitStop - stepDt);
+        trackButtons(input);
         buffer.update(now * 1000, { x: input.xDown, y: input.yDown });
         readLock(input);
         return snapshot();
       }
       now += stepDt;
+      trackButtons(input);
       readLock(input);
       const edges = buffer.update(now * 1000, { x: input.xDown, y: input.yDown });
       queue.push(...edges);
@@ -732,6 +904,7 @@ export function createFight(
         }
       }
 
+      refreshCharge();
       advanceMove(player);
       if (hitStop > 0) {
         refreshLock();
@@ -763,8 +936,8 @@ export function createFight(
         return snapshot();
       }
       runAi(stepDt);
-      movePlayer(stepDt, input);
       faceLock(stepDt);
+      movePlayer(stepDt, input);
       approach(stepDt);
       lunge(player);
       slide(player, stepDt);
@@ -787,6 +960,14 @@ export function createFight(
       actor.spawnZ = z;
       actor.kbx = 0;
       actor.kbz = 0;
+      if (actor.team === 'player') {
+        motor.vx = 0;
+        motor.vz = 0;
+        motor.skid = 0;
+        motor.startT = 0;
+        evadeKind = null;
+        planarSpeed = 0;
+      }
     },
     setTuning(patch: Partial<FightTuning>): void {
       const next = { ...tuning, ...patch };
@@ -804,6 +985,7 @@ export function createFight(
       if (patch.holdThresholdMs !== undefined) buffer.setThreshold(patch.holdThresholdMs);
       if (patch.lockHoldMs !== undefined) lockBuffer.setThreshold(patch.lockHoldMs);
       if (patch.script !== undefined) script = copyScript(patch.script);
+      if (patch.motor) next.motor = { ...tuning.motor, ...patch.motor };
       Object.assign(tuning, next);
       const windowSec = Math.min(TELEGRAPH_SEC, Math.max(0.04, tuning.counterWindowMs / 1000));
       for (const enemy of enemies) {

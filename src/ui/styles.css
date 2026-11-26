@@ -1609,6 +1609,14 @@ input:focus-visible {
   font-weight: 700;
 }
 
+.dojo-gait {
+  margin: 0.15rem 0 0;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  color: #3d4338;
+}
+
 .dojo-lock {
   margin: 0.2rem 0 0;
   font-family: Palatino, Georgia, serif;
