@@ -9,6 +9,7 @@ import {
   dojoEnemies,
   dojoHitboxes,
   dojoHoldMs,
+  dojoLockHoldMs,
   dojoHud,
   dojoNotice,
   dojoTimeScale,
@@ -31,6 +32,7 @@ export class DojoScene implements Scene {
   private fight: Fight | null = null;
   private yaw = 0;
   private leaving = false;
+  private focus = { x: 0, z: 0 };
 
   constructor(private readonly host: GameHost) {}
 
@@ -51,6 +53,7 @@ export class DojoScene implements Scene {
         attackRate: dojoAttackRate.value,
         counterWindowMs: dojoCounterMs.value,
         holdThresholdMs: dojoHoldMs.value,
+        lockHoldMs: dojoLockHoldMs.value,
       },
       {
         onSpecial: (request) => {
@@ -80,6 +83,7 @@ export class DojoScene implements Scene {
       attackRate: dojoAttackRate.value,
       counterWindowMs: dojoCounterMs.value,
       holdThresholdMs: dojoHoldMs.value,
+      lockHoldMs: dojoLockHoldMs.value,
     });
     const stick = this.input.sample();
     const wish = cameraWish(stick.ix, stick.iz, this.yaw);
@@ -96,12 +100,16 @@ export class DojoScene implements Scene {
       })),
       move: snap.player.moveId,
       ready: this.view.readyCount,
+      lockId: snap.lockId,
     };
+    const locked = snap.enemies.find((enemy) => enemy.id === snap.lockId);
+    this.focus = locked
+      ? { x: (snap.player.x + locked.x) / 2, z: (snap.player.z + locked.z) / 2 }
+      : { x: snap.player.x, z: snap.player.z };
   }
 
   render(_alpha: number): void {
-    const player = this.fight?.snapshot().player;
-    this.view?.render(this.yaw, { x: player?.x ?? 0, z: player?.z ?? 0 });
+    this.view?.render(this.yaw, this.focus);
   }
 
   exit(): void {

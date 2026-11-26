@@ -26,7 +26,13 @@ test('dojo inputs map X, Y, and counter without mixing them', () => {
     stickZ: 0,
     padX: false,
     padY: false,
+    lockHeld: false,
   };
+  expect(mapDojoInput({ ...base, lockHeld: true })).toMatchObject({
+    xDown: false,
+    yDown: false,
+    lockDown: true,
+  });
   expect(mapDojoInput({ ...base, j: true }).xDown).toBe(true);
   expect(mapDojoInput({ ...base, mouseX: true }).xDown).toBe(true);
   expect(mapDojoInput({ ...base, padX: true }).xDown).toBe(true);
