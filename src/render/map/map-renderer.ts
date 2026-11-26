@@ -9,6 +9,8 @@ import {
 import type { MapSkinId } from '../../core/state/settings';
 import { AssetLibrary } from './assets';
 import { loadTrailbound, type RegionBake, type TrailboundTiles } from './trailbound-bake';
+import { drawRoleInset, drawRoleLegend } from './role-overlay';
+import { roleDebugEnabled } from '../../core/world/role-view';
 import { WorldRenderer, type MapCaravanDraw, type MapZonesDraw } from './wm-renderer';
 
 export type { MapCaravanDraw, MapZonesDraw };
@@ -34,6 +36,8 @@ export interface MapDrawState {
   bare?: boolean;
   /** Biome overlay wash (whole map, legend colours, already semi-transparent). */
   biomeWash?: CanvasImageSource | null;
+  /** Screen-space role tooltip. */
+  roleHover?: { sx: number; sy: number; text: string } | null;
 }
 
 /**
@@ -144,7 +148,14 @@ export class MapRenderer {
       zones: state.bare ? null : (state.zones ?? null),
       markers: !state.bare,
       biomeWash: state.bare ? null : (state.biomeWash ?? null),
+      roleOverlay: false,
     });
+    if (!state.bare && roleDebugEnabled()) {
+      drawRoleLegend(ctx, cssW);
+      drawRoleInset(ctx, world, state.heroX, state.heroY, cssW, cssH);
+    }
+    if (state.roleHover)
+      drawRoleTip(ctx, state.roleHover.sx, state.roleHover.sy, state.roleHover.text);
     const paintMs = performance.now() - paintStarted;
     this.drawMs = this.drawMs === 0 ? paintMs : this.drawMs * 0.8 + paintMs * 0.2;
     this.bakeMs = this.worldRenderer.bakeMs;
@@ -261,4 +272,20 @@ export class MapRenderer {
     this.bakeMs = this.worldRenderer.bakeMs;
     this.detailMs = 0;
   }
+}
+
+function drawRoleTip(ctx: CanvasRenderingContext2D, sx: number, sy: number, text: string): void {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.font = '13px monospace';
+  const pad = 8;
+  const w = ctx.measureText(text).width + pad * 2;
+  const x = Math.min(sx + 14, ctx.canvas.clientWidth - w - 8);
+  const y = Math.max(8, sy - 28);
+  ctx.fillStyle = 'rgba(28, 24, 18, 0.92)';
+  ctx.fillRect(x, y, w, 24);
+  ctx.fillStyle = '#f4ead8';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + pad, y + 12);
+  ctx.restore();
 }

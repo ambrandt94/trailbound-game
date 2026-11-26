@@ -778,6 +778,91 @@ export function placedMask(
   return mask;
 }
 
+const YAW_MASKS = new Map<string, { parts: BuildingPart[]; w: number; d: number }>();
+
+/**
+ * Template mask rotated by any whole-degree yaw. Quarter turns use the
+ * existing cache. Other angles inverse-rotate each cell centre into the
+ * template and take the nearest sample. The result is world-aligned.
+ */
+export function placedMaskAtYaw(
+  id: string,
+  yawDeg: number,
+): { parts: BuildingPart[]; w: number; d: number } | null {
+  const yaw = ((Math.round(yawDeg) % 360) + 360) % 360;
+  if (yaw % 90 === 0) return placedMask(id, yaw as BuildingRotation);
+  const key = `${id}@${yaw}`;
+  const cached = YAW_MASKS.get(key);
+  if (cached) return cached;
+  const base = placedMask(id, 0);
+  if (!base) return null;
+  const rad = (yaw * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const cx = base.w / 2;
+  const cy = base.d / 2;
+  const corners: Array<[number, number]> = [
+    [0, 0],
+    [base.w, 0],
+    [0, base.d],
+    [base.w, base.d],
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [x, y] of corners) {
+    const dx = x - cx;
+    const dy = y - cy;
+    const rx = cx + dx * cos - dy * sin;
+    const ry = cy + dx * sin + dy * cos;
+    minX = Math.min(minX, rx);
+    minY = Math.min(minY, ry);
+    maxX = Math.max(maxX, rx);
+    maxY = Math.max(maxY, ry);
+  }
+  const x0 = Math.floor(minX);
+  const y0 = Math.floor(minY);
+  const w = Math.max(1, Math.ceil(maxX) - x0);
+  const d = Math.max(1, Math.ceil(maxY) - y0);
+  const parts: BuildingPart[] = new Array<BuildingPart>(w * d).fill('void');
+  const sample = (lx: number, ly: number): BuildingPart => {
+    const sx = Math.round(lx - 0.5);
+    const sy = Math.round(ly - 0.5);
+    if (sx < 0 || sy < 0 || sx >= base.w || sy >= base.d) return 'void';
+    return base.parts[sy * base.w + sx] ?? 'void';
+  };
+  for (let y = 0; y < d; y++) {
+    for (let x = 0; x < w; x++) {
+      const counts = new Map<BuildingPart, number>();
+      for (const ox of [0.35, 0.65]) {
+        for (const oy of [0.35, 0.65]) {
+          const wx = x0 + x + ox;
+          const wy = y0 + y + oy;
+          const dx = wx - cx;
+          const dy = wy - cy;
+          const part = sample(cx + dx * cos + dy * sin, cy - dx * sin + dy * cos);
+          counts.set(part, (counts.get(part) ?? 0) + 1);
+        }
+      }
+      let best: BuildingPart = 'void';
+      let n = 0;
+      for (const [part, count] of counts) {
+        if (part === 'void') continue;
+        if (count > n) {
+          best = part;
+          n = count;
+        }
+      }
+      parts[y * w + x] = n >= 2 ? best : 'void';
+    }
+  }
+  const mask = { parts, w, d };
+  if (YAW_MASKS.size > 360) YAW_MASKS.clear();
+  YAW_MASKS.set(key, mask);
+  return mask;
+}
+
 export function rotatedSize(
   w: number,
   d: number,

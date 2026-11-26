@@ -141,9 +141,11 @@ describe('ward partition', () => {
   });
 
   test('missing settlementGen is 1 and old saves load unchanged', () => {
-    expect(DEFAULT_WORLD_SETTINGS.settlementGen).toBe(2);
+    expect(DEFAULT_WORLD_SETTINGS.settlementGen).toBe(3);
     expect(clampSettings({}).settlementGen).toBe(1);
     expect(clampSettings({ settlementGen: 2 }).settlementGen).toBe(2);
+    expect(clampSettings({ settlementGen: 3 }).settlementGen).toBe(3);
+    expect(clampSettings({ settlementGen: 4 as never }).settlementGen).toBe(1);
     expect(clampSettings({ settlementGen: undefined }).settlementGen).toBe(1);
 
     const settings = clampSettings({

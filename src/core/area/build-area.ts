@@ -26,6 +26,7 @@ import {
   PART_CODE,
   PART_LEGEND,
   placedMask,
+  placedMaskAtYaw,
   rotateCardinal,
   rotateRidge,
   structureBounds,
@@ -402,6 +403,9 @@ export interface AreaSettlement {
   dropped: number;
   districts: Array<{ id: string; kind: string }>;
   respawnAnchor: { x: number; y: number; kind: string };
+  culture?: string;
+  biomeSet?: string;
+  layoutGen?: 3;
 }
 
 export interface AreaSegment {
@@ -489,6 +493,14 @@ export interface AreaBuilding {
   district?: string;
   lot?: { x: number; y: number; w: number; d: number };
   frontageRank?: number;
+  /** Generation 3. Additive on AreaExport 0.9.0. */
+  yawDeg?: number;
+  obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
+  role?: string;
+  roleLabel?: string;
+  placeholder?: boolean;
+  form?: string;
+  roleColour?: string;
 }
 
 export interface AreaProp {
@@ -868,7 +880,7 @@ export function buildAreaExport(
 
   const area: AreaExport = {
     type: 'trailbound.area',
-    version: AREA_EXPORT_VERSION,
+    version: plan?.layoutGen === 3 ? '0.9.0' : AREA_EXPORT_VERSION,
     source: {
       app: 'world-map',
       build: AREA_EXPORT_BUILD,
@@ -910,6 +922,13 @@ export function buildAreaExport(
                 y: round3(plan.respawnAnchor.y),
                 kind: plan.respawnAnchor.kind,
               },
+              ...(plan.layoutGen === 3
+                ? {
+                    culture: plan.culture ?? 'human',
+                    biomeSet: plan.biomeSet ?? 'temperate',
+                    layoutGen: 3 as const,
+                  }
+                : {}),
             },
           }
         : {}),
@@ -1415,6 +1434,7 @@ function settlementPopulation(
     crowd: placeCrowd({
       worldSeed: world.seed,
       placeId: place.id,
+      culture: world.settings.settlementGen === 3 ? (place.culture ?? 'human') : null,
       tier,
       buildings: listed,
       water: crowdWater(world, place, listed),
@@ -1537,7 +1557,8 @@ function buildingRecord(spr: PlacedSprite, anchorX: number, anchorY: number): Ar
   const tmpl = (spr.templateId && templateById(spr.templateId)) || templatesForType(spr.sprite)[0];
   if (!tmpl) throw new Error(`no template for ${spr.sprite}`);
   const rotation: BuildingRotation = spr.rotation ?? 0;
-  const mask = placedMask(tmpl.id, rotation);
+  const mask =
+    spr.yawDeg === undefined ? placedMask(tmpl.id, rotation) : placedMaskAtYaw(tmpl.id, spr.yawDeg);
   if (!mask) throw new Error(`no mask for ${tmpl.id}`);
   const plotW = mask.w;
   const plotD = mask.d;
@@ -1604,6 +1625,18 @@ function buildingRecord(spr: PlacedSprite, anchorX: number, anchorY: number): Ar
           ...(spr.district ? { district: spr.district } : {}),
           ...(spr.lot ? { lot: spr.lot } : {}),
           ...(spr.frontageRank !== undefined ? { frontageRank: spr.frontageRank } : {}),
+        }
+      : {}),
+    ...(spr.yawDeg !== undefined
+      ? {
+          yawDeg: spr.yawDeg,
+          ...(spr.role
+            ? { role: spr.role, roleLabel: spr.roleLabel ?? spr.label ?? spr.role }
+            : {}),
+          ...(spr.placeholder ? { placeholder: true } : {}),
+          ...(spr.form ? { form: spr.form } : {}),
+          ...(spr.roleColour ? { roleColour: spr.roleColour } : {}),
+          ...(spr.obb ? { obb: spr.obb } : {}),
         }
       : {}),
   };

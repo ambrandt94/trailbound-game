@@ -15,6 +15,7 @@ import {
   walkTilesPerSec,
 } from '../../core/world/models';
 import { onFootPaceMps } from '../../core/sim/map-pace';
+import { roleAt } from '../../core/world/buildings';
 import { attachMapInput } from '../../input/map-input';
 import { MapCamera } from '../../render/map/map-camera';
 import { dayLightAt } from '../../core/sim/time';
@@ -82,6 +83,8 @@ export class MapView implements Scene {
   /** Seconds left before Enter can open 3D again after a return. */
   private entryCooldown = 0;
   private detachClicks: (() => void) | null = null;
+  private detachHover: (() => void) | null = null;
+  private roleHover: { sx: number; sy: number; text: string } | null = null;
   /** Route clicks in fine tiles, converted with the camera as it was when clicked. */
   private readonly clicks: Array<{ x: number; y: number; pick: number; append: boolean }> = [];
   private hudKey = '';
@@ -132,6 +135,23 @@ export class MapView implements Scene {
       const pick = (14 / (this.camera.scale * TILE)) * step;
       this.clicks.push({ x: at.x * step, y: at.y * step, pick, append });
     });
+    const onHover = (event: PointerEvent): void => {
+      const canvas = this.host.mapCanvas;
+      const rect = canvas.getBoundingClientRect();
+      const sx = event.clientX - rect.left;
+      const sy = event.clientY - rect.top;
+      const world = this.host.world.data;
+      if (!world || this.camera.inGlobe()) {
+        this.roleHover = null;
+        return;
+      }
+      const at = this.camera.screenToWorld(sx, sy, canvas.clientWidth, canvas.clientHeight);
+      const step = this.camera.step;
+      const hit = roleAt(world, at.x * step, at.y * step);
+      this.roleHover = hit ? { sx, sy, text: `${hit.label} — ${hit.place}` } : null;
+    };
+    this.host.mapCanvas.addEventListener('pointermove', onHover);
+    this.detachHover = () => this.host.mapCanvas.removeEventListener('pointermove', onHover);
   }
 
   update(dt: number): void {
@@ -272,6 +292,7 @@ export class MapView implements Scene {
       prompt.value = stand.blockedReason ? 'Open water. Walk ashore to enter.' : '';
     }
     this.host.mapCanvas.dataset.scale = this.camera.scale.toFixed(4);
+    this.host.mapCanvas.dataset.roleHover = this.roleHover?.text ?? '';
     this.publishGlobe();
     // During a toggle glide the map is not repainted: its last frame is scaled
     // with a CSS transform (as the 3D dive does), so the 2D paint stays out of
@@ -311,6 +332,7 @@ export class MapView implements Scene {
       zones: this.zonesDraw(),
       bare: this.bare,
       biomeWash: this.biomeWash(),
+      roleHover: this.bare ? null : this.roleHover,
     });
     this.paintedScale = this.camera.scale;
   }
@@ -517,6 +539,9 @@ export class MapView implements Scene {
     this.detachInput = null;
     this.detachClicks?.();
     this.detachClicks = null;
+    this.detachHover?.();
+    this.detachHover = null;
+    this.roleHover = null;
     travelHud.value = null;
     this.hudKey = '';
   }

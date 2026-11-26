@@ -33,6 +33,7 @@ import {
   markerDisplay,
 } from '../../core/world/map-grid';
 import { landUseRgb } from '../../core/world/settlement-siting';
+import { drawRoleOverlay } from './role-overlay';
 import { type ChatBubble, peerMarkerColor } from './markers';
 import { LOCAL_PLAYER_ID } from '../../core/sim/player';
 import { pixelSnapScale } from './map-camera';
@@ -1343,6 +1344,8 @@ export class WorldRenderer {
       markers?: boolean;
       /** Biome overlay: a semi-transparent legend-colour image of the whole map, under the markers. */
       biomeWash?: CanvasImageSource | null;
+      /** Generation 3 role colours, streets, and wall. Debug only. */
+      roleOverlay?: boolean;
     },
   ): void {
     this.caravanDraw = opts.caravan ?? null;
@@ -1588,6 +1591,7 @@ export class WorldRenderer {
         camera.x,
         camera.y,
       );
+      if (opts.roleOverlay) drawRoleOverlay(ctx, world, camera, this.mapStep, viewW, viewH);
       ctx.restore();
     }
 

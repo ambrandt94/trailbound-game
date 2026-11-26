@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   chunkToSphere,
   neighbor,
@@ -16,6 +16,10 @@ import { planetFrame } from '../../src/core/world/planet-chunk';
 import { edgeGates } from '../../src/core/world/seamless-terrain';
 import { generateChunkAt, generateWorld } from '../../src/core/world/world-gen';
 
+// These tests bake full scale-2 worlds. The default 5s limit flakes when the
+// player-mesh browser test is holding the CI runner.
+vi.setConfig({ testTimeout: 120_000 });
+
 const SEED = 7741;
 
 function settingsFor(source: 'trailbound' | 'procedural', terrainGen: 1 | 2 = 2) {
@@ -24,6 +28,8 @@ function settingsFor(source: 'trailbound' | 'procedural', terrainGen: 1 | 2 = 2)
     worldSource: source,
     worldScale: 2,
     terrainGen,
+    // Terrain continuity, not the city layout. Stay on the generation this file was written for.
+    settlementGen: 2,
   });
 }
 

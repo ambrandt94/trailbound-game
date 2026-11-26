@@ -29,7 +29,8 @@ import {
   type WorldScale,
   type WorldSettings,
 } from '../core/world/models';
-import { newWorldLand, newWorldSeed, newWorldSettings } from './creator-state';
+import { newWorldLand, newWorldSeed, newWorldSettings, setNewWorldGen } from './creator-state';
+import { roleDebugEnabled, setRoleDebug } from '../core/world/role-view';
 import {
   wgBake,
   wgCached,
@@ -449,6 +450,39 @@ export function WorldGenScreen() {
           ))}
           <CityPlanToggle />
         </div>
+        {!readOnly ? (
+          <label class="wg-check">
+            Culture
+            <select
+              aria-label="Culture"
+              value={s.cultureOverride ?? ''}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setNewWorldGen({
+                  cultureOverride:
+                    value === 'human' || value === 'orc' || value === 'mouse' ? value : undefined,
+                });
+              }}
+            >
+              <option value="">Biome roll</option>
+              <option value="human">Human</option>
+              <option value="orc">Orc war camp</option>
+              <option value="mouse">Mouse (stub)</option>
+            </select>
+          </label>
+        ) : null}
+        <label class="wg-check">
+          <input
+            type="checkbox"
+            checked={roleDebugEnabled()}
+            aria-label="Role colours"
+            onChange={(event) => {
+              const target = event.currentTarget;
+              if (target instanceof HTMLInputElement) setRoleDebug(target.checked);
+            }}
+          />
+          Role colours
+        </label>
 
         <h3 class="tb-heading">Start</h3>
         <p class="note">

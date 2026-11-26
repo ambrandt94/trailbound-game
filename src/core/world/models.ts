@@ -335,20 +335,28 @@ export interface WorldSettings {
   terrainGen: TerrainGen;
   /**
    * Settlement layout. 1 is today's authored places. 2 scores sites, grows
-   * class footprints, and adds outskirts and satellites. Saves without the
-   * field read 1, so an old world keeps today's towns. New worlds are 2.
+   * class footprints, and adds outskirts and satellites. 3 keeps that siting
+   * and lays streets out off the grid, with a culture and a building role.
+   * Saves without the field read 1, so an old world keeps today's towns.
+   * New worlds are 3.
    */
   settlementGen: SettlementGen;
+  /**
+   * Generation 3 test override. Missing means the biome roll (about one orc
+   * camp in eight villages and towns in the rough biomes).
+   */
+  cultureOverride?: 'human' | 'orc' | 'mouse';
 }
 
 export type TerrainGen = 1 | 2;
 
 /**
  * How settlements are laid out. 1 is today's authored places. 2 is scored
- * siting (hamlets through metropolis, outskirts, satellites). Missing reads
- * 1, so a save from before this field keeps today's towns.
+ * siting (hamlets through metropolis, outskirts, satellites) with layout v2.
+ * 3 is that siting plus off-grid streets, culture, and building roles.
+ * Missing reads 1, so a save from before this field keeps today's towns.
  */
-export type SettlementGen = 1 | 2;
+export type SettlementGen = 1 | 2 | 3;
 
 /** Side length of `WorldSettings.landSketch`. */
 export const LAND_SKETCH_SIZE = 40;
@@ -425,7 +433,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   moistBias: 0,
   terrainGen: 2,
   // New worlds. A save that omits the field still reads as 1 in clampSettings.
-  settlementGen: 2,
+  settlementGen: 3,
 };
 
 export function worldExtent(scale: WorldScale): number {
@@ -589,8 +597,13 @@ export function clampSettings(raw: Partial<WorldSettings>): WorldSettings {
     moistBias: clampBias(raw.moistBias),
     // Missing means a world made before seamless chunks: keep its map.
     terrainGen: raw.terrainGen === 2 ? 2 : 1,
-    // Missing means a save from before city plans: keep today's settlements.
-    settlementGen: raw.settlementGen === 2 ? 2 : 1,
+    // Missing, or any value other than 2 or 3, keeps today's settlements.
+    settlementGen: raw.settlementGen === 3 ? 3 : raw.settlementGen === 2 ? 2 : 1,
+    ...(raw.cultureOverride === 'human' ||
+    raw.cultureOverride === 'orc' ||
+    raw.cultureOverride === 'mouse'
+      ? { cultureOverride: raw.cultureOverride }
+      : {}),
   };
 }
 
@@ -852,6 +865,11 @@ export interface MapNode {
   satelliteOf?: string;
   /** Biome land-use role, such as `farm hamlet` or `fishing hamlet`. */
   satelliteRole?: string;
+  /**
+   * Generation 3 culture. Derived from the seed at siting time and never
+   * written into a save on its own. Missing means human.
+   */
+  culture?: string;
 }
 
 export interface PointOfInterest {
@@ -893,6 +911,14 @@ export interface PlacedSprite {
   district?: string;
   lot?: { x: number; y: number; w: number; d: number };
   frontageRank?: number;
+  /** Generation 3 free yaw, role, and oriented lot. */
+  yawDeg?: number;
+  role?: string;
+  roleLabel?: string;
+  placeholder?: boolean;
+  form?: string;
+  roleColour?: string;
+  obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
   rot?: number;
   /** Trees only, 0.9–1.1. */
   scale?: number;

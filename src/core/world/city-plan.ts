@@ -4,6 +4,7 @@
  * footprints; this cutter is what the World Gen debug overlay draws. Layout
  * still comes later.
  */
+import type { RoleDemand } from './building-roles';
 import type { Vec2 } from './models';
 import { fbm, hash2, Rng } from './noise';
 import {
@@ -44,15 +45,100 @@ export interface SizeClass {
   chunkEdgeMargin: number;
   /** Hamlet, village, and town are a single ward. */
   singleWard: boolean;
+  /** Inclusive building count for layout generation 3. */
+  buildings: [number, number];
+  /** Main road, street, and lane. */
+  roadRanks: 1 | 2 | 3;
+  defence: 'none' | 'hedge' | 'palisade' | 'curtain' | 'curtain2';
+  /** What this size asks for before a culture rewrites it. */
+  roleDemand: RoleDemand[];
 }
 
+const HAMLET_ROLES: RoleDemand[] = [
+  { role: 'farmstead', count: 1 },
+  { role: 'shop', count: 1, minBuildings: 6 },
+];
+const VILLAGE_ROLES: RoleDemand[] = [
+  { role: 'inn', count: 1 },
+  { role: 'smithy', count: 1 },
+  { role: 'shop', count: 1 },
+  { role: 'temple', count: 1 },
+  { role: 'farmstead', count: 1 },
+];
+const TOWN_ROLES: RoleDemand[] = [
+  ...VILLAGE_ROLES,
+  { role: 'market', count: 1 },
+  { role: 'town_hall', count: 1 },
+  { role: 'healer', count: 1 },
+  { role: 'workshop', count: 1 },
+  { role: 'stables', count: 1 },
+  { role: 'shop', count: 1 },
+];
+const CITY_ROLES: RoleDemand[] = [
+  ...TOWN_ROLES,
+  { role: 'shop', count: 1 },
+  { role: 'guildhall', count: 1 },
+  { role: 'bank', count: 1 },
+  { role: 'warehouse', count: 1 },
+  { role: 'barracks', count: 1 },
+  { role: 'bakery', count: 1 },
+];
+
 export const SIZE_CLASS: Record<SettlementClass, SizeClass> = {
-  hamlet: { id: 'hamlet', chunkEdgeMargin: 2, singleWard: true },
-  village: { id: 'village', chunkEdgeMargin: 2, singleWard: true },
-  town: { id: 'town', chunkEdgeMargin: 4, singleWard: true },
-  city: { id: 'city', chunkEdgeMargin: 8, singleWard: false },
-  capital: { id: 'capital', chunkEdgeMargin: 8, singleWard: false },
-  metropolis: { id: 'metropolis', chunkEdgeMargin: 12, singleWard: false },
+  hamlet: {
+    id: 'hamlet',
+    chunkEdgeMargin: 2,
+    singleWard: true,
+    buildings: [3, 8],
+    roadRanks: 1,
+    defence: 'hedge',
+    roleDemand: HAMLET_ROLES,
+  },
+  village: {
+    id: 'village',
+    chunkEdgeMargin: 2,
+    singleWard: true,
+    buildings: [8, 25],
+    roadRanks: 2,
+    defence: 'hedge',
+    roleDemand: VILLAGE_ROLES,
+  },
+  town: {
+    id: 'town',
+    chunkEdgeMargin: 4,
+    singleWard: true,
+    buildings: [25, 80],
+    roadRanks: 3,
+    defence: 'palisade',
+    roleDemand: TOWN_ROLES,
+  },
+  city: {
+    id: 'city',
+    chunkEdgeMargin: 8,
+    singleWard: false,
+    buildings: [80, 250],
+    roadRanks: 3,
+    defence: 'curtain',
+    roleDemand: CITY_ROLES,
+  },
+  capital: {
+    id: 'capital',
+    chunkEdgeMargin: 8,
+    singleWard: false,
+    buildings: [250, 400],
+    roadRanks: 3,
+    defence: 'curtain2',
+    roleDemand: CITY_ROLES,
+  },
+  metropolis: {
+    id: 'metropolis',
+    chunkEdgeMargin: 12,
+    singleWard: false,
+    buildings: [400, 900],
+    roadRanks: 3,
+    defence: 'curtain2',
+    roleDemand: CITY_ROLES,
+  },
 };
 
 /** Target blob radius in quadrants, before the irregular outline and the clean. */
