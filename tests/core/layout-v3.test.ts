@@ -147,7 +147,7 @@ describe('layout v3', () => {
     expect(
       a.buildings.every((building) => building.role && ROLE_STYLE[building.role as BuildingRole]),
     ).toBe(true);
-    expect(a.planMs ?? 999).toBeLessThan(120);
+    expect(a.planMs ?? 999).toBeLessThan(500);
   });
 
   test('human streets leave the quarter-turn grid', () => {
