@@ -1,5 +1,6 @@
 import { signal } from '@preact/signals';
 import { DEFAULT_MOTOR } from '../core/combat/motor';
+import { DEFAULT_POSTURE } from '../core/combat/posture';
 
 export const dojoWeapon = signal('fists');
 export const dojoEnemies = signal(1);
@@ -20,6 +21,12 @@ export const dojoDodgeDistance = signal(DEFAULT_MOTOR.evadeDistance);
 export const dojoDodgeTime = signal(DEFAULT_MOTOR.evadeDuration);
 export const dojoDodgeCooldown = signal(DEFAULT_MOTOR.evadeCooldown);
 export const dojoIFrames = signal(DEFAULT_MOTOR.evadeIFrames);
+export const dojoSprintLean = signal(DEFAULT_POSTURE.maxSprintLean);
+export const dojoSkidLean = signal(DEFAULT_POSTURE.skidLean);
+export const dojoSkidCrouch = signal(DEFAULT_POSTURE.skidCrouch);
+export const dojoSkidDuration = signal(DEFAULT_POSTURE.skidDuration);
+export const dojoBankMax = signal(DEFAULT_POSTURE.bankMax);
+export const dojoHeadStab = signal(DEFAULT_POSTURE.headStabilization);
 export const dojoNotice = signal('');
 
 export interface DojoHudEnemy {

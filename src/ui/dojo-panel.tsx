@@ -18,6 +18,12 @@ import {
   dojoDodgeTime,
   dojoDodgeCooldown,
   dojoIFrames,
+  dojoSprintLean,
+  dojoSkidLean,
+  dojoSkidCrouch,
+  dojoSkidDuration,
+  dojoBankMax,
+  dojoHeadStab,
   dojoHud,
   dojoNotice,
   dojoTimeScale,
@@ -297,6 +303,55 @@ export function DojoScreen() {
           step={0.01}
           value={dojoIFrames.value}
           set={(value) => (dojoIFrames.value = value)}
+        />
+        <p class="eyebrow">Posture</p>
+        <MotorSlider
+          label="Max sprint lean"
+          min={0}
+          max={55}
+          step={0.5}
+          value={dojoSprintLean.value}
+          set={(value) => (dojoSprintLean.value = value)}
+        />
+        <MotorSlider
+          label="Skid lean"
+          min={0}
+          max={20}
+          step={0.5}
+          value={dojoSkidLean.value}
+          set={(value) => (dojoSkidLean.value = value)}
+        />
+        <MotorSlider
+          label="Skid crouch"
+          min={0}
+          max={0.12}
+          step={0.01}
+          value={dojoSkidCrouch.value}
+          set={(value) => (dojoSkidCrouch.value = value)}
+        />
+        <MotorSlider
+          label="Skid duration"
+          min={0.2}
+          max={0.35}
+          step={0.01}
+          value={dojoSkidDuration.value}
+          set={(value) => (dojoSkidDuration.value = value)}
+        />
+        <MotorSlider
+          label="Bank max"
+          min={0}
+          max={12}
+          step={0.5}
+          value={dojoBankMax.value}
+          set={(value) => (dojoBankMax.value = value)}
+        />
+        <MotorSlider
+          label="Head stabilization"
+          min={0}
+          max={1}
+          step={0.05}
+          value={dojoHeadStab.value}
+          set={(value) => (dojoHeadStab.value = value)}
         />
         <label class="dojo-check">
           <input

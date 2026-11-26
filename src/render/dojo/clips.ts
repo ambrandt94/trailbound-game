@@ -9,6 +9,10 @@
  * is playing. Limb bones point along local +Y. Identity means "no extra
  * rotation", so legs keep the locomotion cycle while a guard or swing
  * layers on the torso and arms.
+ *
+ * Sprint, start, stop, and skid clips stay in this file as replaceable
+ * data, but the dojo does not layer them. That lean is `posture.ts`, on
+ * the spine, so a private Start/Stop/Skid/Sprint clip can take over later.
  */
 import {
   AdditiveAnimationBlendMode,
