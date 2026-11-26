@@ -9,6 +9,7 @@ import {
 import type { MapSkinId } from '../../core/state/settings';
 import { AssetLibrary } from './assets';
 import { loadTrailbound, type RegionBake, type TrailboundTiles } from './trailbound-bake';
+import { drawBuildingRoleLabels } from './building-labels';
 import { drawRoleInset, drawRoleLegend } from './role-overlay';
 import { roleDebugEnabled } from '../../core/world/role-view';
 import { WorldRenderer, type MapCaravanDraw, type MapZonesDraw } from './wm-renderer';
@@ -148,8 +149,11 @@ export class MapRenderer {
       zones: state.bare ? null : (state.zones ?? null),
       markers: !state.bare,
       biomeWash: state.bare ? null : (state.biomeWash ?? null),
-      roleOverlay: false,
+      roleOverlay: roleDebugEnabled(),
     });
+    if (!state.bare) {
+      drawBuildingRoleLabels(ctx, world, drawn, this.worldRenderer.mapStep, cssW, cssH);
+    }
     if (!state.bare && roleDebugEnabled()) {
       drawRoleLegend(ctx, cssW);
       drawRoleInset(ctx, world, state.heroX, state.heroY, cssW, cssH);
