@@ -124,6 +124,7 @@ export function drawBuildingRoleLabels(
   const marksByPlace: ScreenMark[][] = [];
   for (const node of world.nodes) {
     if (!usesLayoutV3(world, node)) continue;
+    if (node.settlementClass === 'capital' || node.settlementClass === 'metropolis') continue;
     const dx = fineToDisplay(node.cx, mapStep) - camera.x;
     const dy = fineToDisplay(node.cy, mapStep) - camera.y;
     if (Math.hypot(dx, dy) > fineToDisplay(node.radius, mapStep) + reach) continue;

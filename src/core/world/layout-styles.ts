@@ -133,7 +133,8 @@ const ORC_DISTRICTS: DistrictKind[] = [
 
 const hedge: DefenceRule = { kind: 'hedge', towers: 'none', gates: [1, 2] };
 const palisade: DefenceRule = { kind: 'palisade', towers: 'gates', gates: [2, 3] };
-const curtain: DefenceRule = { kind: 'curtain', towers: 'gates', gates: [2, 4] };
+/** Stone curtain. Towers sit on the gates and about every 40 m of wall. */
+const curtain: DefenceRule = { kind: 'curtain', towers: 'every_n', gates: [2, 4] };
 const spiked: DefenceRule = { kind: 'spiked_palisade', towers: 'gates', gates: [2, 4] };
 
 export const LAYOUT_STYLES: Record<string, LayoutStyle> = {
@@ -143,7 +144,14 @@ export const LAYOUT_STYLES: Record<string, LayoutStyle> = {
     implemented: true,
     streets: { kind: 'organic', branchAngleDeg: [60, 110], curviness: 0.32, laneDensity: 0.7 },
     centre: 'plaza',
-    defence: { hamlet: hedge, village: hedge, town: palisade, city: curtain },
+    defence: {
+      hamlet: hedge,
+      village: palisade,
+      town: palisade,
+      city: curtain,
+      capital: curtain,
+      metropolis: curtain,
+    },
     lots: {
       frontage: [7, 12],
       depth: [8, 12],
@@ -170,6 +178,8 @@ export const LAYOUT_STYLES: Record<string, LayoutStyle> = {
       village: spiked,
       town: spiked,
       city: spiked,
+      capital: spiked,
+      metropolis: spiked,
     },
     lots: {
       frontage: [6, 10],

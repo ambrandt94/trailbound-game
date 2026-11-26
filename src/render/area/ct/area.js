@@ -1148,23 +1148,32 @@ sh.fragmentShader=sh.fragmentShader.replace("#include <fog_fragment>","if(uBakeP
 }
 };
 }
+function meshStride(w,h){
+const n=Math.max(w,h);
+if(n>900)return 4;
+if(n>480)return 2;
+return 1;
+}
 function buildMesh(field,rows){
 gridOffX=field.offX||0;gridOffZ=field.offZ||0;hasRing=!!field.hasRing;
-const m=field.meters,sampled=sampleGrid(field),vx=sampled.vx,vz=sampled.vz;
+const m=field.meters,sampled=sampleGrid(field),fullVx=sampled.vx;
 heights=sampled.heights;skirtY=sampled.skirtY;
+const stride=meshStride(field.w,field.h);
+const cellsX=Math.floor(field.w/stride),cellsZ=Math.floor(field.h/stride);
+const vx=cellsX+1,vz=cellsZ+1;
 const pos=new Float32Array(vx*vz*3),uv=new Float32Array(vx*vz*2),zone=new Float32Array(vx*vz),edge=new Float32Array(vx*vz);
 const k=10/32,ox=gridOffX,oz=gridOffZ;
 for(let iz=0;iz<vz;iz++)for(let ix=0;ix<vx;ix++){
-const o=iz*vx+ix,p=o*3;
-pos[p]=ox+ix*m;pos[p+1]=heights[o];pos[p+2]=oz+iz*m;
-uv[o*2]=ix*m*k;uv[o*2+1]=iz*m*k;
-zone[o]=maskDistAt(field,ix,iz);
+const sx=ix*stride,sz=iz*stride,o=iz*vx+ix,p=o*3,ho=sz*fullVx+sx;
+pos[p]=ox+sx*m;pos[p+1]=heights[ho];pos[p+2]=oz+sz*m;
+uv[o*2]=sx*m*k;uv[o*2+1]=sz*m*k;
+zone[o]=maskDistAt(field,sx,sz);
 edge[o]=field.hasRing?rimDistAt(field,ix,iz):80;
 }
-const count=field.w*field.h*6;
+const count=cellsX*cellsZ*6;
 const idx=(vx*vz)>65535?new Uint32Array(count):new Uint16Array(count);
 let q=0;
-for(let iz=0;iz<field.h;iz++)for(let ix=0;ix<field.w;ix++){
+for(let iz=0;iz<cellsZ;iz++)for(let ix=0;ix<cellsX;ix++){
 const a=iz*vx+ix;
 idx[q++]=a;idx[q++]=a+vx;idx[q++]=a+1;
 idx[q++]=a+1;idx[q++]=a+vx;idx[q++]=a+vx+1;
@@ -2127,6 +2136,7 @@ if(window.TBBuildings&&p.buildings&&p.buildings.length){
 TBBuildings.place(group,groundY,p.buildings,p.area.innerOrigin,meters,ctx.BX);
 }
 if(window.TBProps)TBProps.place(group,groundY,p,meters);
+if(window.TBWalls)TBWalls.place(group,groundY,p,meters);
 captureBuildingOccluders(group);
 weldStatic(group);
 widenShadows();
@@ -2162,7 +2172,9 @@ function receive(payload,from){
 primeCharacters();
 const err=validate(payload);
 if(err){console.warn("tb area:",err);curtain(false);return;}
-try{if(JSON.stringify(payload).length>4*1024*1024){console.warn("tb area: payload too big");curtain(false);return;}}catch(e){}
+/* A capital core is a few hundred metres on a side. The old 4 MB cap
+   rejected that export and left the sky up. 48 MB still refuses a runaway. */
+try{if(JSON.stringify(payload).length>48*1024*1024){console.warn("tb area: payload too big");curtain(false);return;}}catch(e){}
 currentPayload=payload;
 const hash=payloadHash(payload);
 if(active&&hash&&hash===builtHash&&group&&ctx&&group.parent===ctx.scene){ack(from,hash);notifyLive(payload,from,true);return;}

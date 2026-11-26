@@ -688,13 +688,7 @@ function populateWorld(
     );
     if (settings.settlementGen === 3) {
       for (const node of nodes) {
-        if (
-          !node.settlementClass ||
-          node.settlementClass === 'capital' ||
-          node.settlementClass === 'metropolis'
-        ) {
-          continue;
-        }
+        if (!node.settlementClass) continue;
         node.culture = rollCulture(seed, node, settings.cultureOverride);
       }
     }

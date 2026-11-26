@@ -483,6 +483,36 @@ input:focus-visible {
   color: #8a3d12;
 }
 
+#bake-banner[hidden] {
+  display: none !important;
+}
+
+#bake-banner {
+  position: absolute;
+  left: 50%;
+  top: 18%;
+  z-index: 40;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.9rem;
+  background: rgba(28, 24, 18, 0.9);
+  color: #f4ead8;
+  border: 2px solid #8a5a32;
+  font: 15px monospace;
+}
+
+#bake-banner::before {
+  content: '';
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid #e4d8c4;
+  border-top-color: #d4652f;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
 .spinner {
   width: 0.9rem;
   height: 0.9rem;

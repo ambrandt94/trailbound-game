@@ -1385,6 +1385,7 @@ export async function createTownSession(canvas, hooks) {
       }
       if (entry) applyEntry(entry);
       const spawn = window.TBArea && TBArea.spawn ? TBArea.spawn() : { x: PLS[0].x, z: PLS[0].z, yaw: PLS[0].yaw };
+      if (window.TBBuildings && TBBuildings.relod) TBBuildings.relod(spawn.x, spawn.z);
       const first = hooks.getConvoy ? hooks.getConvoy() : null;
       convoyFrame = first;
       try {
@@ -1490,6 +1491,7 @@ export async function createTownSession(canvas, hooks) {
       if (forgePawn) RIGS[0].root.visible = false;
       tickPlayerBody(fdt);
       tickPartyWagon(fdt);
+      if (window.TBBuildings && TBBuildings.relod && PLS[0]) TBBuildings.relod(PLS[0].x, PLS[0].z);
       if (window.TBTiles && TBTiles.tick) TBTiles.tick(fdt);
       if (window.TBLive && TBLive.update) TBLive.update(fdt);
       if (window.TBNpcs && TBNpcs.update) TBNpcs.update(fdt);
@@ -1709,6 +1711,9 @@ export async function createTownSession(canvas, hooks) {
     window.__tb = {
       ready: true,
       session,
+      stats() {
+        return { fps, calls, triangles, colorCalls, colorTriangles };
+      },
       setView: goView,
       pawn: () => (forgePawn ? 'forge' : 'block'),
       player: () => ({

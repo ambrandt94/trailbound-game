@@ -1102,7 +1102,79 @@ back.rotation.y=yaw+Math.PI;
 back.rotation.x=-0.55;
 holder.add(back);
 }
+function instanceBoxes(holder,rows,groundY){
+const geo=new THREE.BoxGeometry(1,2.2,1);
+geo.translate(0,1.1,0);
+const mat=new THREE.MeshLambertMaterial({color:0xffffff});
+mat.toneMapped=false;
+const mesh=new THREE.InstancedMesh(geo,mat,rows.length);
+const dummy=new THREE.Object3D(),tint=new THREE.Color();
+for(let i=0;i<rows.length;i++){
+const row=rows[i];
+row._i=i;
+const y=groundY(row.cx,row.cz)||0;
+const w=Math.max(3,row.houseW||row.fw||6);
+const d=Math.max(3,row.houseD||row.fd||5);
+dummy.position.set(row.cx,y,row.cz);
+dummy.rotation.set(0,(row.yawDeg||0)*Math.PI/180,0);
+dummy.scale.set(w,1,d);
+dummy.updateMatrix();
+mesh.setMatrixAt(i,dummy.matrix);
+tint.set(row.roleColour||"#c4b49a");
+if(mesh.setColorAt)mesh.setColorAt(i,tint);
+}
+mesh.instanceMatrix.needsUpdate=true;
+if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
+mesh.castShadow=false;mesh.receiveShadow=true;mesh.frustumCulled=false;
+mesh.userData.tbKeep=1;
+holder.add(mesh);
+return mesh;
+}
+function showInstance(mesh,row,groundY,on){
+if(!mesh||row._i==null)return;
+const dummy=new THREE.Object3D();
+if(!on){
+dummy.position.set(0,-100,0);
+dummy.scale.set(0,0,0);
+}else{
+const y=groundY(row.cx,row.cz)||0;
+const w=Math.max(3,row.houseW||row.fw||6);
+const d=Math.max(3,row.houseD||row.fd||5);
+dummy.position.set(row.cx,y,row.cz);
+dummy.rotation.set(0,(row.yawDeg||0)*Math.PI/180,0);
+dummy.scale.set(w,1,d);
+}
+dummy.updateMatrix();
+mesh.setMatrixAt(row._i,dummy.matrix);
+}
+function relod(x,z){
+const st=window.TBBuildings._lod;
+if(!st||!isFinite(x)||!isFinite(z))return;
+if(st.anchor&&Math.hypot(x-st.anchor.x,z-st.anchor.z)<22)return;
+st.anchor={x:x,z:z};
+let changed=false;
+for(let i=0;i<st.rows.length;i++){
+const row=st.rows[i];
+const want=Math.hypot(row.cx-x,row.cz-z)<96;
+if(want&&!row._detail){
+const g=new THREE.Group();
+g.userData.tbKeep=1;
+st.holder.add(g);
+st.placeBody(g,row);
+row._detail=g;
+showInstance(st.mesh,row,st.groundY,false);
+changed=true;
+}else if(!want&&row._detail){
+st.holder.remove(row._detail);
+row._detail=null;
+showInstance(st.mesh,row,st.groundY,true);
+changed=true;
+}
+}
+if(changed)st.mesh.instanceMatrix.needsUpdate=true;
+}
 function place(parent,groundY,buildings,origin,meters,blocks){
+window.TBBuildings._lod=null;
 const rows=layout(buildings,origin,meters,groundY);
 window.TBBuildings.rows=rows;
 clearBlocks(blocks);
@@ -1110,10 +1182,16 @@ if(!parent||!window.TBTiles||!TBTiles.house)return rows;
 const holder=new THREE.Group();
 holder.name="tb-buildings";
 parent.add(holder);
-rows.forEach(function(row){
+function sendBlocks(row){
+if(row._blocksSent)return;
+row._blocksSent=1;
+sendBlocks(row);
+}
+function placeBody(into,row){
+const holder=into;
 if(row.rec&&row.rec.recipe==="marker"){
 if(window.TBProps&&TBProps.stamp)TBProps.stamp(holder,row.rec.kit||row.type,row.cx,row.cz,(row.door&&row.door.yawOut)||0,groundY);
-row.blocks.forEach(function(b){if(blocks)blocks.push(b);});
+sendBlocks(row);
 addRoleDress(holder,row,groundY);
 return;
 }
@@ -1131,7 +1209,7 @@ if(doorClear(row,sx,sz))TBTiles.stall(holder,groundY,sx,sz,d.yawOut,!!(row.seed&
 }
 dressYard(holder,groundY,row,blocks);
 }
-row.blocks.forEach(function(b){if(blocks)blocks.push(b);});
+sendBlocks(row);
 addRoleDress(holder,row,groundY);
 return;
 }
@@ -1165,9 +1243,17 @@ sx=Math.max(plotL,Math.min(plotR,sx));
 if(doorClear(row,sx,sz))TBTiles.stall(holder,groundY,sx,sz,0,!!row.seed.blue);
 }
 dressYard(holder,groundY,row,blocks);
-row.blocks.forEach(function(b){if(blocks)blocks.push(b);});
+sendBlocks(row);
 addRoleDress(holder,row,groundY);
-});
+}
+if(rows.length>90){
+const mesh=instanceBoxes(holder,rows,groundY);
+rows.forEach(sendBlocks);
+window.TBBuildings._lod={holder:holder,rows:rows,groundY:groundY,blocks:blocks,mesh:mesh,anchor:null,placeBody:placeBody};
+if(rows.length)console.info("tb buildings",rows.length,"instanced");
+return rows;
+}
+rows.forEach(function(row){placeBody(holder,row);});
 if(rows.length)console.info("tb buildings",rows.length);
 return rows;
 }
@@ -1175,7 +1261,7 @@ window.TBBuildings={
 MAP:BUILDING_MAP,recipeFor:recipeFor,hashId:hashId,seedOf:seedOf,
 inShape:inShape,partsFor:partsFor,anchorOf:anchorOf,sampleLot:sampleLot,foundation:foundation,
 fitShell:fitShell,targetOf:targetOf,doorClear:doorClear,yardProps:yardProps,
-layout:layout,place:place,decodeB64:decodeB64,maskOf:maskOf,prettyName:prettyName,kitBox:kitBox,wantsKit:wantsKit,
+layout:layout,place:place,relod:relod,decodeB64:decodeB64,maskOf:maskOf,prettyName:prettyName,kitBox:kitBox,wantsKit:wantsKit,
 SIDE:SIDE,rows:[]
 };
 })();

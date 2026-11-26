@@ -596,6 +596,15 @@ function stampPlan(
     }
   };
   for (const cell of plan.roadCells) {
+    const mx = cell.gx * 3;
+    const my = cell.gy * 3;
+    if (
+      mx < originX - 8 ||
+      my < originY - 8 ||
+      mx >= originX + size + 8 ||
+      my >= originY + size + 8
+    )
+      continue;
     const pad = cell.widthM >= 4.5 ? 1 : 0;
     paint(cell.gx, cell.gy, pad, (ix, iy) => {
       paths[idx(ix, iy, size)] = 1;
@@ -657,6 +666,13 @@ function placeSettlementSprites(
   const originY = wy * size;
   const layout = settlementLayout(node, world);
   for (const b of layout) {
+    if (
+      b.x < originX - 18 ||
+      b.y < originY - 18 ||
+      b.x >= originX + size + 18 ||
+      b.y >= originY + size + 18
+    )
+      continue;
     stampBuildingYard(cobble, paths, size, b, originX, originY);
     if (buildingInChunk(b, wx, wy, size)) sprites.push(toPlacedSprite(b, originX, originY));
   }

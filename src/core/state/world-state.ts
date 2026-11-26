@@ -910,7 +910,9 @@ export class WorldState {
     }
     let areaExport = this.areaCache.get(cacheKey);
     if (!areaExport) {
+      const exportStarted = performance.now();
       areaExport = buildAreaExport(world, node, { timeOfDayHours: this.clockHours });
+      (globalThis as { __tbExportMs?: number }).__tbExportMs = Math.round(performance.now() - exportStarted);
       this.areaCache.set(cacheKey, areaExport);
     } else {
       areaExport.meta.timeOfDayHours = Math.round(this.clockHours * 1000) / 1000;

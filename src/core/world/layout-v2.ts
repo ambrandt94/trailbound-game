@@ -117,6 +117,13 @@ export interface PlanSegment {
   gates: number[];
 }
 
+/** One district of a capital or metropolis. Quadrants are the ward cutter's cells. */
+export interface PlanWard {
+  id: number;
+  kind: string;
+  quadrants: Array<{ x: number; y: number }>;
+}
+
 export interface SettlementPlan {
   tier: SettlementTierId;
   style: string;
@@ -143,6 +150,8 @@ export interface SettlementPlan {
   planMs?: number;
   wallLoop?: Array<[number, number]>;
   gates?: Array<{ x: number; y: number }>;
+  /** Capital and metropolis only. The whole core is still one area. */
+  wards?: PlanWard[];
 }
 
 const DIRS: ReadonlyArray<readonly [number, number, Cardinal]> = [
