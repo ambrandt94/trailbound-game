@@ -881,7 +881,7 @@ strokeSeg(cov,tw,th,worldW,worldH,pos[i][0],pos[i][1],pos[b][0],pos[b][1],half,f
 }
 paint(road,roadC);
 paint(dirt,dirtC);
-(yards||[]).forEach(function(r){stampRect(dirtC,tw,th,worldW,worldH,r[0],r[1],r[2],r[3],0.32);});
+(yards||[]).forEach(function(r){stampSoft(dirtC,tw,th,worldW,worldH,r[0],r[1],r[2],r[3]);});
 const data=new Uint8Array(tw*th*4);
 for(let i=0;i<data.length/4;i++){
 data[i*4]=Math.max(0,Math.min(255,Math.round(roadC[i]*255)));
@@ -954,6 +954,27 @@ t=t<0?0:t>1?1:t;
 const d=Math.hypot(px-(ax+dx*t),py-(ay+dy*t));
 const u=(half+feather-d)/(feather*2);
 const c=u<=0?0:u>=1?1:u*u*(3-2*u);
+const i=y*tw+x;
+if(c>cov[i])cov[i]=c;
+}
+}
+/* Yards are a warm hint, not a painted square. The centre stays well under a full dirt mix. */
+function stampSoft(cov,tw,th,worldW,worldH,x0,z0,x1,z1){
+const feather=2.8,peak=0.34;
+const ix=(x0+x1)/2,iz=(z0+z1)/2;
+const hx=Math.max(0.6,(x1-x0)/2),hz=Math.max(0.6,(z1-z0)/2);
+const tx0=Math.max(0,Math.floor((x0-feather)/worldW*tw));
+const tx1=Math.min(tw-1,Math.ceil((x1+feather)/worldW*tw));
+const ty0=Math.max(0,Math.floor((z0-feather)/worldH*th));
+const ty1=Math.min(th-1,Math.ceil((z1+feather)/worldH*th));
+for(let y=ty0;y<=ty1;y++)for(let x=tx0;x<=tx1;x++){
+const px=(x+0.5)/tw*worldW,pz=(y+0.5)/th*worldH;
+const dx=px<x0?x0-px:px>x1?px-x1:0,dz=pz<z0?z0-pz:pz>z1?pz-z1:0;
+const d=Math.hypot(dx,dz),u=(feather-d)/Math.max(0.08,feather);
+const edge=u<=0?0:u>=1?1:u*u*(3-2*u);
+const nx=(px-ix)/hx,nz=(pz-iz)/hz;
+const fall=Math.max(0,1-Math.min(1,(nx*nx+nz*nz)*0.55));
+const c=edge*fall*peak;
 const i=y*tw+x;
 if(c>cov[i])cov[i]=c;
 }
@@ -1063,7 +1084,7 @@ loc.push(toLocalXZ(xy[0],xy[1],field));
 }
 for(let i=1;i<loc.length;i++)strokeSeg(cov,g.tw,g.th,g.worldW,g.worldH,loc[i-1][0],loc[i-1][1],loc[i][0],loc[i][1],half,0.42);
 });
-(yards||[]).forEach(function(r){stampRect(dirtC,g.tw,g.th,g.worldW,g.worldH,r[0],r[1],r[2],r[3],0.32);});
+(yards||[]).forEach(function(r){stampSoft(dirtC,g.tw,g.th,g.worldW,g.worldH,r[0],r[1],r[2],r[3]);});
 return packCover(roadC,dirtC,g);
 }
 /* Polylines win when they carry v0.6 fields. Otherwise a surface layer,

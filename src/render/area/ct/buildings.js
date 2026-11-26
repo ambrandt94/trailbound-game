@@ -914,7 +914,7 @@ g.strokeStyle="#6b4a2a";
 g.lineWidth=4;
 g.strokeRect(2,2,60,28);
 g.fillStyle=ink||"#3a2a16";
-g.font="bold 18px monospace";
+g.font=String(text||"?").length>8?"bold 13px monospace":"bold 18px monospace";
 g.textAlign="center";
 g.textBaseline="middle";
 g.fillText(String(text||"?"),32,17);
@@ -942,6 +942,65 @@ tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
 tex.colorSpace=THREE.SRGBColorSpace;
 return new THREE.MeshLambertMaterial({map:tex});
 }
+function logMaterial(){
+const c=document.createElement("canvas");
+c.width=32;c.height=32;
+const g=c.getContext("2d");
+g.imageSmoothingEnabled=false;
+g.fillStyle="#5c3318";
+g.fillRect(0,0,32,32);
+for(let y=0;y<32;y+=8){
+g.fillStyle=y%16?"#7a4a28":"#6a3e20";
+g.fillRect(0,y,32,6);
+g.fillStyle="#c4a574";
+g.fillRect(0,y+6,32,2);
+}
+const tex=new THREE.CanvasTexture(c);
+tex.magFilter=THREE.NearestFilter;
+tex.minFilter=THREE.NearestFilter;
+tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+tex.colorSpace=THREE.SRGBColorSpace;
+return new THREE.MeshLambertMaterial({map:tex});
+}
+function gableGeometry(w,d,rise){
+const hw=w/2,hd=d/2;
+const pos=new Float32Array([
+-hw,0,-hd, hw,0,-hd, hw,rise,0, -hw,rise,0,
+-hw,0,hd, hw,0,hd, hw,rise,0, -hw,rise,0,
+-hw,0,-hd, -hw,rise,0, -hw,0,hd,
+hw,0,-hd, hw,0,hd, hw,rise,0
+]);
+const uv=new Float32Array([
+0,0, 1,0, 1,1, 0,1,
+0,0, 1,0, 1,1, 0,1,
+0,0, 0.5,1, 1,0,
+0,0, 1,0, 0.5,1
+]);
+const idx=[];
+for(let f=0;f<2;f++){const b=f*4;idx.push(b,b+1,b+2,b,b+2,b+3);}
+idx.push(8,10,9, 11,13,12);
+const geo=new THREE.BufferGeometry();
+geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+geo.setAttribute("uv",new THREE.BufferAttribute(uv,2));
+geo.setIndex(idx);
+geo.computeVertexNormals();
+return geo;
+}
+function cabinMesh(w,d,wallMat,roofMat){
+const g=new THREE.Group();
+const wallH=2.05,oh=0.42,rise=1.25;
+const logs=logMaterial();
+const body=new THREE.Mesh(new THREE.BoxGeometry(w,wallH,d),logs);
+body.position.y=wallH/2+0.08;
+const door=new THREE.Mesh(new THREE.BoxGeometry(0.7,1.35,0.08),pixelMaterial("#3a2414","cabin"));
+door.position.set(0,0.78,d/2+0.02);
+const roof=new THREE.Mesh(gableGeometry(w+oh*2,d+oh*2,rise),roofMat);
+roof.position.y=wallH+0.08;
+const chim=new THREE.Mesh(new THREE.BoxGeometry(0.38,0.85,0.38),pixelMaterial("#6e5a52","block"));
+chim.position.set(w*0.28,wallH+rise*0.55,-d*0.12);
+g.add(body,door,roof,chim);
+return g;
+}
 function placeForm(holder,row,groundY){
 const y=groundY(row.cx,row.cz)||row.floorY||0;
 const g=new THREE.Group();
@@ -964,12 +1023,7 @@ const cone=new THREE.Mesh(new THREE.ConeGeometry(Math.min(w,d)*0.55,row.form==="
 cone.position.y=row.form==="teepee"?2.2:1.4;
 g.add(cone);
 }else if(row.form==="cabin"||row.form==="hut"||row.form==="longhouse"){
-const body=new THREE.Mesh(new THREE.BoxGeometry(w,2.3,d),mat);
-body.position.y=1.35;
-const cap=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.62,1.5,4),roof);
-cap.position.y=3.15;
-cap.rotation.y=Math.PI/4;
-g.add(body,cap);
+g.add(cabinMesh(w,d,mat,roof));
 }else{
 const body=new THREE.Mesh(new THREE.BoxGeometry(w,2.1,d),mat);
 body.position.y=1.15;
@@ -988,30 +1042,65 @@ floors:row.floors,baseY:row.baseY,found:row.found,wallH:row.wallH,rise:row.rise,
 slate:row.slate,wallMat:wallMat,door:1,chimney:1,flowers:1,sign:null
 });
 }
+function roleGroundTexture(hex){
+const key="ground|"+hex;
+const hit=SIGN_TEX.get(key);
+if(hit)return hit;
+const c=document.createElement("canvas");
+c.width=64;c.height=64;
+const g=c.getContext("2d");
+g.clearRect(0,0,64,64);
+g.fillStyle=hex||"#e4d2b0";
+g.beginPath();
+g.arc(32,32,30,0,Math.PI*2);
+g.fill();
+const img=g.getImageData(0,0,64,64);
+for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+const dist=Math.hypot(x-31.5,y-31.5)/30;
+const a=dist>=1?0:Math.pow(1-dist,1.6);
+const i=(y*64+x)*4;
+img.data[i+3]=Math.round(a*150);
+}
+g.putImageData(img,0,0);
+const tex=new THREE.CanvasTexture(c);
+tex.magFilter=THREE.LinearFilter;
+tex.minFilter=THREE.LinearFilter;
+tex.colorSpace=THREE.SRGBColorSpace;
+SIGN_TEX.set(key,tex);
+return tex;
+}
 function addRoleDress(holder,row,groundY){
 if(!row.role)return;
-const y=groundY(row.cx,row.cz)||row.floorY||0;
-const top=y+(row.found||0.4)+(row.wallTotal||row.wallH||2.2)+(row.rise||0.8)+0.15;
-const tex=glyphTexture(row.roleLabel||row.role,"#2a1c10");
-const mat=new THREE.MeshLambertMaterial({map:tex});
-const board=new THREE.Mesh(new THREE.BoxGeometry(3.2,0.12,1.5),mat);
-board.position.set(row.cx,top+1.1,row.cz);
-board.rotation.y=(row.yawDeg||0)*Math.PI/180;
-holder.add(board);
-const post2=new THREE.Mesh(new THREE.BoxGeometry(0.16,1.2,0.16),pixelMaterial("#6b4428","cabin"));
-post2.position.set(row.cx,top+0.5,row.cz);
-holder.add(post2);
-const postMat=pixelMaterial("#8d5a32","cabin");
-const post=new THREE.Mesh(new THREE.BoxGeometry(0.12,1.3,0.12),postMat);
 const yaw=(row.yawDeg||0)*Math.PI/180;
-const doorX=row.cx+Math.sin(yaw)*((row.houseD||row.fd||4)/2+0.4);
-const doorZ=row.cz+Math.cos(yaw)*((row.houseD||row.fd||4)/2+0.4);
-post.position.set(doorX,y+0.7,doorZ);
+const fx=Math.sin(yaw),fz=Math.cos(yaw);
+const rx=fz,rz=-fx;
+const reach=(row.houseD||row.fd||5)/2+0.7;
+const x=row.cx+fx*reach+rx*0.85;
+const z=row.cz+fz*reach+rz*0.85;
+const y=groundY(x,z)||row.floorY||0;
+const tint=new THREE.Mesh(new THREE.CircleGeometry(Math.max(row.fw||4,row.fd||4)*0.62,20),new THREE.MeshBasicMaterial({
+map:roleGroundTexture(row.roleColour||"#e4d2b0"),
+transparent:true,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2
+}));
+tint.rotation.x=-Math.PI/2;
+tint.position.set(row.cx,(groundY(row.cx,row.cz)||y)+0.05,row.cz);
+holder.add(tint);
+const wood=pixelMaterial("#5c3a22","cabin");
+const post=new THREE.Mesh(new THREE.BoxGeometry(0.1,1.7,0.1),wood);
+post.position.set(x,y+0.85,z);
 holder.add(post);
-const hang=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.45,0.06),mat);
-hang.position.set(doorX,y+1.35,doorZ);
-hang.rotation.y=yaw;
-holder.add(hang);
+const face=new THREE.Mesh(new THREE.PlaneGeometry(1.55,0.62),new THREE.MeshLambertMaterial({map:glyphTexture(row.roleLabel||row.role,"#2a1c10"),side:THREE.FrontSide}));
+face.position.set(x,y+1.55,z);
+face.rotation.order="YXZ";
+face.rotation.y=yaw;
+face.rotation.x=0.55;
+holder.add(face);
+const back=new THREE.Mesh(new THREE.PlaneGeometry(1.55,0.62),wood);
+back.position.set(x-fx*0.025,y+1.55,z-fz*0.025);
+back.rotation.order="YXZ";
+back.rotation.y=yaw+Math.PI;
+back.rotation.x=-0.55;
+holder.add(back);
 }
 function place(parent,groundY,buildings,origin,meters,blocks){
 const rows=layout(buildings,origin,meters,groundY);

@@ -1,6 +1,6 @@
 /**
  * Map and 3D shots for settlement generation 3.
- * Role colours are on (`?roles=1`). Orc camps use the culture override.
+ * Player view: role overlay off, hover labels on. Orc camps use the culture override.
  */
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
@@ -129,7 +129,7 @@ async function backToMap() {
 }
 
 try {
-  await page.goto(`${base}?roles=1`);
+  await page.goto(base);
   await reachMap(7741);
   const nodes = await listSettlements();
   console.log('settlements', nodes.length);
@@ -182,7 +182,7 @@ try {
   }
   if (!forest) {
     for (const seed of [64, 8801, 4401, 2207]) {
-      await page.goto(`${base}?roles=1`);
+      await page.goto(base);
       await reachMap(seed);
       const more = await listSettlements();
       forest = pick(
@@ -203,7 +203,7 @@ try {
     await backToMap();
   }
 
-  await page.goto(`${base}?roles=1&culture=orc`);
+  await page.goto(`${base}?culture=orc`);
   await reachMap(7741);
   const orcNodes = await listSettlements();
   const orc =
@@ -217,14 +217,14 @@ try {
     await shot('c2-3d-orc-camp');
   }
 
-  await page.goto(`${base}?roles=1&settlementGen=2`);
+  await page.goto(`${base}?settlementGen=2`);
   await reachMap(7741);
   if (humanTown) {
     const gen2 = (await listSettlements()).find((n) => n.id === humanTown.id) ?? humanTown;
     await frame(gen2, 3.6);
     await shot('c2-map-gen2-same-seed');
   }
-  await page.goto(`${base}?roles=1&settlementGen=3`);
+  await page.goto(`${base}?settlementGen=3`);
   await reachMap(7741);
   if (humanTown) {
     await frame(humanTown, 3.6);

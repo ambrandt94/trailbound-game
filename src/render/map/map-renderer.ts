@@ -148,7 +148,7 @@ export class MapRenderer {
       zones: state.bare ? null : (state.zones ?? null),
       markers: !state.bare,
       biomeWash: state.bare ? null : (state.biomeWash ?? null),
-      roleOverlay: !state.bare && roleDebugEnabled(),
+      roleOverlay: false,
     });
     if (!state.bare && roleDebugEnabled()) {
       drawRoleLegend(ctx, cssW);
