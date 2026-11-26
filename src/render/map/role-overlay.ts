@@ -1,7 +1,9 @@
 /**
  * Debug role colours on the world map: rotated footprints, curved streets,
- * the wall line, and a glyph on each building. Player hover labels are drawn
- * separately. This layer is off unless `?roles=1` or the World Gen checkbox.
+ * and the wall line. Glyphs are not drawn here. A world-space font stays
+ * large when a town is only a few pixels, and the letters pile up on the
+ * icon. The inset keeps the readable plan. Player labels are screen-space.
+ * This layer is off unless `?roles=1` or the World Gen checkbox.
  */
 import { ROLE_STYLE, type BuildingRole, type RoleGroup } from '../../core/world/building-roles';
 import { settlementPlan } from '../../core/world/layout-v2';
@@ -117,14 +119,6 @@ export function drawRoleOverlay(
       ctx.strokeStyle = 'rgba(42, 32, 22, 0.85)';
       ctx.lineWidth = 1 / Math.max(0.4, camera.scale);
       ctx.stroke();
-      const gx = fineToDisplay(obb.cx / 8, mapStep) * TILE;
-      const gy = fineToDisplay(obb.cy / 8, mapStep) * TILE;
-      const glyph = ROLE_STYLE[(building.role as BuildingRole) || 'unassigned'].glyph;
-      ctx.fillStyle = '#2a2418';
-      ctx.font = `${Math.max(8, 11 / Math.max(0.8, camera.scale / 2))}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(glyph, gx, gy);
     }
     ctx.restore();
   }
