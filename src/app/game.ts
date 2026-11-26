@@ -98,11 +98,14 @@ function raceMetricsOf(object: { userData: Record<string, unknown> }): ForgeRace
   ) {
     return null;
   }
+  const runDuration = typeof metrics.runDuration === 'number' ? metrics.runDuration : undefined;
+  const runStrideM = typeof metrics.runStrideM === 'number' ? metrics.runStrideM : undefined;
   return {
     heightM: metrics.heightM,
     strideM: metrics.strideM,
     walkDuration: metrics.walkDuration,
     scale: typeof metrics.scale === 'number' && metrics.scale > 0 ? metrics.scale : undefined,
+    ...(runDuration && runStrideM ? { runDuration, runStrideM } : {}),
   };
 }
 import type { PlayerAvatar } from '../core/people/avatar';
@@ -714,7 +717,7 @@ export class Game implements GameHost {
     const pose = forgePresentation(raceMetricsOf(body.object3D), speed);
     body.object3D.scale.setScalar(pose.scale);
     body.present({
-      clip: speed > 0.4 ? 'Walk' : 'Idle',
+      clip: pose.clip,
       timeScale: pose.timeScale,
       fade: 0.12,
     });

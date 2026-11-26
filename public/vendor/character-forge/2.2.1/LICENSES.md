@@ -1,4 +1,4 @@
-# LICENSES: Character Forge runtime 2.1.1
+# LICENSES: Character Forge runtime 2.2.1
 
 Every shipped file is listed by rule below (machine-readable: `licenses.json`). `tools/licenses.mjs check` fails the build if a file has no rule or if any Kevin Iglesias (KI) clip is present.
 
@@ -22,6 +22,10 @@ Every shipped file is listed by rule below (machine-readable: `licenses.json`). 
 
 - Kevin Iglesias animation clips: licensed to Alex (purchased; Unity Asset Store licence lets them be used in the game but not redistributed as raw files). They are NEVER in this public folder or assets.json. They ship separately as a private pack (`ki_manifest.json` + clip files) that the game serves from a private location and registers at runtime: `CF.init({ privateAnimBaseUrl })` or `CF.registerAnimSet('ki', urlOrLoader)`, then `policy.animationSet: 'cf+ki'` or `'cf+cc0+ki'`. Keep the private pack out of the public game repo (gitignore it / fetch it from private storage at build or run time).
 - three.js: peer dependency (MIT), not bundled.
+
+## Kits (2.2.0)
+
+- The registration API (CF.loadKit / registerGarment / registerRace / registerClip) loads third-party kit content at run time from the kit's own URL. Kit files are not part of this folder; each kit manifest carries its own `license`. Kits cannot register licensed (KI) clips.
 
 ## MIT notice (three.js addons bundled in chunks/engine_entry-*.mjs)
 

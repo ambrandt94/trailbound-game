@@ -383,11 +383,14 @@ export async function createTownSession(canvas, hooks) {
     const walkDuration = raw.walkDuration;
     if (!(heightM > 0) || !(strideM > 0) || !(walkDuration > 0)) return null;
     const scale = raw.scale;
+    const runDuration = raw.runDuration;
+    const runStrideM = raw.runStrideM;
     return {
       heightM,
       strideM,
       walkDuration,
       scale: typeof scale === 'number' && scale > 0 ? scale : 1,
+      ...(runDuration > 0 && runStrideM > 0 ? { runDuration, runStrideM } : {}),
     };
   }
 
@@ -402,17 +405,24 @@ export async function createTownSession(canvas, hooks) {
     const presented = forgePresentation(metrics, speed);
     const scale = presented.scale * P.scale;
     obj.scale.setScalar(scale);
+    const durations = { Walk: metrics ? metrics.walkDuration : AREA_PACE.forgeWalkDuration };
+    const strides = { Walk: metrics ? metrics.strideM : AREA_PACE.forgeWalkStride };
+    if (metrics && metrics.runDuration > 0 && metrics.runStrideM > 0) {
+      durations.Run = metrics.runDuration;
+      strides.Run = metrics.runStrideM;
+    }
     const sample = locomotionSample({
       state: p.st,
       speed,
       scale,
-      clips: ['Idle', 'Walk'],
-      durations: { Walk: metrics ? metrics.walkDuration : AREA_PACE.forgeWalkDuration },
-      strides: { Walk: metrics ? metrics.strideM : AREA_PACE.forgeWalkStride },
+      clips: durations.Run ? ['Idle', 'Walk', 'Run'] : ['Idle', 'Walk'],
+      durations,
+      strides,
       // Foot-locked beside the wagon: a walk at wagon pace is quicker than a stroll, so lift the walk cap.
       maxRate: p.autoWalk ? AREA_PACE.fastPlaybackCap : undefined,
     });
-    const clip = forgeClip(sample, forgePawn.clip === 'Walk' ? 'Walk' : 'Idle');
+    const current = forgePawn.clip === 'Run' || forgePawn.clip === 'Walk' ? forgePawn.clip : 'Idle';
+    const clip = forgeClip(sample, current);
     const pose = {
       clip,
       timeScale: sample.clip ? sample.timeScale : 1,

@@ -38,25 +38,55 @@
    "type": "string"
   },
   "race": {
-   "enum": [
-    "human",
-    "wood_elf",
-    "dark_elf",
-    "great_elf",
-    "mousefolk",
-    "tiefling",
-    "halfling",
-    "gnome",
-    "dwarf",
-    "goliath",
-    "firbolg",
-    "orc",
-    "goblin",
-    "kobold",
-    "imp",
-    "pixie",
-    "dragonborn"
+   "anyOf": [
+    {
+     "enum": [
+      "human",
+      "wood_elf",
+      "dark_elf",
+      "great_elf",
+      "mousefolk",
+      "tiefling",
+      "halfling",
+      "gnome",
+      "dwarf",
+      "goliath",
+      "firbolg",
+      "orc",
+      "goblin",
+      "kobold",
+      "imp",
+      "pixie",
+      "dragonborn"
+     ]
+    },
+    {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9_-]{1,31}/[a-z0-9][a-z0-9_-]{0,47}$",
+     "description": "registered race (kit)"
+    }
    ]
+  },
+  "kits": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "namespace"
+    ],
+    "properties": {
+     "namespace": {
+      "type": "string"
+     },
+     "version": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "description": "2.2.0: kits this recipe needs (CF.loadKit); absent for builtin-only recipes"
   },
   "bodyType": {
    "enum": [
@@ -173,30 +203,37 @@
   "outfit": {
    "type": "object",
    "propertyNames": {
-    "enum": [
-     "smallclothes",
-     "socks",
-     "torso_inner",
-     "legs",
-     "feet",
-     "skirt",
-     "torso_mid",
-     "belt",
-     "baldric",
-     "chaps",
-     "apron",
-     "neck_wrap",
-     "chest",
-     "arm_l",
-     "arm_r",
-     "hand_l",
-     "hand_r",
-     "shin_l",
-     "shin_r",
-     "tabard",
-     "outer",
-     "hands",
-     "hood"
+    "anyOf": [
+     {
+      "enum": [
+       "smallclothes",
+       "socks",
+       "torso_inner",
+       "legs",
+       "feet",
+       "skirt",
+       "torso_mid",
+       "belt",
+       "baldric",
+       "chaps",
+       "apron",
+       "neck_wrap",
+       "chest",
+       "arm_l",
+       "arm_r",
+       "hand_l",
+       "hand_r",
+       "shin_l",
+       "shin_r",
+       "tabard",
+       "outer",
+       "hands",
+       "hood"
+      ]
+     },
+     {
+      "pattern": "^[a-z][a-z0-9_-]{1,31}/[a-z0-9][a-z0-9_-]{0,47}$"
+     }
     ]
    },
    "additionalProperties": {
@@ -206,29 +243,37 @@
     ],
     "properties": {
      "id": {
-      "enum": [
-       "homespun_shirt",
-       "smallclothes",
-       "broadfall_trousers",
-       "wool_socks",
-       "leather_belt",
-       "calico_vest",
-       "baldric",
-       "tank",
-       "tee",
-       "tunic",
-       "coat",
-       "painted_shorts",
-       "trousers",
-       "breeches",
-       "shoes",
-       "tall_boots",
-       "bracers",
-       "gloves",
-       "strap",
-       "scarf",
-       "hood",
-       "hooded_cloak"
+      "anyOf": [
+       {
+        "enum": [
+         "homespun_shirt",
+         "smallclothes",
+         "broadfall_trousers",
+         "wool_socks",
+         "leather_belt",
+         "calico_vest",
+         "baldric",
+         "tank",
+         "tee",
+         "tunic",
+         "coat",
+         "painted_shorts",
+         "trousers",
+         "breeches",
+         "shoes",
+         "tall_boots",
+         "bracers",
+         "gloves",
+         "strap",
+         "scarf",
+         "hood",
+         "hooded_cloak"
+        ]
+       },
+       {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{1,31}/[a-z0-9][a-z0-9_-]{0,47}$"
+       }
       ]
      },
      "variant": {
@@ -246,7 +291,7 @@
     "type": "object",
     "additionalProperties": {
      "type": "string",
-     "description": "'#rrggbb' (procedural / mesh regions) or a ramp id (painted regions A-D)"
+     "description": "'#rrggbb' (procedural / mesh regions, kit tint regions) or a ramp id (painted regions A-D)"
     }
    }
   }

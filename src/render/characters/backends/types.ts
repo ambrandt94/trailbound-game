@@ -89,7 +89,7 @@ export interface BuiltCharacter {
   object3D: Object3D;
   mixer: AnimationMixer;
   clips?: Record<string, AnimationClip>;
-  play(name: 'Idle' | 'Walk', phase?: number): void;
+  play(name: 'Idle' | 'Walk' | 'Run', phase?: number): void;
   /** v2. v1 playback sets `mixer.timeScale` directly. */
   setTimeScale?(scale: number): void;
   /** v2 attachment point. */

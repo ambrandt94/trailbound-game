@@ -220,6 +220,7 @@ test('locomotion crossfades and locks the feet to speed', () => {
     clips: ['Idle', 'Walk', 'Run'],
   });
   expect(sprint.clip).toBe('Run');
+  expect(forgeClip(sprint, 'Walk')).toBe('Run');
   expect(sprint.timeScale).toBeCloseTo(1.28);
   const held = locomotionSample({
     state: 'jump',

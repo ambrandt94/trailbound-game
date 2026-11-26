@@ -1,6 +1,8 @@
 # Player avatar hook
 
-`forge.ts` is the game-facing character API. `backends/v2.ts` imports the Character Forge 2.1.1 runtime and is the default. `backends/v1.ts` imports the 1.2.1 runtime and stays in the tree as the fallback. With no `?cf=` param the game loads v2. `?cf=2` (also `v2` / `cf2`) does the same. `?cf=1` (also `v1` / `cf1`) selects v1. `?cf=0` skips the runtime. If v2 fails to init or preload, the game warns and loads v1 so the player still has a body.
+`forge.ts` is the game-facing character API. `backends/v2.ts` imports the Character Forge 2.2.1 runtime and is the default. `backends/v1.ts` imports the 1.2.1 runtime and stays in the tree as the fallback. With no `?cf=` param the game loads v2. `?cf=2` (also `v2` / `cf2`) does the same. `?cf=1` (also `v1` / `cf1`) selects v1. `?cf=0` skips the runtime. If v2 fails to init or preload, the game warns and loads v1 so the player still has a body.
+
+Public builds keep the animation policy at `cf`. 2.2.1's default locomotion is `full`, so Idle, Walk, and Run are the CC0 Quaternius clips shipped in the runtime. A private build can set `VITE_CF_PRIVATE_ANIM_URL` to a Kevin Iglesias pack served outside this repo. That is the only switch to `cf+ki`. Do not commit that pack or point a public build at it.
 
 The area controller (the port into `src/render/area`) should not import Character Forge. After the player confirms a look, the committed body is available here:
 
@@ -28,6 +30,6 @@ if (body) {
 
 `getPlayerBody()` is null until a look is confirmed or a continue warms the saved recipe. After `?cf=0` or a Forge failure it is still a body: `source === 'placeholder'` (a lit capsule pawn, not a block). Do not dispose the body from the area; the creator replaces it on the next confirm. The saved `player.avatar.recipe` is the opaque Forge recipe, so a rebuild of that object matches the creator. Schema 5 records `player.avatar.engine`. A look confirmed under the default runtime is `cf2`. A schema 4 save copies that recipe into `legacyRecipe`, tags `engine: 'cf1'`, and still builds. Loading a `cf1` avatar while v2 is selected migrates a copy in memory and does not rewrite the save. Confirming that look stores `engine: 'cf2'` and keeps the old recipe on `legacyRecipe`. Every v2 body, in town and on the road, uses one uniform scale: 1.4 divided by the v2 human height. Races keep their lineup, and the scale is not Y-only. v1 has no catalog height and stays at scale 1.
 
-Pixies hover. `present` still asks for `Idle` or `Walk`. Forge maps those to Hover / FlyMove and crossfades. `play` is the hard cut the creator uses.
+Pixies hover. `present` still asks for `Idle` or `Walk` on a flyer (ground Run is left off). Other races use `Run` once they are moving faster than a walk. `play` is the hard cut the creator uses.
 
 Set the area renderer to `outputColorSpace = SRGBColorSpace` (the shell already does). Forge atlases are sRGB and nearest-filtered.

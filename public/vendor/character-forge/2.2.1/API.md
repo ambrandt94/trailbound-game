@@ -1,9 +1,9 @@
-# Character Forge runtime 2.1.1 (api 2)
+# Character Forge runtime 2.2.0 (api 2)
 
 ```js
 import * as THREE from 'three';                       // peer dependency, >=0.187 <0.190 (tested 0.187.0)
-import CF from './character-forge/2.1.1/cf-runtime.mjs';
-await CF.init({ THREE, baseUrl: '/character-forge/2.1.1/' });   // optional: fetch, createCanvas|canvasFactory, decodeImage, policy, bundle (CF_API_MISMATCH check), privateAnimBaseUrl, animationSet, platform
+import CF from './character-forge/2.2.0/cf-runtime.mjs';
+await CF.init({ THREE, baseUrl: '/character-forge/2.2.0/' });   // optional: fetch, createCanvas|canvasFactory, decodeImage, policy, bundle (CF_API_MISMATCH check), privateAnimBaseUrl, animationSet, platform
 const recipe = CF.randomRecipe(1234, { race: 'dwarf', role: 'smith', tier: 'town' });
 const body = await CF.build(recipe, { texSize: 256, signal });   // sliced: yields every ~6 ms (budgetMs), sync-equivalent result
 scene.add(body.object3D); body.play('Walk');           // per frame: body.mixer.update(dt)
@@ -26,7 +26,8 @@ Import and these run in Node with no `document` / `window`: `init`, `catalog`, `
 ## Bodies
 `CF.build(recipe, {budgetMs, texSize, signal, trace})` → `{object3D, mixer, clips, info, play(name,{fade,timeScale}), setTimeScale, socket(name), setRecipe(next, {budgetMs, signal, trace}), dispose}`.
 - Feet at y=0, +Z forward, 1 unit = 1 m (chibi scale: human 0.946 m; per race `catalog().races[id].heightM`, `strideM`, `walkDuration`).
-- Clips: `Idle`, `Walk` always (CF-authored); pixie/imp also `Hover`, `FlyMove` (wing flap baked as tracks). With `policy.animationSet: 'cf+cc0'`: `Run Attack1H Magic PickUp Cheer` (Quaternius, CC0).
+- Clips (2.2.1, `policy.locomotion: 'full'`, the default): `Idle`, `Walk`, `Run` are fully animated mocap with every rig bone keyed: `KI_*` when the private KI pack is in `animationSet`, otherwise CC0 Quaternius (public-safe, `assets/packs/quaternius_anims.glb`, loaded automatically). The CF-authored clips stay as `CF_Idle`, `CF_Walk`. `clip.userData.locomotion` = `'ki' | 'quaternius'`. `locomotion: 'cf'` restores the 2.2.0 behaviour below.
+- Clips (2.2.0 / `locomotion: 'cf'`): `Idle`, `Walk` always (CF-authored); pixie/imp also `Hover`, `FlyMove` (wing flap baked as tracks). With `policy.animationSet: 'cf+cc0'`: `Run Attack1H Magic PickUp Cheer` (Quaternius, CC0).
   With `'cf+ki'` / `'cf+cc0+ki'`: `KI_Idle KI_Walk KI_Run KI_Attack1H KI_Magic KI_PickUp KI_Cheer` from the **private** Kevin Iglesias pack (see below; HumanF clips for `fem`, HumanM for `neutral`/`masc`; race Idle tail sway layered in). `clip.userData.license` names the source of every clip.
 - Sockets (Object3D children of bones, follow animation): `hand_l hand_r` (0.55 × hand length), `back` (Chest, back surface), `belt` (Hips), `head` (crown).
 - `setRecipe` paths: `painted` (painted garments/dye/procedural colours: uniforms + cached atlas, synchronous), `layers` (mesh layers, hair, face, sliders) and `rebuild` (race/model change): a fresh Character is built in slices off to the side and swapped in at the end (no half-built frame; the current clip and its time carry over). Returns `{path, ms, maxStepMs, steps, trace}`.
@@ -53,15 +54,39 @@ await CF.init({ THREE, baseUrl: '', platform: {
 
 ## Policy (defaults are neutral placeholders until decided)
 `animationSet`: `'cf' | 'cf+cc0' | 'cf+ki' | 'cf+cc0+ki'` (anything else throws).
-`{ animationSet: 'cf', migration: 'regenerate', missingRaces: {elf:'wood_elf', djinn:'human', elder:'human', thug:'human'}, tieflingPlayable: true, regalia: 'kits', regaliaMinRichness: .85, adoption: 'runtime-first', wingsUnderCloak: 'show' }`
+`{ animationSet: 'cf', migration: 'regenerate', missingRaces: {elf:'wood_elf', djinn:'human', elder:'human', thug:'human'}, tieflingPlayable: true, regalia: 'kits', regaliaMinRichness: .85, adoption: 'runtime-first', wingsUnderCloak: 'show', locomotion: 'full' }`
 
 ## Migration from 1.2.x
 `CF.migrate(v1)` → `{recipe, lossy: true, notes[]}`: race (renamed / mapped), gender→bodyType, nearest skin tone, nearest hair colour, eye colour if in the v2 iris set, seed and style carried; hair style, face, sliders (24→3) and outfit (69 garments → v2 kit by style) are regenerated from the seed. `migrate(v2)` is identity (`lossy:false`).
 
+## Kits (2.2.0): registering slots, garments, races and clips
+Additive in 2.2.0: every 2.1.x recipe, `recipeHash`, `randomRecipe` / `generate` result and golden is unchanged, and seeded generation never picks kit content.
+```js
+await CF.init({ THREE, baseUrl: '/cf/2.2.0/' });
+const res = await CF.loadKit('/kits/blitzball/blitzball.cfkit.json');   // or a manifest object + { baseUrl }; assets resolve relative to the manifest
+// res = { namespace, version, slots, garments, races, clips, warnings }
+let r = CF.normalize(CF.blankRecipe('orc'));
+r = CF.equip(r, 'legs', 'blitzball/boardshorts').recipe;                 // kit ids are '<namespace>/<id>'
+r = CF.dye(r, 'blitzball/boardshorts', 'team', '#1e5bd8').recipe;        // tint dye: painted change, no rebuild
+const b = await CF.build(r); b.play('Swim');                             // kit clips join the clip list (Idle, Walk, ..., Swim, Tread)
+```
+- `CF.loadKit(urlOrManifest, { baseUrl, namespace, signal, preload })` validates and registers a **`cf-kit/1`** manifest (a superset of Blitzball's `wardrobe.json` `cf-swimwear/1`: add `format`, `namespace`, `version`). Invalid → throws `CF_KIT_INVALID` (`err.errors[{path,msg}]`); fetch failure → `CF_KIT_FETCH`; ids owned by another loaded kit → `CF_KIT_CONFLICT`. Loading the same namespace again replaces it. `preload: true` fetches the meshes / textures / clips now; otherwise `build` fetches them (and `assetsFor` lists them).
+- `CF.validateKit(manifest)` → `{ ok, errors, warnings }` (no registration). `CF.unloadKit(namespace)`. `CF.registry()` → `{ format, rig, kits, slots, garments, races, clips }` (kit content only).
+- `CF.registerSlot(def, {namespace})`, `CF.registerGarment(def, {namespace, baseUrl})`, `CF.registerRace(def, {namespace})`, `CF.registerClip(def, {namespace, baseUrl})`: one-entry kits (`def.id` = `'ns/id'`, or a local id + `{namespace}`); they merge into a loaded kit of that namespace.
+- **Garments** (`garments.<id>`): `kind: 'mesh'` GLB (`file`, optional `nodes`, `segments: {name: node}`) skinned to **cf-humanoid-29** and bound by bone name; `slot` (builtin or kit slot), `band` / `layer` (under < base < mid < armor < outer), `variants`, `texture`, `mask`, `dye: [{ region, kind: 'tint', default, mask }]` (legacy `material: 'TeamTint'` = one `team` region), `hides`, `hiddenBy`, `displaces`, `races: '*' | [ids]`, `fit: { mode: 'auto' | 'hug' | 'keep', hugMm: 8, minGapMm: 2, weights: 'surface' | 'garment' }`, `shellOffsetM`.
+- **Overrides:** a kit may replace a builtin garment with `override: true` under the builtin id; it must keep the builtin slot and variant ids. Overrides do not add a `kits` entry to recipes (they are a deployment choice, not recipe content). Builtin slots cannot be overridden; builtin `Idle` / `Walk` clips only with `override: true`.
+- **Hides as data:** `body:<region>` (only body triangles the garment really covers, in that region: `pelvis torso neck thigh_L/R shin_L/R foot_L/R upperarm_L/R forearm_L/R hand_L/R covered`), `slot:<slotId>` (drops the painted piece in that slot, e.g. `slot:smallclothes`), `<garmentId>`, `<garmentId>:<segment>`, `horns`, `wings`; `hiddenBy` is the reverse.
+- **Autofit:** garments are authored on human / neutral (`authoredOn`) and fitted at build time to every race, body type and body slider: joint retarget, tight vertices snapped to the body at their authored offset, loose parts (flares, hems) carried by harmonic interpolation, a gap guard, skin weights from the body under each vertex, and covered body triangles hidden. `body.info.kit` reports per garment `{ id, layer, anchors, minGapMm, maxGapMm, guardMaxMm, bodyTrisHidden, fitMs, coverMs }`. The fit runs once per build on the main thread (not sliced): about 50-200 ms per garment (Node, this box); bodies of the same race / body type / garment are not cached yet.
+- **Known limits (2.2.0 autofit):** rest pose: no garment inside the body on any race / body type / slider extreme tested (one 0.9 mm exception, see the Blitzball audit). In animation the fitted garment follows the body's own skinning (no cloth simulation), so deep flexion creases (Tread's knee / hip flex, Swim's chest stretch) push a few mm of garment under the skin, as they do on Blitzball's own authored swimmer. There is no child body in v2 (the smallest bodies are the small races and the body sliders at -1).
+- **Tint:** `dye` kind `tint` multiplies the texture by the colour where the mask is white (`diffuse = mix(tex, tex × tint, mask.r)`); without a mask the whole garment is tinted. Changing a tint is a painted change (uniform only).
+- **Races (minimal):** `races.<id> = { base, label, tones, defaults, playable, heightScale }` registers an alias of a builtin cf-humanoid-29 race (same body; tone subset by index; default features). Aliases appear in `CF.races()` / `options` and builtin garment availability follows the base race; they are never picked by seeded generation. Custom race models are not supported in cf-kit/1.
+- **Clips:** `clips.<Name> = { file | tracks, loop, license }` in CF clip JSON (`{ name, duration, tracks: [{ name, type, times, values }] }`, quaternion tracks as-is, `Root` / `Trans` position tracks relative to the race rest pose and scaled per race). Licensed (KI) content is refused in kits.
+- **Recipes:** stay `v: 2`. A recipe that uses kit content carries `kits: [{ namespace, version }]` (written only when non-empty, derived on `normalize` from the namespaced race / garments / dyes it uses). Building or `setRecipe` with a kit that is not loaded throws `CF_KIT_MISSING` (`err.code`, `err.errors[{path,msg,code}]`; `normalize` / `validateRecipe` report the same as errors with `code`); a loaded kit with a different major version gives the warning `CF_KIT_VERSION`.
+
 ## Private animation pack (Kevin Iglesias, licensed: never in the public bundle)
 The KI clips are licensed content: they are **not** in `dist/`, `assets.json`, `bundle.json` or the licence manifest's file list. The game serves the pack privately (`ki_manifest.json` + `KI_HumanM_anims.glb` + `KI_HumanF_anims.glb`, format `cf-anim-pack/1`) and registers it:
 ```js
-await CF.init({ THREE, baseUrl: '/cf/2.1.1/', privateAnimBaseUrl: '/private/ki/', animationSet: 'cf+ki' });   // register + switch policy in one call
+await CF.init({ THREE, baseUrl: '/cf/2.2.0/', privateAnimBaseUrl: '/private/ki/', animationSet: 'cf+ki' });   // register + switch policy in one call
 // or a loader (auth headers, asset bundles, Electron fs ...): name is 'ki_manifest.json' or a file the manifest lists
 CF.registerAnimSet('ki', async (name, { signal }) => fetch('/private/ki/' + name, { credentials: 'include', signal }));   // may return Response | ArrayBuffer | Uint8Array
 CF.setPolicy({ animationSet: 'cf+ki' });   // or 'cf+cc0+ki' (needed after registerAnimSet unless init got animationSet)
