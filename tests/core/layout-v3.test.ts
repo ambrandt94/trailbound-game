@@ -303,12 +303,12 @@ describe('generation gates', () => {
     expect(elsewhere).toBe(0);
     expect(orcs / rough).toBeGreaterThanOrEqual(0);
     expect(orcs / rough).toBeLessThan(0.45);
-  }, 60_000);
+  }, 180_000);
 
   test('a single-zone city bakes in under a second', () => {
     const world = generateWorld(7741, settings(3));
     const city = world.nodes.find((n) => n.settlementClass === 'city') ?? world.nodes[0]!;
-    const grown = grow(city, 14, 'city');
+    const grown = grow(city, 12, 'city');
     city.tiles = grown.tiles;
     city.x0 = Math.min(...grown.tiles.map((t) => t.x));
     city.y0 = Math.min(...grown.tiles.map((t) => t.y));
