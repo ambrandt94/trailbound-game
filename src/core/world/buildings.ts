@@ -8,8 +8,10 @@ import {
   type WorldData,
   ZONE_SCALE,
   hasNodeTile,
+  nodeContaining,
 } from './models';
 import { settlementPlan } from './layout-v2';
+import { pointInLayoutObb } from './layout-v3';
 import {
   type BuildingPart,
   type BuildingRotation,
@@ -76,6 +78,13 @@ export interface PlacedBuilding extends BuildingDef {
   district?: string;
   lot?: { x: number; y: number; w: number; d: number };
   frontageRank?: number;
+  yawDeg?: number;
+  role?: string;
+  roleLabel?: string;
+  placeholder?: boolean;
+  form?: string;
+  roleColour?: string;
+  obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
 }
 
 const COTTAGE_SHELL: BuildingShell = {
@@ -787,10 +796,38 @@ export function settlementLayout(node: MapNode, world: WorldData): PlacedBuildin
         district: b.district,
         lot: b.lot,
         frontageRank: b.frontageRank,
+        ...(b.yawDeg !== undefined ? { yawDeg: b.yawDeg } : {}),
+        ...(b.role ? { role: b.role, roleLabel: b.roleLabel ?? b.label } : {}),
+        ...(b.placeholder ? { placeholder: true } : {}),
+        ...(b.form ? { form: b.form } : {}),
+        ...(b.roleColour ? { roleColour: b.roleColour } : {}),
+        ...(b.obb ? { obb: b.obb } : {}),
       };
     });
   }
   return legacySettlementLayout(node, world.seed);
+}
+
+/** Role under a fine-tile point, for the map hover label. Generation 3 only. */
+export function roleAt(
+  world: WorldData,
+  fineX: number,
+  fineY: number,
+): { label: string; place: string } | null {
+  if (world.settings.settlementGen !== 3) return null;
+  const node = nodeContaining(world.nodes, fineX, fineY);
+  if (!node) return null;
+  const plan = settlementPlan(world, node);
+  if (!plan || plan.layoutGen !== 3) return null;
+  const mx = fineX * ZONE_SCALE;
+  const my = fineY * ZONE_SCALE;
+  for (let i = plan.buildings.length - 1; i >= 0; i--) {
+    const building = plan.buildings[i];
+    if (!building?.obb || !building.role) continue;
+    if (!pointInLayoutObb(mx, my, building.obb)) continue;
+    return { label: building.roleLabel ?? building.label, place: node.name };
+  }
+  return null;
 }
 
 function legacySettlementLayout(node: MapNode, worldSeed: number): PlacedBuilding[] {
@@ -1068,6 +1105,12 @@ export function toPlacedSprite(b: PlacedBuilding, originX: number, originY: numb
     ...(b.district ? { district: b.district } : {}),
     ...(b.lot ? { lot: b.lot } : {}),
     ...(b.frontageRank !== undefined ? { frontageRank: b.frontageRank } : {}),
+    ...(b.yawDeg !== undefined ? { yawDeg: b.yawDeg } : {}),
+    ...(b.role ? { role: b.role, roleLabel: b.roleLabel } : {}),
+    ...(b.placeholder ? { placeholder: true } : {}),
+    ...(b.form ? { form: b.form } : {}),
+    ...(b.roleColour ? { roleColour: b.roleColour } : {}),
+    ...(b.obb ? { obb: b.obb } : {}),
   };
 }
 

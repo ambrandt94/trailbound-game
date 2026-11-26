@@ -33,6 +33,7 @@ import {
   tierForKind,
   tierPlacement,
 } from './settlement-tiers';
+import { buildLayoutV3, usesLayoutV3 } from './layout-v3';
 import { worldHeightSampler } from './world-gen';
 import { Biome, type MapNode, type WorldData, ZONE_SCALE, hasNodeTile } from './models';
 
@@ -62,6 +63,14 @@ export interface PlanBuilding {
   storeys: number;
   /** World-aligned structure box. Spacing checks use this, not the lot. */
   structure: { x: number; y: number; w: number; d: number };
+  /** Generation 3 role. Absent on layout v2. */
+  role?: string;
+  roleLabel?: string;
+  yawDeg?: number;
+  placeholder?: boolean;
+  form?: string;
+  roleColour?: string;
+  obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
 }
 
 export interface PlanProp {
@@ -126,6 +135,14 @@ export interface SettlementPlan {
   warnings: string[];
   plaza: { x: number; y: number; w: number; d: number } | null;
   notes: string[];
+  /** Set only by layout generation 3. */
+  layoutGen?: 3;
+  culture?: string;
+  biomeSet?: string;
+  curviness?: number;
+  planMs?: number;
+  wallLoop?: Array<[number, number]>;
+  gates?: Array<{ x: number; y: number }>;
 }
 
 const DIRS: ReadonlyArray<readonly [number, number, Cardinal]> = [
@@ -146,11 +163,15 @@ export function stageSeed(placeSeed: number, stage: string): number {
 export function settlementPlan(world: WorldData, node: MapNode): SettlementPlan | null {
   const tier = tierForKind(node.kind);
   if (!tier || node.poiKind) return null;
-  const key = `${node.id}:${world.seed}:${node.seed}:${node.kind}:${node.tiles?.length ?? 0}`;
+  const base = `${node.id}:${world.seed}:${node.seed}:${node.kind}:${node.tiles?.length ?? 0}`;
+  const v3 = usesLayoutV3(world, node);
+  const key = v3
+    ? `${base}:v3:${node.culture ?? ''}:${world.settings.cultureOverride ?? ''}:${node.biome}:${node.settlementClass ?? ''}`
+    : base;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
   if (cache.size > 64) cache.clear();
-  const plan = buildPlan(world, node, tier);
+  const plan = v3 ? buildLayoutV3(world, node) : buildPlan(world, node, tier);
   cache.set(key, plan);
   return plan;
 }

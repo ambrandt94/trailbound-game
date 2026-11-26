@@ -121,6 +121,7 @@ export type NewWorldGen = Pick<
   | 'seaLevel'
   | 'tempBias'
   | 'moistBias'
+  | 'cultureOverride'
 >;
 
 /** Seed of the next new world (World Gen's seed field and re-roll). */
@@ -166,12 +167,13 @@ export function setNewWorldGen(patch: Partial<NewWorldGen>): void {
     seaLevel: next.seaLevel,
     tempBias: next.tempBias,
     moistBias: next.moistBias,
+    ...(next.cultureOverride ? { cultureOverride: next.cultureOverride } : {}),
   };
 }
 
 /**
  * Full settings for the next new world: land shape plus the generation choices.
- * `?settlementGen=1` keeps the screenshot harness on the old layout.
+ * `?settlementGen=1|2|3` forces a generation. `?culture=orc` forces a layout style.
  */
 export function newWorldSettings(): WorldSettings {
   const settings = clampSettings({
@@ -180,8 +182,16 @@ export function newWorldSettings(): WorldSettings {
     mapStyle: newWorldLand.value,
   });
   try {
-    const flag = new URLSearchParams(globalThis.location?.search ?? '').get('settlementGen');
-    if (flag === '1') return clampSettings({ ...settings, settlementGen: 1 });
+    const params = new URLSearchParams(globalThis.location?.search ?? '');
+    const flag = params.get('settlementGen');
+    const culture = params.get('culture');
+    const patch: Partial<WorldSettings> = {};
+    if (flag === '1' || flag === '2' || flag === '3')
+      patch.settlementGen = Number(flag) as 1 | 2 | 3;
+    if (culture === 'human' || culture === 'orc' || culture === 'mouse')
+      patch.cultureOverride = culture;
+    if (patch.settlementGen || patch.cultureOverride)
+      return clampSettings({ ...settings, ...patch });
   } catch {
     /* location is absent in some test runners */
   }

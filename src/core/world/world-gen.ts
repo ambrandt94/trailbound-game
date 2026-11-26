@@ -16,6 +16,7 @@ import {
 } from './models';
 import { fbm, hash2, Rng } from './noise';
 import { edgeGates, seamlessTerrain } from './seamless-terrain';
+import { rollCulture } from './culture';
 import { placeSettlementsGen2 } from './settlement-siting';
 import { placePois } from './pois';
 import { prepareLandSketch, sampleLandSketch } from './land-sketch';
@@ -244,7 +245,8 @@ export function sameWorldSettings(have: WorldSettings, want: WorldSettings, seed
     have.residentsMode === want.residentsMode &&
     have.avgPerHouse === want.avgPerHouse &&
     have.avgPerPlace === want.avgPerPlace &&
-    have.settlementGen === want.settlementGen
+    have.settlementGen === want.settlementGen &&
+    (have.cultureOverride ?? '') === (want.cultureOverride ?? '')
   );
 }
 
@@ -652,7 +654,8 @@ export function generateChunkAt(
  * `mainland` (planet chunks) keeps the towns on the largest landmass so the
  * roads can join them, and guarantees Ashfen even when no tile suits it.
  * `settings.settlementGen` 1 lays out the authored places. Generation 2
- * scores sites and adds hamlets, outskirts and satellites. Missing reads 1.
+ * scores sites and adds hamlets, outskirts and satellites. Generation 3
+ * uses that siting and stamps a culture. Missing reads 1.
  */
 function populateWorld(
   seed: number,
@@ -667,7 +670,7 @@ function populateWorld(
 ): WorldData {
   const { heightM, heights, biomes } = terrain;
   const nodes: MapNode[] = [];
-  if (settings.settlementGen === 2) {
+  if (settings.settlementGen === 2 || settings.settlementGen === 3) {
     nodes.push(
       ...placeSettlementsGen2({
         seed,
@@ -683,6 +686,18 @@ function populateWorld(
           stampPath(paths, biomes, w, h, x0, y0, x1, y1, roadRng),
       }),
     );
+    if (settings.settlementGen === 3) {
+      for (const node of nodes) {
+        if (
+          !node.settlementClass ||
+          node.settlementClass === 'capital' ||
+          node.settlementClass === 'metropolis'
+        ) {
+          continue;
+        }
+        node.culture = rollCulture(seed, node, settings.cultureOverride);
+      }
+    }
   } else {
     const blocked = new Set<string>();
     for (const spec of AUTHORED) {

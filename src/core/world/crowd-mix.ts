@@ -43,8 +43,8 @@ export interface CrowdBlock {
   /** Unsigned 32-bit. See `crowdSeed`. */
   seed: number;
   mix: CrowdWeight[];
-  /** Region and culture are undecided. Always null in v0.8. */
-  culture: null;
+  /** Region culture. Null through layout v2. Generation 3 writes the culture id. */
+  culture: string | null;
   tier: SettlementTierId;
 }
 
@@ -208,6 +208,7 @@ export function placeCrowd(args: {
   tier: SettlementTierId;
   buildings: ReadonlyArray<{ specialty?: string; kit?: string }>;
   water: CrowdWater;
+  culture?: string | null;
 }): CrowdBlock {
   const raw = emptyRaw();
   addRow(raw, TIER_BASE[args.tier]);
@@ -232,7 +233,7 @@ export function placeCrowd(args: {
     profile: CROWD_PROFILE,
     seed: crowdSeed(args.worldSeed, args.placeId),
     mix: normalize(raw),
-    culture: null,
+    culture: args.culture ?? null,
     tier: args.tier,
   };
 }

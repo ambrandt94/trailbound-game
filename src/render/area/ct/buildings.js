@@ -587,7 +587,12 @@ const out=[];
 for(let i=0;i<buildings.length;i++){
 const b=buildings[i];
 if(!b||!isFinite(+b.x)||!isFinite(+b.y))continue;
-out.push(layoutOne(b,origin||{x:0,y:0},meters||1,gy));
+const row=layoutOne(b,origin||{x:0,y:0},meters||1,gy);
+if(row){
+row.yawDeg=b.yawDeg;row.role=b.role;row.roleLabel=b.roleLabel;
+row.placeholder=!!b.placeholder;row.form=b.form;row.roleColour=b.roleColour;
+out.push(row);
+}
 }
 return out;
 }
@@ -894,6 +899,120 @@ const tx=Math.max(0,Math.floor(row.mask.w/2)),ty=Math.max(0,Math.floor(row.mask.
 TBTiles.addBox(g,0.4,0.95,0.4,(tx+0.55)*cell,row.floorY+row.wallTotal+row.rise*0.35,(ty+0.35)*cell,M.stone);
 }
 }
+const SIGN_TEX=new Map();
+function glyphTexture(text,ink){
+const key=text+"|"+ink;
+const hit=SIGN_TEX.get(key);
+if(hit)return hit;
+const c=document.createElement("canvas");
+c.width=64;c.height=32;
+const g=c.getContext("2d");
+g.imageSmoothingEnabled=false;
+g.fillStyle="#f0e2c4";
+g.fillRect(0,0,64,32);
+g.strokeStyle="#6b4a2a";
+g.lineWidth=4;
+g.strokeRect(2,2,60,28);
+g.fillStyle=ink||"#3a2a16";
+g.font="bold 18px monospace";
+g.textAlign="center";
+g.textBaseline="middle";
+g.fillText(String(text||"?"),32,17);
+const tex=new THREE.CanvasTexture(c);
+tex.magFilter=THREE.NearestFilter;
+tex.minFilter=THREE.NearestFilter;
+tex.colorSpace=THREE.SRGBColorSpace;
+SIGN_TEX.set(key,tex);
+return tex;
+}
+function pixelMaterial(hex,kind){
+const c=document.createElement("canvas");
+c.width=16;c.height=16;
+const g=c.getContext("2d");
+g.imageSmoothingEnabled=false;
+const base=hex||"#c4a574";
+g.fillStyle=base;
+g.fillRect(0,0,16,16);
+g.fillStyle=kind==="cabin"||kind==="longhouse"?"#6b4428":kind==="teepee"?"#a5683c":"#e7d3a8";
+for(let i=0;i<8;i++)g.fillRect(0,i*2,16,1);
+const tex=new THREE.CanvasTexture(c);
+tex.magFilter=THREE.NearestFilter;
+tex.minFilter=THREE.NearestFilter;
+tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+tex.colorSpace=THREE.SRGBColorSpace;
+return new THREE.MeshLambertMaterial({map:tex});
+}
+function placeForm(holder,row,groundY){
+const y=groundY(row.cx,row.cz)||row.floorY||0;
+const g=new THREE.Group();
+g.position.set(row.cx,y,row.cz);
+g.rotation.y=(row.yawDeg||0)*Math.PI/180;
+const w=Math.max(3,row.houseW||row.fw||6);
+const d=Math.max(3,row.houseD||row.fd||5);
+const wood=row.form==="cabin"||row.form==="longhouse"||row.form==="hut";
+const hide=row.form==="yurt"||row.form==="teepee"||row.form==="tent";
+const mat=pixelMaterial(wood?"#6a3b1e":hide?"#e4c99a":(row.roleColour||"#b7b2a6"),row.form);
+const roof=pixelMaterial(wood?"#4a2814":hide?"#a85a32":"#8d6a45",row.form);
+if(row.form==="yurt"){
+const body=new THREE.Mesh(new THREE.CylinderGeometry(Math.min(w,d)*0.46,Math.min(w,d)*0.5,2.1,14),mat);
+body.position.y=1.25;
+const cap=new THREE.Mesh(new THREE.ConeGeometry(Math.min(w,d)*0.58,1.15,14),roof);
+cap.position.y=2.7;
+g.add(body,cap);
+}else if(row.form==="teepee"||row.form==="tent"){
+const cone=new THREE.Mesh(new THREE.ConeGeometry(Math.min(w,d)*0.55,row.form==="teepee"?4.4:2.6,12),mat);
+cone.position.y=row.form==="teepee"?2.2:1.4;
+g.add(cone);
+}else if(row.form==="cabin"||row.form==="hut"||row.form==="longhouse"){
+const body=new THREE.Mesh(new THREE.BoxGeometry(w,2.3,d),mat);
+body.position.y=1.35;
+const cap=new THREE.Mesh(new THREE.ConeGeometry(Math.max(w,d)*0.62,1.5,4),roof);
+cap.position.y=3.15;
+cap.rotation.y=Math.PI/4;
+g.add(body,cap);
+}else{
+const body=new THREE.Mesh(new THREE.BoxGeometry(w,2.1,d),mat);
+body.position.y=1.15;
+g.add(body);
+}
+g.traverse(function(n){if(n.isMesh)n.castShadow=n.receiveShadow=true;});
+holder.add(g);
+}
+function placeYawedHouse(holder,row,groundY){
+if(!window.TBTiles||!TBTiles.house)return;
+let wallMat=matOf(row.wall);
+TBTiles.house(holder,groundY,{
+x:row.cx,z:row.cz,w:row.houseW||row.fw||6,d:row.houseD||row.fd||5,
+yaw:(row.yawDeg||0)*Math.PI/180,
+floors:row.floors,baseY:row.baseY,found:row.found,wallH:row.wallH,rise:row.rise,
+slate:row.slate,wallMat:wallMat,door:1,chimney:1,flowers:1,sign:null
+});
+}
+function addRoleDress(holder,row,groundY){
+if(!row.role)return;
+const y=groundY(row.cx,row.cz)||row.floorY||0;
+const top=y+(row.found||0.4)+(row.wallTotal||row.wallH||2.2)+(row.rise||0.8)+0.15;
+const tex=glyphTexture(row.roleLabel||row.role,"#2a1c10");
+const mat=new THREE.MeshLambertMaterial({map:tex});
+const board=new THREE.Mesh(new THREE.BoxGeometry(3.2,0.12,1.5),mat);
+board.position.set(row.cx,top+1.1,row.cz);
+board.rotation.y=(row.yawDeg||0)*Math.PI/180;
+holder.add(board);
+const post2=new THREE.Mesh(new THREE.BoxGeometry(0.16,1.2,0.16),pixelMaterial("#6b4428","cabin"));
+post2.position.set(row.cx,top+0.5,row.cz);
+holder.add(post2);
+const postMat=pixelMaterial("#8d5a32","cabin");
+const post=new THREE.Mesh(new THREE.BoxGeometry(0.12,1.3,0.12),postMat);
+const yaw=(row.yawDeg||0)*Math.PI/180;
+const doorX=row.cx+Math.sin(yaw)*((row.houseD||row.fd||4)/2+0.4);
+const doorZ=row.cz+Math.cos(yaw)*((row.houseD||row.fd||4)/2+0.4);
+post.position.set(doorX,y+0.7,doorZ);
+holder.add(post);
+const hang=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.45,0.06),mat);
+hang.position.set(doorX,y+1.35,doorZ);
+hang.rotation.y=yaw;
+holder.add(hang);
+}
 function place(parent,groundY,buildings,origin,meters,blocks){
 const rows=layout(buildings,origin,meters,groundY);
 window.TBBuildings.rows=rows;
@@ -906,9 +1025,15 @@ rows.forEach(function(row){
 if(row.rec&&row.rec.recipe==="marker"){
 if(window.TBProps&&TBProps.stamp)TBProps.stamp(holder,row.rec.kit||row.type,row.cx,row.cz,(row.door&&row.door.yawOut)||0,groundY);
 row.blocks.forEach(function(b){if(blocks)blocks.push(b);});
+addRoleDress(holder,row,groundY);
 return;
 }
 if(row.masked){
+const formed=row.placeholder||row.form==="yurt"||row.form==="teepee"||row.form==="tent"||row.form==="cabin"||row.form==="hut"||row.form==="longhouse"||row.form==="block"||row.form==="igloo"||row.form==="stilt";
+const yawed=row.yawDeg!=null&&Math.round(row.yawDeg)%90!==0;
+if(formed)placeForm(holder,row,groundY);
+else if(yawed)placeYawedHouse(holder,row,groundY);
+else{
 buildShell(holder,row);
 if(row.rec.stall&&TBTiles.stall&&row.door){
 const d=row.door,side=row.seed&&row.seed.blue?1:-1;
@@ -916,7 +1041,9 @@ const sx=d.outX-d.nz*side*1.9,sz=d.outZ+d.nx*side*1.9;
 if(doorClear(row,sx,sz))TBTiles.stall(holder,groundY,sx,sz,d.yawOut,!!(row.seed&&row.seed.blue));
 }
 dressYard(holder,groundY,row,blocks);
+}
 row.blocks.forEach(function(b){if(blocks)blocks.push(b);});
+addRoleDress(holder,row,groundY);
 return;
 }
 row.parts.forEach(function(part){
@@ -950,6 +1077,7 @@ if(doorClear(row,sx,sz))TBTiles.stall(holder,groundY,sx,sz,0,!!row.seed.blue);
 }
 dressYard(holder,groundY,row,blocks);
 row.blocks.forEach(function(b){if(blocks)blocks.push(b);});
+addRoleDress(holder,row,groundY);
 });
 if(rows.length)console.info("tb buildings",rows.length);
 return rows;
