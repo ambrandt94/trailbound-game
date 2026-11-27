@@ -348,6 +348,24 @@ export function blendCurviness(style: LayoutStyle, biome: BiomeId): number {
   return Math.min(1, Math.max(0, culture * 0.62 + ground * 0.38));
 }
 
+export type RoofMaterialId = 'tile' | 'slate' | 'thatch';
+
+/** Pixel roof for a material set. Grassland is tile, forest is thatch, stone towns are slate. */
+export function roofMaterialForSet(setId: string): RoofMaterialId {
+  switch (setId) {
+    case 'deep_forest':
+      return 'thatch';
+    case 'grassland':
+    case 'arid':
+    case 'tropical':
+    case 'wetland':
+    case 'sea_shack':
+      return 'tile';
+    default:
+      return 'slate';
+  }
+}
+
 /** Stone and timber townhouses. A capital stays a city even on grassland. */
 export function urbanForm(setId: string, role: BuildingRole): BuildingForm {
   const civic =

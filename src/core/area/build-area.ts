@@ -503,6 +503,7 @@ export interface AreaBuilding {
   placeholder?: boolean;
   form?: string;
   roleColour?: string;
+  roofMaterial?: 'tile' | 'slate' | 'thatch';
 }
 
 export interface AreaProp {
@@ -1087,6 +1088,68 @@ function paintSettlement(
         paint(zone.rect.x + x, zone.rect.y + y, surfaceId, groundId);
     }
   }
+  paintYardDirt(plan, ground, mask, originX, originY, gw, gh);
+}
+
+/** Alleys and the ground against a house are packed dirt. Noble gardens stay grass. */
+function paintYardDirt(
+  plan: SettlementPlan,
+  ground: Uint8Array,
+  mask: Uint8Array,
+  originX: number,
+  originY: number,
+  gw: number,
+  gh: number,
+): void {
+  const paint = (absX: number, absY: number) => {
+    const ix = Math.floor(absX - originX);
+    const iy = Math.floor(absY - originY);
+    if (ix < 0 || iy < 0 || ix >= gw || iy >= gh) return;
+    const gi = ix + iy * gw;
+    if (!mask[gi]) return;
+    const g = ground[gi] ?? 0;
+    if (
+      g === GROUND.road ||
+      g === GROUND.plaza ||
+      g === GROUND.water ||
+      g === GROUND.rock ||
+      g === GROUND.park
+    )
+      return;
+    ground[gi] = GROUND.dirt;
+  };
+  for (const building of plan.buildings) {
+    const obb = building.obb;
+    if (!obb) continue;
+    const pad =
+      building.district === 'noble'
+        ? 1.5
+        : building.district === 'slums' || building.district === 'craft'
+          ? 4.4
+          : 3.4;
+    const rad = (obb.yawDeg * Math.PI) / 180;
+    const fx = Math.sin(rad);
+    const fy = Math.cos(rad);
+    const rx = fy;
+    const ry = -fx;
+    const hw = obb.w / 2 + pad;
+    const hd = obb.d / 2 + pad;
+    const reach = Math.hypot(hw, hd);
+    const x0 = Math.floor(obb.cx - reach);
+    const x1 = Math.ceil(obb.cx + reach);
+    const y0 = Math.floor(obb.cy - reach);
+    const y1 = Math.ceil(obb.cy + reach);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x + 0.5 - obb.cx;
+        const dy = y + 0.5 - obb.cy;
+        const lx = dx * rx + dy * ry;
+        const ly = dx * fx + dy * fy;
+        if (Math.abs(lx) > hw || Math.abs(ly) > hd) continue;
+        paint(x + 0.5, y + 0.5);
+      }
+    }
+  }
 }
 
 function tagLegacyProps(
@@ -1127,6 +1190,14 @@ function addWildProps(
   plan: SettlementPlan | null,
 ): void {
   const budget = vegetationBudget();
+  const plots = rectBuckets(
+    buildings.map((building) => ({
+      x: building.plotX,
+      y: building.plotY,
+      w: building.plotW,
+      d: building.plotD,
+    })),
+  );
   let vegetation = props.filter((prop) => isVegetation(prop.class)).length;
   let other = props.length - vegetation;
   const taken = props.map((prop) => ({ x: prop.x, y: prop.y }));
@@ -1150,16 +1221,7 @@ function addWildProps(
         continue;
       const x = originX + ix + 0.5;
       const y = originY + iy + 0.5;
-      if (
-        buildings.some(
-          (b) =>
-            x >= b.plotX - 1 &&
-            x < b.plotX + b.plotW + 1 &&
-            y >= b.plotY - 1 &&
-            y < b.plotY + b.plotD + 1,
-        )
-      )
-        continue;
+      if (rectCovers(plots, x, y, 1)) continue;
       if (taken.some((p) => Math.abs(p.x - x) < 2.2 && Math.abs(p.y - y) < 2.2)) continue;
       const dressed = dressCell(biomeGrid[gi] ?? 0, x, y, placeSeed + 17);
       if (!dressed) continue;
@@ -1651,6 +1713,7 @@ function buildingRecord(spr: PlacedSprite, anchorX: number, anchorY: number): Ar
           ...(spr.placeholder ? { placeholder: true } : {}),
           ...(spr.form ? { form: spr.form } : {}),
           ...(spr.roleColour ? { roleColour: spr.roleColour } : {}),
+          ...(spr.roofMaterial ? { roofMaterial: spr.roofMaterial } : {}),
           ...(spr.obb ? { obb: spr.obb } : {}),
         }
       : {}),
@@ -1982,6 +2045,54 @@ function pointInRect(
  * Playable natural cells that are not roads or lots. `outsideDistricts` keeps
  * the slot off the built-up bounding boxes. Empty means the caller drops the slot.
  */
+function lotOf(building: AreaBuilding): { x: number; y: number; w: number; d: number } {
+  return (
+    building.lot ?? {
+      x: building.plotX,
+      y: building.plotY,
+      w: building.plotW,
+      d: building.plotD,
+    }
+  );
+}
+
+/** Rects in 24 m cells, expanded by the 1 m pad the callers test. */
+function rectBuckets(
+  rects: readonly { x: number; y: number; w: number; d: number }[],
+): Map<string, { x: number; y: number; w: number; d: number }[]> {
+  const cell = 24;
+  const grid = new Map<string, { x: number; y: number; w: number; d: number }[]>();
+  for (const rect of rects) {
+    const x0 = Math.floor((rect.x - 1) / cell);
+    const y0 = Math.floor((rect.y - 1) / cell);
+    const x1 = Math.floor((rect.x + rect.w + 1) / cell);
+    const y1 = Math.floor((rect.y + rect.d + 1) / cell);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const key = `${x},${y}`;
+        const list = grid.get(key);
+        if (list) list.push(rect);
+        else grid.set(key, [rect]);
+      }
+    }
+  }
+  return grid;
+}
+
+function rectCovers(
+  grid: Map<string, { x: number; y: number; w: number; d: number }[]>,
+  x: number,
+  y: number,
+  pad: number,
+): boolean {
+  const list = grid.get(`${Math.floor(x / 24)},${Math.floor(y / 24)}`);
+  if (!list) return false;
+  for (const rect of list) {
+    if (pointInRect(x, y, rect, pad)) return true;
+  }
+  return false;
+}
+
 function forageCells(
   placeSeed: number,
   buildings: AreaBuilding[],
@@ -1996,6 +2107,7 @@ function forageCells(
   outsideDistricts: boolean,
 ): Array<{ x: number; y: number }> {
   const candidates: Array<{ x: number; y: number }> = [];
+  const lots = rectBuckets(buildings.map((building) => lotOf(building)));
   for (let iy = 0; iy < gh; iy++) {
     for (let ix = 0; ix < gw; ix++) {
       const gi = ix + iy * gw;
@@ -2005,16 +2117,7 @@ function forageCells(
       if (surface[gi]) continue;
       const x = originX + ix + 0.5;
       const y = originY + iy + 0.5;
-      const onLot = buildings.some((building) => {
-        const lot = building.lot ?? {
-          x: building.plotX,
-          y: building.plotY,
-          w: building.plotW,
-          d: building.plotD,
-        };
-        return pointInRect(x, y, lot, 1);
-      });
-      if (onLot) continue;
+      if (rectCovers(lots, x, y, 1)) continue;
       if (plan) {
         let blocked = false;
         for (const zone of plan.zones) {

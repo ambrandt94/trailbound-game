@@ -293,6 +293,7 @@ T.plaster=authored("plaster_32.png","#f3dcba");
 T.timber=authored("timber_32.png","#5c3a22");
 T.clay=authored("roof_clay_32.png","#c46a3a");
 T.slate=authored("roof_slate_32.png","#6a7c8c");
+T.thatch=authored("roof_thatch_32.png","#c6a15a");
 T.stone=authored("stone_block_32.png","#8a8e90");
 T.cobble=authored("cobble_32.png","#a89880");
 T.water=authored("water_32.png","#3a8fd0");
@@ -338,6 +339,7 @@ plaster:lambert(T.plaster),
 timber:lambert(T.timber),
 clay:lambert(T.clay),
 slate:lambert(T.slate),
+thatch:lambert(T.thatch),
 stone:lambert(T.stone,{flat:true}),
 cobble:lambert(T.cobble,{polygonOffset:true}),
 water:unlit(T.water),
