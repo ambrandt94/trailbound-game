@@ -43,13 +43,7 @@ export function drawRoleOverlay(
   if (world.settings.settlementGen !== 3) return;
   const margin = Math.max(viewW, viewH) / Math.max(0.2, camera.scale) / TILE;
   for (const node of world.nodes) {
-    if (
-      !node.settlementClass ||
-      node.settlementClass === 'capital' ||
-      node.settlementClass === 'metropolis'
-    ) {
-      continue;
-    }
+    if (!node.settlementClass) continue;
     const dx = fineToDisplay(node.cx, mapStep) - camera.x;
     const dy = fineToDisplay(node.cy, mapStep) - camera.y;
     if (Math.hypot(dx, dy) > fineToDisplay(node.radius, mapStep) + margin) continue;
@@ -58,6 +52,25 @@ export function drawRoleOverlay(
     ctx.save();
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    const wardColour: Record<string, string> = {
+      market: 'rgba(196, 122, 44, 0.45)',
+      temple: 'rgba(120, 96, 168, 0.45)',
+      noble: 'rgba(92, 122, 176, 0.45)',
+      craft: 'rgba(168, 96, 56, 0.45)',
+      docks: 'rgba(56, 140, 168, 0.45)',
+      slums: 'rgba(140, 124, 96, 0.4)',
+      keep: 'rgba(110, 110, 130, 0.55)',
+      residential: 'rgba(168, 156, 120, 0.35)',
+    };
+    for (const ward of plan.wards ?? []) {
+      ctx.fillStyle = wardColour[ward.kind] ?? 'rgba(168, 156, 120, 0.3)';
+      for (const q of ward.quadrants) {
+        const x = fineToDisplay(q.x * 8, mapStep) * TILE;
+        const y = fineToDisplay(q.y * 8, mapStep) * TILE;
+        const s = fineToDisplay(8, mapStep) * TILE;
+        ctx.fillRect(x, y, s, s);
+      }
+    }
     for (const road of plan.roads) {
       if (road.points.length < 2) continue;
       ctx.beginPath();
@@ -135,12 +148,7 @@ export function drawRoleInset(
 ): void {
   if (world.settings.settlementGen !== 3) return;
   const node = nodeContaining(world.nodes, heroX, heroY);
-  if (
-    !node?.settlementClass ||
-    node.settlementClass === 'capital' ||
-    node.settlementClass === 'metropolis'
-  )
-    return;
+  if (!node?.settlementClass) return;
   const plan = settlementPlan(world, node);
   if (!plan || plan.layoutGen !== 3 || !plan.buildings.length) return;
   const box = { x: viewW - 336, y: viewH - 292, w: 320, h: 250 };

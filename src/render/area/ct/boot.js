@@ -10,6 +10,7 @@ import './life.js';
 import './places.js';
 import './buildings.js';
 import './props.js';
+import './walls.js';
 import './interiors.js';
 import './live.js';
 import './npcs.js';

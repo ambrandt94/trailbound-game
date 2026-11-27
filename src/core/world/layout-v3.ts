@@ -1,7 +1,7 @@
 /**
  * Settlement layout generation 3. Streets are continuous polylines, lots are
  * oriented boxes at any yaw, and every building has a role. Deterministic
- * from the node seed. Capitals and metropolises stay on layout v2.
+ * from the node seed. Capitals and metropolises use the same graph, cut into wards.
  */
 import { ROLE_STYLE, type BuildingRole, type RoleDemand } from './building-roles';
 import {
@@ -9,6 +9,7 @@ import {
   blendCurviness,
   resolveBiomeSet,
   resolveBuilding,
+  urbanForm,
   type BiomeSetId,
 } from './biome-building-sets';
 import { SIZE_CLASS, type SettlementClass } from './city-plan';
@@ -19,18 +20,27 @@ import type {
   PlanProp,
   PlanRoad,
   PlanSegment,
+  PlanWard,
   PlanZone,
   RoadPaint,
   SettlementPlan,
 } from './layout-v2';
+import { keepGatePoints, planWards, traceCellLoop, waterBeside } from './layout-wards';
 import { type BuildingRotation, type Cardinal, placedMaskAtYaw } from './building-templates';
 import { ensureKitTemplate, kitBuilding, resolveKit } from './kit-catalog';
 import { fbm, Rng } from './noise';
-import { type MapNode, type WorldData, ZONE_SCALE } from './models';
+import { Biome, type MapNode, type WorldData, ZONE_SCALE } from './models';
 import { worldHeightSampler } from './world-gen';
 import { type SettlementTier, roadForRank, tierById, tierForKind } from './settlement-tiers';
 
-const V3_CLASS = new Set<SettlementClass>(['hamlet', 'village', 'town', 'city']);
+const V3_CLASS = new Set<SettlementClass>([
+  'hamlet',
+  'village',
+  'town',
+  'city',
+  'capital',
+  'metropolis',
+]);
 
 export function usesLayoutV3(world: WorldData, node: MapNode): boolean {
   if (world.settings.settlementGen !== 3) return false;
@@ -173,11 +183,47 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
     contains,
   );
   const span = Math.max(8, Math.min(maxX - minX, maxY - minY));
-  const lots = placeLots(style, edges, contains, centre, cls, target, curviness, rngLot, span);
+  const big = cls === 'capital' || cls === 'metropolis';
+  let lots = placeLots(style, edges, contains, centre, cls, target, curviness, rngLot, span);
   const districts = seedDistricts(style, centre, entries, tiles, heightAt);
-  for (const lot of lots) {
-    lot.district = nearestDistrict(lot.obb, districts);
-    lot.weights = districts.find((d) => d.id === lot.district)?.weights ?? new Map();
+  let wards: PlanWard[] | undefined;
+  if (big && tiles.length) {
+    const biomeAt = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= world.width || y >= world.height) return Biome.Water;
+      return world.biomes[x + y * world.width] ?? Biome.Plains;
+    };
+    const planned = planWards(tiles, centre, entries, heightAt, waterBeside(tiles, biomeAt));
+    const byId = new Map(planned.wards.map((ward) => [ward.id, ward]));
+    const kept: Lot[] = [];
+    for (const lot of lots) {
+      const id = planned.wardIdAt(lot.obb.cx, lot.obb.cy);
+      const ward = id === undefined ? undefined : byId.get(id);
+      if (!ward) continue;
+      let cross = false;
+      for (const [x, y] of cornersOf(lot.obb)) {
+        const other = planned.wardIdAt(x, y);
+        if (other !== undefined && other !== id) {
+          cross = true;
+          break;
+        }
+      }
+      if (cross) continue;
+      lot.district = ward.kind;
+      lot.weights = ward.weights;
+      kept.push(lot);
+    }
+    if (kept.length) lots = kept;
+    wards = planned.wards.map((ward) => ({
+      id: ward.id,
+      kind: ward.kind,
+      quadrants: ward.quadrants,
+    }));
+    notes.push(`${wards.length} wards across the core.`);
+  } else {
+    for (const lot of lots) {
+      lot.district = nearestDistrict(lot.obb, districts);
+      lot.weights = districts.find((d) => d.id === lot.district)?.weights ?? new Map();
+    }
   }
 
   const gateCount = Math.max(1, entries.length);
@@ -185,36 +231,76 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
   const buildings = assigned.flatMap((role, index) => {
     const lot = lots[index];
     if (!lot || !role) return [];
-    const built = makeBuilding(role, lot, style, set, index);
+    const built = makeBuilding(role, lot, style, set, index, big && style.id !== 'orc');
     return built ? [built] : [];
   });
 
+  const defence = defenceFor(style, cls, size.defence);
+  const wall =
+    defence.kind === 'none'
+      ? []
+      : big
+        ? traceCellLoop(tiles, ZONE_SCALE)
+        : outlineOf(centre, contains);
+  const gates = pierceAvenues(edges, entries, wall);
   const roads = edges.map((edge, index) => roadOf(edge, index, row));
   const roadCells = rasterRoads(edges);
-  const defence = defenceFor(style, cls, size.defence);
-  const wall = defence.kind === 'none' ? [] : outlineOf(centre, contains);
-  const gates = gatePoints(wall, entries);
   const segments = wallSegments(defence, wall, gates);
-  const props = propsFor(style, centre, gates, defence, buildings, rngLot);
-  const zones = zonesFor(style, centre, cls, districts, buildings);
-  const respawn = respawnFor(buildings, centre, style);
+  const keep = wards?.find((ward) => ward.kind === 'keep');
+  if (big && keep && keep.quadrants.length >= 4) {
+    const loop = traceCellLoop(keep.quadrants, 8 * ZONE_SCALE);
+    const keepKeys = new Set(keep.quadrants.map((q) => `${q.x},${q.y}`));
+    const insideKeep = (x: number, y: number) => {
+      const qx = Math.floor(x / (8 * ZONE_SCALE));
+      const qy = Math.floor(y / (8 * ZONE_SCALE));
+      return keepKeys.has(`${qx},${qy}`);
+    };
+    const innerGates = keepGatePoints(edges, loop, insideKeep).map((gate) => ({
+      ...gate,
+      rot: gateRot(edges, gate.x, gate.y),
+    }));
+    const inner = wallSegments(
+      { kind: 'curtain', towers: 'every_n', gates: [1, 2] },
+      loop,
+      innerGates,
+    ).map((segment, index) => ({ ...segment, id: `keep${index}` }));
+    segments.push(...inner);
+    gates.push(...innerGates);
+    notes.push(`inner keep wall, ${innerGates.length} gate${innerGates.length === 1 ? '' : 's'}.`);
+  }
+  const placed = buildings.filter((building) => {
+    const box = building.obb;
+    if (!box) return true;
+    return !gates.some((gate) => Math.hypot(gate.x - box.cx, gate.y - box.cy) < 12);
+  });
+  const props = propsFor(style, centre, gates, defence, placed, segments, rngLot);
+  const zoneDistricts: Seed[] = wards
+    ? [...new Set(wards.map((ward) => ward.kind))].map((id) => ({
+        id,
+        x: centre.x,
+        y: centre.y,
+        weights: new Map(),
+      }))
+    : districts;
+  const zones = zonesFor(style, centre, cls, zoneDistricts, placed);
+  const respawn = respawnFor(placed, centre, style);
 
   const planMs = Math.round((nowMs() - started) * 10) / 10;
-  notes.push(`plan ${planMs} ms, ${buildings.length} buildings, ${edges.length} streets.`);
+  notes.push(`plan ${planMs} ms, ${placed.length} buildings, ${edges.length} streets.`);
 
   return {
     tier,
     style: set.kitSuffix,
     variant: 'default',
-    buildingCount: buildings.length,
+    buildingCount: placed.length,
     dropped: dropNotes.length,
     dropNotes,
-    districts: districts.map((d) => ({ id: d.id, kind: d.id })),
+    districts: zoneDistricts.map((d) => ({ id: d.id, kind: d.id })),
     respawnAnchor: respawn,
     roads,
     roadCells,
     zones,
-    buildings,
+    buildings: placed,
     props,
     segments,
     warnings,
@@ -227,6 +313,7 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
     planMs,
     wallLoop: wall,
     gates,
+    ...(wards ? { wards } : {}),
   };
 }
 
@@ -234,7 +321,9 @@ function placeCap(cls: SettlementClass): number {
   if (cls === 'hamlet') return 8;
   if (cls === 'village') return 24;
   if (cls === 'town') return 56;
-  return 84;
+  if (cls === 'city') return 84;
+  if (cls === 'capital') return 400;
+  return 900;
 }
 
 function nearestInside(
@@ -616,9 +705,16 @@ function buildEdges(
       samples: samplePolyline(points, 2),
     });
   };
+  const wide = cls === 'city' || cls === 'town' || cls === 'capital' || cls === 'metropolis';
   for (const entry of entries) {
     const raw = astar(field, entry.x, entry.y, centre.x, centre.y);
-    push(1, cls === 'city' || cls === 'town' ? 4.5 : 3, smooth(raw, curviness));
+    push(1, wide ? 4.5 : 3, smooth(raw, curviness));
+  }
+  if ((cls === 'capital' || cls === 'metropolis') && style.streets.kind === 'organic') {
+    const reach = reachOf(centre, contains, 640);
+    for (const piece of ringPieces(centre, contains, reach * 0.55, curviness)) {
+      if (piece.length >= 4) push(1, 4.5, piece);
+    }
   }
   if (style.streets.kind === 'radial') {
     const reach = reachOf(centre, contains);
@@ -647,11 +743,42 @@ function buildEdges(
     return edges;
   }
   if (ranks >= 2 && style.streets.kind === 'organic') {
-    const count = cls === 'city' ? 14 : cls === 'town' ? 8 : cls === 'village' ? 4 : 1;
+    const count =
+      cls === 'metropolis'
+        ? 110
+        : cls === 'capital'
+          ? 72
+          : cls === 'city'
+            ? 14
+            : cls === 'town'
+              ? 8
+              : cls === 'village'
+                ? 4
+                : 1;
     const scaled = Math.max(1, Math.round(count * style.streets.laneDensity));
-    const reach = cls === 'city' ? 78 : cls === 'town' ? 52 : 34;
+    const reach =
+      cls === 'metropolis'
+        ? 460
+        : cls === 'capital'
+          ? 300
+          : cls === 'city'
+            ? 78
+            : cls === 'town'
+              ? 52
+              : 34;
+    const fromAll = cls === 'capital' || cls === 'metropolis';
     for (let i = 0; i < scaled; i++) {
-      growBranch(edges, style, curviness, field, rng, contains, i < scaled - 3 ? 2 : 3, reach);
+      growBranch(
+        edges,
+        style,
+        curviness,
+        field,
+        rng,
+        contains,
+        i < scaled - 3 ? 2 : 3,
+        reach,
+        fromAll,
+      );
     }
   }
   return edges;
@@ -660,11 +787,12 @@ function buildEdges(
 function reachOf(
   centre: { x: number; y: number },
   contains: (x: number, y: number) => boolean,
+  max = 160,
 ): number {
   let reach = 12;
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    for (let r = 8; r <= 160; r += 4) {
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    for (let r = 8; r <= max; r += 4) {
       if (!contains(centre.x + Math.cos(a) * r, centre.y + Math.sin(a) * r)) break;
       reach = Math.max(reach, r);
     }
@@ -678,7 +806,12 @@ function fillEntries(
   contains: (x: number, y: number) => boolean,
   cls: SettlementClass,
 ): Array<{ x: number; y: number }> {
-  const want = cls === 'city' || cls === 'town' ? 4 : cls === 'village' ? 3 : 2;
+  const want =
+    cls === 'city' || cls === 'town' || cls === 'capital' || cls === 'metropolis'
+      ? 4
+      : cls === 'village'
+        ? 3
+        : 2;
   const have = entries.slice();
   for (let i = 0; i < 8 && have.length < want; i++) {
     const a = (i / 8) * Math.PI * 2 + 0.4;
@@ -696,6 +829,98 @@ function fillEntries(
   return have.length ? have : syntheticEntries(centre, contains, new Rng(1));
 }
 
+/**
+ * One ring. A gap where the circle leaves the footprint starts a new piece.
+ * Pieces are never joined across that gap, which is what drew the spiral.
+ */
+function orient(ax: number, ay: number, bx: number, by: number, cx: number, cy: number): number {
+  return (by - ay) * (cx - bx) - (bx - ax) * (cy - by);
+}
+
+/** Proper crossing. Shared endpoints are junctions, not intersections. */
+function segmentsCross(
+  a: [number, number],
+  b: [number, number],
+  c: [number, number],
+  d: [number, number],
+): boolean {
+  const o1 = orient(a[0], a[1], b[0], b[1], c[0], c[1]);
+  const o2 = orient(a[0], a[1], b[0], b[1], d[0], d[1]);
+  const o3 = orient(c[0], c[1], d[0], d[1], a[0], a[1]);
+  const o4 = orient(c[0], c[1], d[0], d[1], b[0], b[1]);
+  return o1 * o2 < 0 && o3 * o4 < 0;
+}
+
+export function polylineCrossesSelf(points: Array<[number, number]>): boolean {
+  const n = points.length - 1;
+  if (n < 3) return false;
+  const closed =
+    points[0]![0] === points[points.length - 1]![0] &&
+    points[0]![1] === points[points.length - 1]![1];
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 2; j < n; j++) {
+      if (closed && i === 0 && j === n - 1) continue;
+      if (segmentsCross(points[i]!, points[i + 1]!, points[j]!, points[j + 1]!)) return true;
+    }
+  }
+  return false;
+}
+
+function polylineHitsEdges(points: Array<[number, number]>, edges: Edge[], skip: string): boolean {
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = points[i]!;
+    const b = points[i + 1]!;
+    for (const edge of edges) {
+      if (edge.id === skip) continue;
+      for (let j = 0; j < edge.points.length - 1; j++) {
+        if (segmentsCross(a, b, edge.points[j]!, edge.points[j + 1]!)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function ringPieces(
+  centre: { x: number; y: number },
+  contains: (x: number, y: number) => boolean,
+  radius: number,
+  curviness: number,
+): Array<Array<[number, number]>> {
+  const n = 72;
+  const samples: Array<[number, number] | null> = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const wobble = 1 + (fbm(Math.cos(a) * 2, Math.sin(a) * 2, 41) - 0.5) * Math.min(0.2, curviness);
+    const x = centre.x + Math.cos(a) * radius * wobble;
+    const y = centre.y + Math.sin(a) * radius * wobble;
+    samples.push(contains(x, y) ? [q(x), q(y)] : null);
+  }
+  const pieces: Array<Array<[number, number]>> = [];
+  let current: Array<[number, number]> = [];
+  const flush = () => {
+    if (current.length >= 4) pieces.push(current);
+    current = [];
+  };
+  for (const sample of samples) {
+    if (!sample) flush();
+    else current.push(sample);
+  }
+  // The circle started and ended inside, so the first and last runs are one arc.
+  if (samples[0] && samples[n - 1] && pieces.length && current.length) {
+    const first = pieces[0]!;
+    pieces[0] = current.concat(first);
+    current = [];
+  }
+  flush();
+  if (pieces.length === 1 && samples[0] && samples[n - 1]) {
+    const only = pieces[0]!;
+    const a = only[0]!;
+    const b = only[only.length - 1]!;
+    if (a[0] !== b[0] || a[1] !== b[1]) only.push(a);
+  }
+  return pieces;
+}
+
 function growBranch(
   edges: Edge[],
   style: LayoutStyle,
@@ -705,9 +930,11 @@ function growBranch(
   contains: (x: number, y: number) => boolean,
   rank: number,
   maxLen: number,
+  fromAll = false,
 ): void {
   if (style.streets.kind !== 'organic' || !edges.length) return;
-  const edge = edges[rng.int(0, Math.max(0, Math.min(edges.length, 4) - 1))]!;
+  const pool = fromAll ? edges.length : Math.min(edges.length, 4);
+  const edge = edges[rng.int(0, Math.max(0, pool - 1))]!;
   const samples = edge.samples;
   if (samples.length < 4) return;
   const at = samples[rng.int(1, samples.length - 2)]!;
@@ -743,10 +970,12 @@ function growBranch(
     y += hy * 4;
     if (!contains(x, y)) break;
     pts.push([q(x), q(y)]);
-    if (nearOther(edges, x, y, 6, edge.id)) break;
+    const snapAt = fromAll ? 16 : 0;
+    if (walked > snapAt && nearOther(edges, x, y, 6, edge.id)) break;
   }
   if (pts.length < 3) return;
   const smoothPts = smooth(pts, curviness);
+  if (polylineCrossesSelf(smoothPts) || polylineHitsEdges(smoothPts, edges, edge.id)) return;
   edges.push({
     id: `e${edges.length}`,
     rank,
@@ -791,10 +1020,15 @@ function placeLots(
   for (const edge of ordered) {
     const length = polylineLength(edge.points);
     let arc = 6;
+    const tight = cls === 'capital' || cls === 'metropolis';
     while (arc < length - 5 && lots.length < target) {
-      const frontage = rng.range(rule.frontage[0], rule.frontage[1]) * style.scale * fit;
-      const depth = rng.range(rule.depth[0], rule.depth[1]) * style.scale * fit;
-      const setback = rng.range(rule.setback[0], rule.setback[1]);
+      const frontage = tight
+        ? rng.range(5.6, 7.4)
+        : rng.range(rule.frontage[0], rule.frontage[1]) * style.scale * fit;
+      const depth = tight
+        ? rng.range(7, 9)
+        : rng.range(rule.depth[0], rule.depth[1]) * style.scale * fit;
+      const setback = tight ? 0.35 : rng.range(rule.setback[0], rule.setback[1]);
       const at = pointAt(edge.points, arc + frontage / 2);
       const tan = tangentAt(edge.points, arc + frontage / 2);
       if (!at || !tan) break;
@@ -811,7 +1045,8 @@ function placeLots(
         } else if (rule.facing === 'free') {
           yaw += rng.range(-40, 40);
         }
-        yaw += rng.range(-rule.yawJitterDeg, rule.yawJitterDeg) * (0.35 + curviness);
+        const jitter = tight ? 2 : rule.yawJitterDeg;
+        yaw += rng.range(-jitter, jitter) * (tight ? 0.4 : 0.35 + curviness);
         const obb: Obb = {
           cx: q(obbCx),
           cy: q(obbCy),
@@ -841,7 +1076,7 @@ function placeLots(
           }
         }
       }
-      arc += frontage + rng.range(1.2, 2.4);
+      arc += frontage + (tight ? rng.range(0.25, 0.6) : rng.range(1.2, 2.4));
     }
   }
   if (!lots.length && contains(centre.x, centre.y)) {
@@ -1135,26 +1370,45 @@ function demandFor(cls: SettlementClass, count: number, gates: number): RoleDema
   const base = SIZE_CLASS[cls].roleDemand.filter(
     (need) => !need.minBuildings || count >= need.minBuildings,
   );
-  if (cls !== 'town' && cls !== 'city') return base;
-  return [...base, { role: 'guard_post', count: Math.max(1, Math.min(4, gates)) }];
+  const guards = { role: 'guard_post' as const, count: Math.max(1, Math.min(6, gates)) };
+  if (cls === 'town' || cls === 'city') return [...base, guards];
+  if (cls === 'capital' || cls === 'metropolis') {
+    return [
+      ...base,
+      guards,
+      { role: 'keep', count: 1 },
+      { role: 'manor', count: cls === 'metropolis' ? 4 : 2 },
+      { role: 'barracks', count: cls === 'metropolis' ? 3 : 2 },
+      { role: 'temple', count: 1 },
+      { role: 'market', count: 1 },
+      { role: 'dock', count: 1 },
+    ];
+  }
+  return base;
 }
 
 function pickLot(lots: Lot[], used: Set<number>, role: BuildingRole): number {
   let fallback = -1;
+  const strict = role === 'dock';
   for (let i = 0; i < lots.length; i++) {
     if (used.has(i)) continue;
     const lot = lots[i]!;
     if (fallback < 0) fallback = i;
     if ((lot.weights.get(role) ?? 0) > 0) return i;
+    if (strict) continue;
     if (role === 'guard_post' && lot.rank === 1) return i;
     if (
-      (role === 'market' || role === 'inn' || role === 'shop' || role === 'town_hall') &&
+      (role === 'market' ||
+        role === 'inn' ||
+        role === 'shop' ||
+        role === 'town_hall' ||
+        role === 'keep') &&
       lot.rank === 1
     ) {
       return i;
     }
   }
-  return fallback;
+  return strict ? -1 : fallback;
 }
 
 function makeBuilding(
@@ -1163,8 +1417,15 @@ function makeBuilding(
   style: LayoutStyle,
   set: ReturnType<typeof resolveBiomeSet>['set'],
   index: number,
+  dense = false,
 ): PlanBuilding | null {
   const resolved = resolveBuilding(role, style, set, index);
+  if (dense && style.id !== 'orc') {
+    const town = urbanForm(set.id, role);
+    resolved.form = town;
+    resolved.placeholder = false;
+    resolved.kitId = town.kit;
+  }
   const spec = kitBuilding(resolved.kitId) ?? kitBuilding('cottage');
   if (!spec) return null;
   const templateId = ensureKitTemplate(spec, set.kitSuffix);
@@ -1305,6 +1566,99 @@ function outlineOf(
   return loop;
 }
 
+/** Run each avenue through the wall and leave the road passing the opening. */
+function pierceAvenues(
+  edges: Edge[],
+  entries: Array<{ x: number; y: number }>,
+  wall: Array<[number, number]>,
+): Array<{ x: number; y: number; rot: number }> {
+  if (wall.length < 4) return [];
+  const gates: Array<{ x: number; y: number; rot: number }> = [];
+  for (const edge of edges) {
+    if (edge.rank !== 1 || edge.points.length < 2) continue;
+    const first = edge.points[0]!;
+    const last = edge.points[edge.points.length - 1]!;
+    const near = (p: [number, number]) =>
+      entries.some((entry) => Math.hypot(entry.x - p[0], entry.y - p[1]) < 24);
+    const nearFirst = near(first);
+    const nearLast = near(last);
+    if (!nearFirst && !nearLast) continue;
+    const atStart = nearFirst && (!nearLast || distToLoop(first, wall) <= distToLoop(last, wall));
+    const opened = openAvenue(edge.points, wall, atStart);
+    if (!opened) continue;
+    if (gates.some((gate) => Math.hypot(gate.x - opened.x, gate.y - opened.y) < 10)) continue;
+    edge.points = opened.points;
+    edge.samples = samplePolyline(edge.points, 2);
+    gates.push({ x: opened.x, y: opened.y, rot: gateRot([edge], opened.x, opened.y) });
+  }
+  if (gates.length) return gates;
+  return gatePoints(wall, entries).map((gate) => ({
+    ...gate,
+    rot: gateRot(edges, gate.x, gate.y),
+  }));
+}
+
+function distToLoop(p: [number, number], loop: Array<[number, number]>): number {
+  let best = Infinity;
+  for (const q of loop) best = Math.min(best, Math.hypot(q[0] - p[0], q[1] - p[1]));
+  return best;
+}
+
+function crossPoint(
+  a: [number, number],
+  b: [number, number],
+  c: [number, number],
+  d: [number, number],
+): { x: number; y: number } | null {
+  const rx = b[0] - a[0];
+  const ry = b[1] - a[1];
+  const sx = d[0] - c[0];
+  const sy = d[1] - c[1];
+  const den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-8) return null;
+  const t = ((c[0] - a[0]) * sy - (c[1] - a[1]) * sx) / den;
+  const u = ((c[0] - a[0]) * ry - (c[1] - a[1]) * rx) / den;
+  if (t < -0.02 || t > 1.02 || u < -0.02 || u > 1.02) return null;
+  return { x: a[0] + rx * t, y: a[1] + ry * t };
+}
+
+function hitLoop(
+  a: [number, number],
+  b: [number, number],
+  loop: Array<[number, number]>,
+): { x: number; y: number } | null {
+  for (let i = 1; i < loop.length; i++) {
+    const hit = crossPoint(a, b, loop[i - 1]!, loop[i]!);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function openAvenue(
+  points: Array<[number, number]>,
+  wall: Array<[number, number]>,
+  atStart: boolean,
+): { x: number; y: number; points: Array<[number, number]> } | null {
+  const end = atStart ? points[0]! : points[points.length - 1]!;
+  const prev = atStart ? points[1]! : points[points.length - 2]!;
+  const dx = end[0] - prev[0];
+  const dy = end[1] - prev[1];
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const far: [number, number] = [end[0] + ux * 100, end[1] + uy * 100];
+  const hit = hitLoop(end, far, wall) ?? hitLoop(prev, end, wall);
+  if (!hit) return null;
+  const gate: [number, number] = [q(hit.x), q(hit.y)];
+  const beyond: [number, number] = [q(hit.x + ux * 14), q(hit.y + uy * 14)];
+  const body = atStart ? points.slice(1) : points.slice(0, -1);
+  const next = (atStart ? [beyond, gate, end, ...body] : [...body, end, gate, beyond]).filter(
+    (p, i, all) => i === 0 || Math.hypot(p[0] - all[i - 1]![0], p[1] - all[i - 1]![1]) > 0.4,
+  );
+  if (polylineCrossesSelf(next)) return null;
+  return { x: gate[0], y: gate[1], points: next };
+}
+
 function gatePoints(
   wall: Array<[number, number]>,
   entries: Array<{ x: number; y: number }>,
@@ -1337,7 +1691,7 @@ function wallSegments(
       : defence.kind === 'hedge'
         ? 'prop_fence_hedge_3m'
         : 'civ_wall_palisade_3m';
-  const gap = 7;
+  const gap = defence.kind === 'curtain' ? 5.5 : defence.kind === 'hedge' ? 3.2 : 4.6;
   const chains: Array<Array<[number, number]>> = [];
   let current: Array<[number, number]> = [];
   for (const p of wall) {
@@ -1358,12 +1712,38 @@ function wallSegments(
   }));
 }
 
+function gateRot(edges: Edge[], x: number, y: number): number {
+  let best = Infinity;
+  let yaw = 0;
+  for (const edge of edges) {
+    if (edge.rank !== 1) continue;
+    for (let i = 1; i < edge.points.length; i++) {
+      const a = edge.points[i - 1]!;
+      const b = edge.points[i]!;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (len * len)));
+      const px = a[0] + dx * t;
+      const py = a[1] + dy * t;
+      const d = Math.hypot(px - x, py - y);
+      if (d < best) {
+        best = d;
+        yaw = yawToward(dx, dy);
+      }
+    }
+  }
+  // The gatehouse's long side runs with the wall, across the avenue.
+  return qYaw(yaw + 90);
+}
+
 function propsFor(
   style: LayoutStyle,
   centre: { x: number; y: number },
-  gates: Array<{ x: number; y: number }>,
+  gates: Array<{ x: number; y: number; rot?: number }>,
   defence: DefenceRule,
   buildings: PlanBuilding[],
+  segments: PlanSegment[],
   rng: Rng,
 ): PlanProp[] {
   const props: PlanProp[] = [];
@@ -1373,13 +1753,14 @@ function propsFor(
     x: number,
     y: number,
     propClass: PlanProp['propClass'],
+    rot?: number,
   ) => {
     props.push({
       sprite,
       kit,
       x: q(x),
       y: q(y),
-      rot: rng.pick([0, 90, 180, 270]),
+      rot: rot ?? rng.pick([0, 90, 180, 270]),
       variant: 'default',
       propClass,
     });
@@ -1396,7 +1777,7 @@ function propsFor(
       );
     }
   }
-  if (defence.towers === 'gates' || defence.towers === 'corners') {
+  if (defence.towers === 'gates' || defence.towers === 'corners' || defence.towers === 'every_n') {
     for (const gate of gates) {
       const dx = centre.x - gate.x;
       const dy = centre.y - gate.y;
@@ -1407,8 +1788,31 @@ function propsFor(
         gate.x + (dx / len) * 5,
         gate.y + (dy / len) * 5,
         'civic',
+        gate.rot,
       );
-      push('civ_wall_gatehouse_9x6', 'civ_wall_gatehouse_9x6', gate.x, gate.y, 'civic');
+      push('civ_wall_gatehouse_9x6', 'civ_wall_gatehouse_9x6', gate.x, gate.y, 'civic', gate.rot);
+    }
+  }
+  for (const segment of segments) {
+    if (segment.kind !== 'wall') continue;
+    let walked = 0;
+    let nextAt = 40;
+    for (let i = 1; i < segment.points.length; i++) {
+      const a = segment.points[i - 1]!;
+      const b = segment.points[i]!;
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      while (walked + len >= nextAt) {
+        const t = (nextAt - walked) / (len || 1);
+        const x = a[0] + (b[0] - a[0]) * t;
+        const y = a[1] + (b[1] - a[1]) * t;
+        const nearGate = gates.some((gate) => Math.hypot(gate.x - x, gate.y - y) < 16);
+        if (!nearGate) {
+          const yaw = yawToward(b[0] - a[0], b[1] - a[1]);
+          push('civ_wall_tower_6x6', 'civ_wall_tower_6x6', x, y, 'civic', qYaw(yaw + 90));
+        }
+        nextAt += 40;
+      }
+      walked += len;
     }
   }
   const smith = buildings.find((b) => b.role === 'smithy');

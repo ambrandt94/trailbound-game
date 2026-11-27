@@ -127,7 +127,7 @@ import { ConvoyDriver } from './convoy-driver';
 import { leaderToggleHalt } from './leader-halt';
 import { buildMusicContext } from './music-context';
 import { MusicConductor } from './music-conductor';
-import { resolveAreaAt } from '../core/area/area-window';
+import { resolveAreaAt, settlementNodeAt } from '../core/area/area-window';
 import type { AreaEntry } from '../render/area/area-from-export';
 import { codeForTouchAction } from './touch-wire';
 import { CF_PIN, GAME_VERSION, PLAYER_NAME, SAVE_SLOT } from './version';
@@ -574,6 +574,19 @@ export class Game implements GameHost {
 
   async buildArea(): Promise<void> {
     if (this.areaScene) return;
+    const banner = bakeBanner(this.options.root);
+    const slow = globalThis.setTimeout(() => {
+      banner.hidden = false;
+    }, 1000);
+    const at = this.diveTarget();
+    const place = this.world.data ? settlementNodeAt(this.world.data, at.x, at.y) : null;
+    if (place?.settlementClass === 'capital' || place?.settlementClass === 'metropolis') {
+      banner.textContent = 'Raising the city…';
+      banner.hidden = false;
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
     try {
       if (!this.pendingArea && this.world.data) this.pendingArea = this.bakeHere();
       const areaExport = this.pendingArea
@@ -613,6 +626,9 @@ export class Game implements GameHost {
       this.world.areaHold = false;
       this.setLayers(1, 1);
       this.toast(error instanceof Error ? error.message : 'Could not start the 3D view');
+    } finally {
+      globalThis.clearTimeout(slow);
+      banner.hidden = true;
     }
   }
 
@@ -1311,4 +1327,19 @@ function findCoast(world: WorldData): { x: number; y: number } | null {
     }
   }
   return best;
+}
+
+/** Shown while a settlement export runs long enough to notice. */
+function bakeBanner(root: HTMLElement): HTMLElement {
+  const doc = root.ownerDocument;
+  let el = doc.getElementById('bake-banner');
+  if (!el) {
+    el = doc.createElement('div');
+    el.id = 'bake-banner';
+    el.setAttribute('role', 'status');
+    el.textContent = 'Raising the town…';
+    el.hidden = true;
+    root.appendChild(el);
+  }
+  return el;
 }

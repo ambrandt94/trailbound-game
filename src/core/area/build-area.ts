@@ -36,7 +36,7 @@ import {
   type BuildingRotation,
   type RoofStyle,
 } from '../world/building-templates';
-import { generateChunk, neighborMap } from '../world/chunk-gen';
+import { bakeFastSettlementChunks, generateChunk, neighborMap } from '../world/chunk-gen';
 import { hash2 } from '../world/noise';
 import { SEASON, biomeSeason } from '../world/tileset';
 import { residentCountFor } from '../sim/entities';
@@ -258,6 +258,8 @@ export interface AreaExport {
      * the legacy sprite name.
      */
     settlement?: AreaSettlement;
+    /** Present when the place is cut into wards. Older readers ignore it. */
+    city?: { class: string; wardCount: number };
   };
   units: {
     zoneScale: number;
@@ -930,6 +932,14 @@ export function buildAreaExport(
                   }
                 : {}),
             },
+            ...(plan.wards && plan.wards.length
+              ? {
+                  city: {
+                    class: place.settlementClass ?? plan.tier,
+                    wardCount: plan.wards.length,
+                  },
+                }
+              : {}),
           }
         : {}),
     },
@@ -1470,8 +1480,13 @@ function plazaCenter(
 /** Bake every tile of a place in a fixed order, twice, into a fresh chunk map. */
 export function bakeAreaChunks(world: WorldData, tiles: Vec2[]): Map<string, ChunkData> {
   const sorted = uniqueTiles(tiles);
+  const fast = bakeFastSettlementChunks(world, sorted);
+  if (fast) return fast;
   const chunks = new Map<string, ChunkData>();
-  for (let pass = 0; pass < AREA_CHUNK_PASSES; pass++) {
+  // A capital core is thousands of fine tiles. The second pass only stitches
+  // chunk edges, and the settlement plan repaints those streets anyway.
+  const passes = sorted.length > 1200 ? 1 : AREA_CHUNK_PASSES;
+  for (let pass = 0; pass < passes; pass++) {
     for (const t of sorted) {
       const chunk = generateChunk(world, t.x, t.y, neighborMap(chunks, t.x, t.y));
       chunks.set(chunkKey(t.x, t.y), chunk);

@@ -348,6 +348,33 @@ export function blendCurviness(style: LayoutStyle, biome: BiomeId): number {
   return Math.min(1, Math.max(0, culture * 0.62 + ground * 0.38));
 }
 
+/** Stone and timber townhouses. A capital stays a city even on grassland. */
+export function urbanForm(setId: string, role: BuildingRole): BuildingForm {
+  const civic =
+    role === 'keep' ||
+    role === 'temple' ||
+    role === 'town_hall' ||
+    role === 'guildhall' ||
+    role === 'bank';
+  let wall = civic ? '#d6ccba' : '#b9834f';
+  let roof = '#7f3a32';
+  if (setId === 'coastal' || setId === 'alpine' || setId === 'snow') {
+    wall = civic ? '#d5ddd8' : '#c4b49a';
+    roof = '#6e5a52';
+  } else if (setId === 'arid' || setId === 'grassland') {
+    wall = civic ? '#e4d8c0' : '#c4a574';
+    roof = '#a85a32';
+  } else if (setId === 'deep_forest') {
+    wall = civic ? '#d6ccba' : '#8d6240';
+    roof = '#5c3318';
+  }
+  return {
+    form: 'house',
+    kit: ROLE_KIT[role] ?? 'cottage',
+    materials: { wall, roof },
+  };
+}
+
 export function resolveBuilding(
   role: BuildingRole,
   style: LayoutStyle,

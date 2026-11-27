@@ -773,10 +773,14 @@ function lotSlots(
 /** Deterministic street layout for a place; every chunk of the node must agree. */
 const layoutCache = new Map<string, PlacedBuilding[]>();
 
+const placedByPlan = new WeakMap<object, PlacedBuilding[]>();
+
 export function settlementLayout(node: MapNode, world: WorldData): PlacedBuilding[] {
   const plan = settlementPlan(world, node);
   if (plan) {
-    return plan.buildings.map((b) => {
+    const cached = placedByPlan.get(plan);
+    if (cached) return cached;
+    const placed = plan.buildings.map((b) => {
       const def = BUILDINGS[b.legacy] ?? bldg('cottage-1');
       return {
         ...def,
@@ -804,6 +808,8 @@ export function settlementLayout(node: MapNode, world: WorldData): PlacedBuildin
         ...(b.obb ? { obb: b.obb } : {}),
       };
     });
+    placedByPlan.set(plan, placed);
+    return placed;
   }
   return legacySettlementLayout(node, world.seed);
 }

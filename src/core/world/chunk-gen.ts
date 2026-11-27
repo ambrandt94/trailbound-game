@@ -193,6 +193,68 @@ function worldPathAt(world: WorldData, x: number, y: number): boolean {
 }
 
 /** Bake one world-tile instance (streets, props, buildings). Session/API entry. */
+/**
+ * One pass over a large settlement. The full chunk generator repeats the
+ * whole plan once per fine tile, which is what pushed a metropolis past 10 s.
+ */
+export function bakeFastSettlementChunks(
+  world: WorldData,
+  tiles: readonly { x: number; y: number }[],
+): Map<string, ChunkData> | null {
+  if (tiles.length < 1200) return null;
+  const node = tileCoveredByNode(world.nodes, tiles[0]!.x, tiles[0]!.y);
+  if (!node) return null;
+  const plan = settlementPlan(world, node);
+  if (!plan || plan.layoutGen !== 3) return null;
+  const layout = settlementLayout(node, world);
+  const size = ZONE_SCALE;
+  const spritesAt = new Map<string, PlacedSprite[]>();
+  const put = (wx: number, wy: number, sprite: PlacedSprite) => {
+    const key = `${wx},${wy}`;
+    const list = spritesAt.get(key);
+    if (list) list.push(sprite);
+    else spritesAt.set(key, [sprite]);
+  };
+  for (const building of layout) {
+    const wx = Math.floor(building.x / size);
+    const wy = Math.floor(building.y / size);
+    put(wx, wy, toPlacedSprite(building, wx * size, wy * size));
+  }
+  for (const prop of plan.props) {
+    const wx = Math.floor(prop.x / size);
+    const wy = Math.floor(prop.y / size);
+    put(wx, wy, {
+      sprite: prop.sprite,
+      x: prop.x - wx * size,
+      y: prop.y - wy * size,
+      kit: prop.kit,
+      rot: prop.rot,
+      ...(prop.scale !== undefined ? { scale: prop.scale } : {}),
+      variant: prop.variant,
+      propClass: prop.propClass,
+    });
+  }
+  const chunks = new Map<string, ChunkData>();
+  for (const tile of tiles) {
+    const biome = world.biomes[tile.x + tile.y * world.width] ?? Biome.Plains;
+    const ground = new Uint8Array(size * size);
+    ground.fill(biome);
+    chunks.set(`${tile.x},${tile.y}`, {
+      wx: tile.x,
+      wy: tile.y,
+      size,
+      tiles: ground,
+      paths: new Uint8Array(size * size),
+      cobble: new Uint8Array(size * size),
+      sprites: spritesAt.get(`${tile.x},${tile.y}`) ?? [],
+      streetFloor: 0,
+      plazaFloor: 4,
+      nodeId: node.id,
+    });
+  }
+  return chunks;
+}
+
 export function generateChunk(
   world: WorldData,
   wx: number,
@@ -596,6 +658,15 @@ function stampPlan(
     }
   };
   for (const cell of plan.roadCells) {
+    const mx = cell.gx * 3;
+    const my = cell.gy * 3;
+    if (
+      mx < originX - 8 ||
+      my < originY - 8 ||
+      mx >= originX + size + 8 ||
+      my >= originY + size + 8
+    )
+      continue;
     const pad = cell.widthM >= 4.5 ? 1 : 0;
     paint(cell.gx, cell.gy, pad, (ix, iy) => {
       paths[idx(ix, iy, size)] = 1;
@@ -657,6 +728,13 @@ function placeSettlementSprites(
   const originY = wy * size;
   const layout = settlementLayout(node, world);
   for (const b of layout) {
+    if (
+      b.x < originX - 18 ||
+      b.y < originY - 18 ||
+      b.x >= originX + size + 18 ||
+      b.y >= originY + size + 18
+    )
+      continue;
     stampBuildingYard(cobble, paths, size, b, originX, originY);
     if (buildingInChunk(b, wx, wy, size)) sprites.push(toPlacedSprite(b, originX, originY));
   }

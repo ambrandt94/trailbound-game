@@ -637,12 +637,24 @@ group.add(im);
 function collect(payload,meters){
 const origin=payload.area&&payload.area.innerOrigin||{x:0,y:0};
 const items=[];
+const gates=[];
+(payload.props||[]).forEach(function(p){
+if(p&&p.kit==="civ_wall_gatehouse_9x6")gates.push(localOf(p,origin,meters));
+});
+function blocksGate(loc){
+for(let i=0;i<gates.length;i++){
+if(Math.hypot(loc.x-gates[i].x,loc.z-gates[i].z)<6.5)return true;
+}
+return false;
+}
 (payload.props||[]).forEach(function(p){
 if(!p||!isFinite(+p.x))return;
 const kit=resolveKit(p);
+if(kit&&String(kit).indexOf("civ_wall_")===0)return;
 const spec=specOf(kit);
 if(!spec)return;
 const loc=localOf(p,origin,meters);
+if(blocksGate(loc))return;
 items.push({kit:kit,x:loc.x,z:loc.z,yaw:yawOf(p,spec),scale:scaleOf(p,spec)});
 });
 (payload.zones||[]).forEach(function(z){

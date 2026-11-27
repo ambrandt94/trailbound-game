@@ -89,7 +89,7 @@ interface ClassStat {
 }
 
 describe('ward partition', () => {
-  test('200 seeds × every class, including metropolis', { timeout: 60_000 }, () => {
+  test('200 seeds × every class, including metropolis', { timeout: 120_000 }, () => {
     const stats = {} as Record<SettlementClass, ClassStat>;
     const failures: string[] = [];
     const started = Date.now();

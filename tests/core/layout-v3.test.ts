@@ -10,7 +10,7 @@ import {
 import { type SettlementClass } from '../../src/core/world/city-plan';
 import { ORC_VILLAGE_RATE, rollCulture } from '../../src/core/world/culture';
 import { ensureKitTemplate, kitBuilding } from '../../src/core/world/kit-catalog';
-import { buildLayoutV3 } from '../../src/core/world/layout-v3';
+import { buildLayoutV3, polylineCrossesSelf } from '../../src/core/world/layout-v3';
 import { settlementPlan, type SettlementPlan } from '../../src/core/world/layout-v2';
 import { LAYOUT_STYLES, resolveLayoutStyle } from '../../src/core/world/layout-styles';
 import { placedMask, placedMaskAtYaw } from '../../src/core/world/building-templates';
@@ -19,6 +19,7 @@ import {
   clampSettings,
   DEFAULT_WORLD_SETTINGS,
   type MapNode,
+  type WorldData,
   type WorldSettings,
 } from '../../src/core/world/models';
 import { generateWorld } from '../../src/core/world/world-gen';
@@ -76,6 +77,105 @@ function grow(node: MapNode, radius: number, cls?: SettlementClass): MapNode {
     tiles,
     ...(cls ? { settlementClass: cls, kind: cls === 'city' ? 'city' : node.kind } : {}),
   };
+}
+
+function adopt(world: WorldData, cls: SettlementClass, radius: number): MapNode {
+  const node = disk(world, cls, radius);
+  const live =
+    world.nodes.find((n) => n.settlementClass === 'city' || n.kind === 'city') ?? world.nodes[0]!;
+  live.tiles = node.tiles;
+  live.cx = node.cx;
+  live.cy = node.cy;
+  live.kind = 'city';
+  live.settlementClass = cls;
+  live.culture = 'human';
+  live.x0 = node.x0;
+  live.y0 = node.y0;
+  live.x1 = node.x1;
+  live.y1 = node.y1;
+  return live;
+}
+
+function disk(world: WorldData, cls: SettlementClass, radius: number): MapNode {
+  const base = world.nodes.find((n) => n.kind === 'city') ?? world.nodes[0]!;
+  const cx = Math.floor(world.width / 2);
+  const cy = Math.floor(world.height / 2);
+  const tiles: Array<{ x: number; y: number }> = [];
+  for (let y = cy - radius; y <= cy + radius; y++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      if (x < 2 || y < 2 || x >= world.width - 2 || y >= world.height - 2) continue;
+      if ((x - cx) ** 2 + (y - cy) ** 2 <= radius * radius) tiles.push({ x, y });
+    }
+  }
+  return {
+    ...base,
+    id: `${cls}-disk`,
+    name: cls,
+    kind: 'city',
+    settlementClass: cls,
+    culture: 'human',
+    cx: cx + 0.5,
+    cy: cy + 0.5,
+    tiles,
+    x0: Math.min(...tiles.map((t) => t.x)),
+    y0: Math.min(...tiles.map((t) => t.y)),
+    x1: Math.max(...tiles.map((t) => t.x)) + 1,
+    y1: Math.max(...tiles.map((t) => t.y)) + 1,
+  };
+}
+
+function quadrantId(index: Map<string, number>, x: number, y: number): number | undefined {
+  return index.get(`${Math.floor(x / 64)},${Math.floor(y / 64)}`);
+}
+
+function angleDelta(a: number, b: number): number {
+  const d = Math.abs((((a - b) % 360) + 360) % 360);
+  return Math.min(d, 360 - d);
+}
+
+/** Same rule as the layout: the gatehouse's long side crosses the avenue. */
+function avenueGateRot(plan: SettlementPlan, x: number, y: number): number {
+  let best = Infinity;
+  let yaw = 0;
+  for (const road of plan.roads) {
+    if (road.rank !== 1) continue;
+    for (let i = 1; i < road.points.length; i++) {
+      const a = road.points[i - 1]!;
+      const b = road.points[i]!;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (len * len)));
+      const px = a[0] + dx * t;
+      const py = a[1] + dy * t;
+      const d = Math.hypot(px - x, py - y);
+      if (d < best) {
+        best = d;
+        yaw = (Math.atan2(dx, dy) * 180) / Math.PI;
+      }
+    }
+  }
+  const yawN = Math.round(yaw + 90) % 360;
+  return yawN < 0 ? yawN + 360 : yawN;
+}
+
+function corners(obb: { cx: number; cy: number; w: number; d: number; yawDeg: number }) {
+  const rad = (obb.yawDeg * Math.PI) / 180;
+  const fx = Math.sin(rad);
+  const fy = Math.cos(rad);
+  const rx = fy;
+  const ry = -fx;
+  const hw = obb.w / 2;
+  const hd = obb.d / 2;
+  return [
+    [1, 1],
+    [-1, 1],
+    [-1, -1],
+    [1, -1],
+  ].map(
+    ([sx, sy]) =>
+      [obb.cx + rx * hw * sx! + fx * hd * sy!, obb.cy + ry * hw * sx! + fy * hd * sy!] as const,
+  );
 }
 
 describe('settlement generation 3 contracts', () => {
@@ -338,6 +438,87 @@ describe('generation gates', () => {
     );
     expect(legacy.population?.crowd.culture).toBeNull();
   });
+
+  test('a human village is palisaded and a hamlet stays hedged', () => {
+    const world = generateWorld(8801, settings(3, { cultureOverride: 'human' }));
+    const node = world.nodes[0]!;
+    const village = buildLayoutV3(world, { ...grow(node, 10, 'village'), culture: 'human' });
+    const hamlet = buildLayoutV3(world, { ...grow(node, 6, 'hamlet'), culture: 'human' });
+    expect(village.segments.some((segment) => segment.kit === 'civ_wall_palisade_3m')).toBe(true);
+    expect(hamlet.segments.some((segment) => segment.kind === 'hedge')).toBe(true);
+    expect(hamlet.segments.some((segment) => segment.kind === 'palisade')).toBe(false);
+  });
+
+  test('a capital and a metropolis fill the whole core', () => {
+    const world = generateWorld(7741, settings(3));
+    const capitalWorld = generateWorld(7741, settings(3));
+    const capital = adopt(capitalWorld, 'capital', 36);
+    const plan = buildLayoutV3(capitalWorld, capital);
+    expect(plan.layoutGen).toBe(3);
+    expect(plan.culture).toBe('human');
+    expect(plan.buildings.length).toBeGreaterThanOrEqual(250);
+    expect(plan.buildings.length).toBeLessThanOrEqual(400);
+    expect(plan.wards && plan.wards.length).toBeGreaterThan(1);
+    expect(plan.wards?.some((ward) => ward.kind === 'keep')).toBe(true);
+    expect(plan.buildings.some((b) => b.role === 'keep')).toBe(true);
+    expect(plan.buildings.every((b) => b.form === 'house')).toBe(true);
+    const closedRank1 = plan.roads.filter((road) => {
+      if (road.rank !== 1 || road.points.length < 4) return false;
+      const a = road.points[0]!;
+      const b = road.points[road.points.length - 1]!;
+      return Math.hypot(a[0] - b[0], a[1] - b[1]) < 1.5;
+    });
+    expect(closedRank1.length).toBeLessThanOrEqual(1);
+    for (const road of plan.roads) expect(polylineCrossesSelf(road.points)).toBe(false);
+    const yaws = plan.buildings.map((b) => b.yawDeg ?? 0);
+    expect(yaws.filter((yaw) => yaw % 90 !== 0).length).toBeGreaterThan(3);
+    expect(plan.segments.some((segment) => segment.id.startsWith('keep'))).toBe(true);
+    expect(plan.segments.some((segment) => segment.kit === 'civ_wall_curtain_3m')).toBe(true);
+    const gate = plan.props.find((prop) => prop.kit === 'civ_wall_gatehouse_9x6');
+    expect(gate).toBeTruthy();
+    expect(Math.abs(angleDelta(gate!.rot, avenueGateRot(plan, gate!.x, gate!.y)))).toBeLessThan(
+      1.5,
+    );
+    const inside = new Map<string, number>();
+    for (const ward of plan.wards ?? []) {
+      for (const q of ward.quadrants) inside.set(`${q.x},${q.y}`, ward.id);
+    }
+    for (const building of plan.buildings) {
+      const obb = building.obb!;
+      const id = quadrantId(inside, obb.cx, obb.cy);
+      expect(id).toBeDefined();
+      for (const [x, y] of corners(obb)) {
+        const other = quadrantId(inside, x, y);
+        if (other !== undefined) expect(other).toBe(id);
+      }
+    }
+    expect(rollCulture(world.seed, capital)).toBe('human');
+    expect(rollCulture(world.seed, capital, 'orc')).toBe('orc');
+
+    const t0 = performance.now();
+    const area = buildAreaExport(capitalWorld, capital);
+    const capitalMs = performance.now() - t0;
+    expect(area.version).toBe('0.9.0');
+    expect(area.area.city?.wardCount).toBeGreaterThan(1);
+    expect(area.buildings.length).toBeGreaterThanOrEqual(250);
+    expect(capitalMs).toBeLessThan(6000);
+
+    const metroWorld = generateWorld(7741, settings(3));
+    const metroNode = adopt(metroWorld, 'metropolis', 48);
+    const metro = buildLayoutV3(metroWorld, metroNode);
+    expect(metro.buildings.length).toBeGreaterThanOrEqual(400);
+    expect(metro.buildings.length).toBeLessThanOrEqual(900);
+    expect(metro.segments.some((segment) => segment.id.startsWith('keep'))).toBe(true);
+
+    const t1 = performance.now();
+    const metroArea = buildAreaExport(metroWorld, metroNode);
+    const metroMs = performance.now() - t1;
+    expect(metroArea.buildings.length).toBeGreaterThanOrEqual(400);
+    expect(metroMs).toBeLessThan(6000);
+    console.info(
+      `c2b bake capital ${Math.round(capitalMs)} ms / ${area.buildings.length} buildings, metropolis ${Math.round(metroMs)} ms / ${metroArea.buildings.length} buildings`,
+    );
+  }, 120_000);
 });
 
 const GEN1_NODES = `ashfen:city::167:16.5:145.5
