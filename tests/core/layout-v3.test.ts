@@ -475,11 +475,15 @@ describe('generation gates', () => {
     expect(built / quadCount).toBeGreaterThan(0.7);
     const sideStreets = plan.roads.filter((road) => road.rank >= 2 && road.points.length >= 4);
     expect(sideStreets.length).toBeGreaterThan(8);
+    const headingBins = new Set<number>();
     for (const road of sideStreets) {
       const a = road.points[0]!;
       const b = road.points[road.points.length - 1]!;
       expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(8);
+      const deg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+      headingBins.add(Math.round((((deg % 180) + 180) % 180) / 15));
     }
+    expect(headingBins.size).toBeGreaterThan(3);
     expect(plan.wards && plan.wards.length).toBeGreaterThan(1);
     expect(plan.wards?.some((ward) => ward.kind === 'keep')).toBe(true);
     expect(plan.buildings.some((b) => b.role === 'keep')).toBe(true);

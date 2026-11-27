@@ -1085,7 +1085,26 @@ loc.push(toLocalXZ(xy[0],xy[1],field));
 for(let i=1;i<loc.length;i++)strokeSeg(cov,g.tw,g.th,g.worldW,g.worldH,loc[i-1][0],loc[i-1][1],loc[i][0],loc[i][1],half,0.42);
 });
 (yards||[]).forEach(function(r){stampSoft(dirtC,g.tw,g.th,g.worldW,g.worldH,r[0],r[1],r[2],r[3]);});
+bakeGroundDirt(field,dirtC,g);
 return packCover(roadC,dirtC,g);
+}
+/* Cells tagged dirt (alleys and the ground against a house) replace the lawn. */
+function bakeGroundDirt(field,dirtC,g){
+const legend=field.groundLegend||[],gnd=field.ground;
+const id=legend.indexOf("dirt");
+if(id<0||!gnd)return;
+const sx=g.tw/Math.max(1,field.w),sy=g.th/Math.max(1,field.h);
+for(let iz=0;iz<field.h;iz++){
+for(let ix=0;ix<field.w;ix++){
+if(gnd[iz*field.w+ix]!==id)continue;
+const x0=Math.floor(ix*sx),x1=Math.min(g.tw,Math.ceil((ix+1)*sx));
+const y0=Math.floor(iz*sy),y1=Math.min(g.th,Math.ceil((iz+1)*sy));
+for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+const i=y*g.tw+x;
+if(dirtC[i]<1)dirtC[i]=1;
+}
+}
+}
 }
 /* Polylines win when they carry v0.6 fields. Otherwise a surface layer,
    and only then today's ground path masks. Old polylines (kind+width only)

@@ -1088,6 +1088,68 @@ function paintSettlement(
         paint(zone.rect.x + x, zone.rect.y + y, surfaceId, groundId);
     }
   }
+  paintYardDirt(plan, ground, mask, originX, originY, gw, gh);
+}
+
+/** Alleys and the ground against a house are packed dirt. Noble gardens stay grass. */
+function paintYardDirt(
+  plan: SettlementPlan,
+  ground: Uint8Array,
+  mask: Uint8Array,
+  originX: number,
+  originY: number,
+  gw: number,
+  gh: number,
+): void {
+  const paint = (absX: number, absY: number) => {
+    const ix = Math.floor(absX - originX);
+    const iy = Math.floor(absY - originY);
+    if (ix < 0 || iy < 0 || ix >= gw || iy >= gh) return;
+    const gi = ix + iy * gw;
+    if (!mask[gi]) return;
+    const g = ground[gi] ?? 0;
+    if (
+      g === GROUND.road ||
+      g === GROUND.plaza ||
+      g === GROUND.water ||
+      g === GROUND.rock ||
+      g === GROUND.park
+    )
+      return;
+    ground[gi] = GROUND.dirt;
+  };
+  for (const building of plan.buildings) {
+    const obb = building.obb;
+    if (!obb) continue;
+    const pad =
+      building.district === 'noble'
+        ? 1.5
+        : building.district === 'slums' || building.district === 'craft'
+          ? 4.4
+          : 3.4;
+    const rad = (obb.yawDeg * Math.PI) / 180;
+    const fx = Math.sin(rad);
+    const fy = Math.cos(rad);
+    const rx = fy;
+    const ry = -fx;
+    const hw = obb.w / 2 + pad;
+    const hd = obb.d / 2 + pad;
+    const reach = Math.hypot(hw, hd);
+    const x0 = Math.floor(obb.cx - reach);
+    const x1 = Math.ceil(obb.cx + reach);
+    const y0 = Math.floor(obb.cy - reach);
+    const y1 = Math.ceil(obb.cy + reach);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x + 0.5 - obb.cx;
+        const dy = y + 0.5 - obb.cy;
+        const lx = dx * rx + dy * ry;
+        const ly = dx * fx + dy * fy;
+        if (Math.abs(lx) > hw || Math.abs(ly) > hd) continue;
+        paint(x + 0.5, y + 0.5);
+      }
+    }
+  }
 }
 
 function tagLegacyProps(

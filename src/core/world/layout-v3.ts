@@ -29,7 +29,7 @@ import type {
 import { keepGatePoints, planWards, traceCellLoop, waterBeside } from './layout-wards';
 import { type BuildingRotation, type Cardinal, placedMaskAtYaw } from './building-templates';
 import { ensureKitTemplate, kitBuilding, resolveKit } from './kit-catalog';
-import { fbm, Rng } from './noise';
+import { fbm, hash2, Rng } from './noise';
 import { Biome, type MapNode, type WorldData, ZONE_SCALE } from './models';
 import { worldHeightSampler } from './world-gen';
 import { type SettlementTier, roadForRank, tierById, tierForKind } from './settlement-tiers';
@@ -196,6 +196,9 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
       return world.biomes[x + y * world.width] ?? Biome.Plains;
     };
     planned = planWards(tiles, centre, entries, heightAt, waterBeside(tiles, biomeAt));
+    if (style.streets.kind === 'organic') {
+      layWardStreets(planned, edges, field, contains, curviness);
+    }
     const seeded = plazaLots(planned, edges, contains);
     seedLots = seeded.lots;
     plazas = seeded.plazas;
@@ -212,6 +215,11 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
     span,
     seedLots,
     plazas,
+    (x, y) => {
+      if (!planned) return undefined;
+      const id = planned.wardIdAt(x, y);
+      return id === undefined ? undefined : planned.wards.find((ward) => ward.id === id)?.kind;
+    },
   );
   const districts = seedDistricts(style, centre, entries, tiles, heightAt);
   if (big && tiles.length && planned) {
@@ -737,7 +745,6 @@ function buildEdges(
     for (const piece of ringPieces(centre, contains, reach * 0.55, curviness)) {
       if (piece.length >= 4) push(1, 4.5, piece);
     }
-    layBlockGrid(edges, centre, contains, cls, curviness, rng);
     return edges;
   }
   if (style.streets.kind === 'radial') {
@@ -945,55 +952,276 @@ function ringPieces(
   return pieces;
 }
 
+interface StreetSample {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  id: string;
+}
+
+interface WardStreetSpec {
+  gap: [number, number];
+  bend: number;
+  /** Share of cross-streets that stop at the next through-street and restart offset. */
+  stagger: number;
+}
+
+/** Craft and slums pack tight and crooked. Noble blocks leave room for gardens. */
+function wardStreetSpec(kind: string): WardStreetSpec {
+  switch (kind) {
+    case 'slums':
+      return { gap: [18, 27], bend: 1, stagger: 0.62 };
+    case 'craft':
+      return { gap: [20, 32], bend: 0.85, stagger: 0.48 };
+    case 'noble':
+      return { gap: [38, 54], bend: 0.35, stagger: 0.22 };
+    case 'market':
+    case 'temple':
+      return { gap: [32, 46], bend: 0.4, stagger: 0.2 };
+    case 'keep':
+      return { gap: [36, 50], bend: 0.28, stagger: 0.12 };
+    case 'docks':
+      return { gap: [22, 34], bend: 0.7, stagger: 0.4 };
+    default:
+      return { gap: [26, 40], bend: 0.55, stagger: 0.36 };
+  }
+}
+
+function lotSpec(kind: string): {
+  frontage: [number, number];
+  depth: [number, number];
+  setback: number;
+  yaw: number;
+} {
+  switch (kind) {
+    case 'slums':
+      return { frontage: [4.4, 6.2], depth: [5.4, 6.6], setback: 0.28, yaw: 8 };
+    case 'craft':
+      return { frontage: [5, 7.2], depth: [5.8, 7.2], setback: 0.32, yaw: 6 };
+    case 'noble':
+      return { frontage: [8, 12], depth: [9, 12], setback: 1.7, yaw: 3 };
+    default:
+      return { frontage: [5.4, 7.4], depth: [6.4, 8.2], setback: 0.42, yaw: 4 };
+  }
+}
+
 /**
- * Side streets of a capital: one gently warped grid, open at both ends, so
- * blocks read as a medieval street plan instead of dead-end loops.
+ * Side streets per ward. Each ward picks its own angle off the nearest avenue,
+ * then lays two bent families with uneven gaps. Cross-streets often stop and
+ * restart a few metres aside, so the plan is T-junctions rather than one lattice.
  */
-function layBlockGrid(
+function layWardStreets(
+  planned: ReturnType<typeof planWards>,
   edges: Edge[],
-  centre: { x: number; y: number },
+  field: Field,
   contains: (x: number, y: number) => boolean,
-  cls: SettlementClass,
   curviness: number,
-  rng: Rng,
 ): void {
-  const reach = reachOf(centre, contains, cls === 'metropolis' ? 720 : 480);
-  const pitch = cls === 'metropolis' ? 28 : 30;
-  const tilt = ((12 + rng.range(0, 16)) * Math.PI) / 180;
-  const amp = Math.min(1.5, 0.7 + curviness);
-  for (const dir of [tilt, tilt + Math.PI / 2]) {
-    const dx = Math.cos(dir);
-    const dy = Math.sin(dir);
+  const cell = 10;
+  const index = new Map<string, StreetSample[]>();
+  const remember = (edge: Edge) => {
+    const pts = edge.points;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const tx = (b[0] - a[0]) / len;
+      const ty = (b[1] - a[1]) / len;
+      const steps = Math.max(1, Math.ceil(len / 4));
+      for (let s = 0; s <= steps; s++) {
+        const t = s / steps;
+        const sample: StreetSample = {
+          x: a[0] + (b[0] - a[0]) * t,
+          y: a[1] + (b[1] - a[1]) * t,
+          tx,
+          ty,
+          id: edge.id,
+        };
+        const key = `${Math.floor(sample.x / cell)},${Math.floor(sample.y / cell)}`;
+        const list = index.get(key);
+        if (list) list.push(sample);
+        else index.set(key, [sample]);
+      }
+    }
+  };
+  for (const edge of edges) remember(edge);
+  const nearSample = (x: number, y: number, dist: number, skip: string): StreetSample | null => {
+    let best: StreetSample | null = null;
+    let bestD = dist;
+    const cx = Math.floor(x / cell);
+    const cy = Math.floor(y / cell);
+    for (let oy = -1; oy <= 1; oy++) {
+      for (let ox = -1; ox <= 1; ox++) {
+        const list = index.get(`${cx + ox},${cy + oy}`);
+        if (!list) continue;
+        for (const sample of list) {
+          if (sample.id === skip) continue;
+          const d = Math.hypot(sample.x - x, sample.y - y);
+          if (d < bestD) {
+            bestD = d;
+            best = sample;
+          }
+        }
+      }
+    }
+    return best;
+  };
+  const pushRun = (points: Array<[number, number]>, width: number) => {
+    if (points.length < 4 || polylineLength(points) < 18) return;
+    if (polylineCrossesSelf(points)) return;
+    let crowded = 0;
+    let seen = 0;
+    for (let i = 1; i < points.length - 1; i += 2) {
+      seen += 1;
+      if (nearSample(points[i]![0], points[i]![1], 7, '')) crowded += 1;
+    }
+    if (seen > 3 && crowded / seen > 0.6) return;
+    const edge: Edge = {
+      id: `e${edges.length}`,
+      rank: width < 2.4 ? 3 : 2,
+      widthM: width,
+      points,
+      samples: samplePolyline(points, 2),
+    };
+    edges.push(edge);
+    remember(edge);
+  };
+  const costAt = (x: number, y: number): number => {
+    const ix = Math.max(0, Math.min(field.w - 1, Math.round((x - field.originX) / field.step)));
+    const iy = Math.max(0, Math.min(field.h - 1, Math.round((y - field.originY) / field.step)));
+    return field.cost[iy * field.w + ix] ?? 1;
+  };
+
+  for (const ward of planned.wards) {
+    if (ward.quadrants.length < 2 && ward.kind !== 'keep') continue;
+    const spec = wardStreetSpec(ward.kind);
+    const at = wardCentre(ward.quadrants);
+    let tx = 1;
+    let ty = 0;
+    let best = Infinity;
+    const probe = (x: number, y: number) => {
+      const cx = Math.floor(x / cell);
+      const cy = Math.floor(y / cell);
+      for (let oy = -2; oy <= 2; oy++) {
+        for (let ox = -2; ox <= 2; ox++) {
+          const list = index.get(`${cx + ox},${cy + oy}`);
+          if (!list) continue;
+          for (const sample of list) {
+            if (!sample.id.startsWith('e')) continue;
+            const d = Math.hypot(sample.x - x, sample.y - y);
+            if (d < best) {
+              best = d;
+              tx = sample.tx;
+              ty = sample.ty;
+            }
+          }
+        }
+      }
+    };
+    probe(at.x, at.y);
+    const spin = (hash2(ward.id, ward.quadrants.length, 5) - 0.5) * 0.7;
+    const ang = Math.atan2(ty, tx) + spin;
+    const dx = Math.cos(ang);
+    const dy = Math.sin(ang);
     const px = -dy;
     const py = dx;
-    const count = Math.ceil((reach * 2) / pitch);
-    for (let i = -count; i <= count; i++) {
-      const ox = centre.x + px * i * pitch;
-      const oy = centre.y + py * i * pitch;
-      let run: Array<[number, number]> = [];
-      const flush = () => {
-        if (run.length >= 5 && polylineLength(run) >= 22 && !polylineCrossesSelf(run)) {
-          edges.push({
-            id: `e${edges.length}`,
-            rank: 2,
-            widthM: 3.2,
-            points: run,
-            samples: samplePolyline(run, 2),
-          });
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const quad of ward.quadrants) {
+      minX = Math.min(minX, quad.x * 64);
+      minY = Math.min(minY, quad.y * 64);
+      maxX = Math.max(maxX, (quad.x + 1) * 64);
+      maxY = Math.max(maxY, (quad.y + 1) * 64);
+    }
+    const span = Math.max(maxX - minX, maxY - minY, 36);
+    const inside = (x: number, y: number): boolean => {
+      if (!contains(x, y)) return false;
+      if (planned.wardIdAt(x, y) === ward.id) return true;
+      return Math.hypot(x - at.x, y - at.y) < span * 0.62;
+    };
+    const walk = (
+      ox: number,
+      oy: number,
+      hx: number,
+      hy: number,
+      limit: number,
+      salt: number,
+    ): Array<[number, number]> => {
+      const pts: Array<[number, number]> = [[q(ox), q(oy)]];
+      let x = ox;
+      let y = oy;
+      let vx = hx;
+      let vy = hy;
+      let turned = 0;
+      for (let walked = 0; walked < limit; walked += 5) {
+        const left = costAt(x - vy * 6, y + vx * 6);
+        const right = costAt(x + vy * 6, y - vx * 6);
+        const terrain = Math.max(-0.07, Math.min(0.07, (right - left) * 0.03));
+        const bend =
+          (fbm(x * 0.02, y * 0.02, ward.id * 19 + salt) - 0.5) *
+          spec.bend *
+          (0.22 + curviness * 0.15);
+        const turn = Math.max(-0.1, Math.min(0.1, bend + terrain));
+        turned += turn;
+        if (Math.abs(turned) > 0.85) break;
+        const c = Math.cos(turn);
+        const s = Math.sin(turn);
+        const nx = vx * c - vy * s;
+        const ny = vx * s + vy * c;
+        vx = nx;
+        vy = ny;
+        x += vx * 5;
+        y += vy * 5;
+        if (!inside(x, y)) break;
+        pts.push([q(x), q(y)]);
+        if (walked > 14) {
+          const hit = nearSample(x, y, 6.5, '');
+          if (hit && Math.hypot(hit.x - ox, hit.y - oy) > 12) {
+            pts.push([q(hit.x), q(hit.y)]);
+            break;
+          }
         }
-        run = [];
-      };
-      for (let t = -reach; t <= reach; t += 6) {
-        const wob = Math.sin(t * 0.045 + i * 0.7) * amp;
-        const x = ox + dx * t + px * wob;
-        const y = oy + dy * t + py * wob;
-        if (!contains(x, y)) {
-          flush();
-          continue;
-        }
-        run.push([q(x), q(y)]);
       }
-      flush();
+      return pts;
+    };
+
+    let cursor = -span * 0.55;
+    let line = 0;
+    while (cursor < span * 0.55 && line < 14) {
+      const gap = spec.gap[0] + hash2(ward.id, line, 11) * (spec.gap[1] - spec.gap[0]);
+      cursor += gap;
+      const slide = (hash2(ward.id, line, 13) - 0.5) * gap * 0.35;
+      const ox = at.x + px * cursor + dx * slide;
+      const oy = at.y + py * cursor + dy * slide;
+      if (!contains(ox, oy)) {
+        line += 1;
+        continue;
+      }
+      pushRun(walk(ox, oy, dx, dy, span * 0.85, line + 1), ward.kind === 'slums' ? 2.6 : 3.1);
+      pushRun(walk(ox, oy, -dx, -dy, span * 0.85, line + 40), ward.kind === 'slums' ? 2.6 : 3.1);
+      line += 1;
+    }
+
+    cursor = -span * 0.55;
+    line = 0;
+    while (cursor < span * 0.55 && line < 14) {
+      const gap = spec.gap[0] + hash2(ward.id, line, 17) * (spec.gap[1] - spec.gap[0]);
+      cursor += gap;
+      const stagger = hash2(ward.id, line, 19) < spec.stagger;
+      const slide = (hash2(ward.id, line, 23) - 0.5) * (stagger ? 14 : 6);
+      const ox = at.x + dx * cursor + px * slide;
+      const oy = at.y + dy * cursor + py * slide;
+      if (!contains(ox, oy)) {
+        line += 1;
+        continue;
+      }
+      const reach = span * (stagger ? 0.42 : 0.7);
+      pushRun(walk(ox, oy, px, py, reach, line + 80), 2.4);
+      if (!stagger) pushRun(walk(ox, oy, -px, -py, reach, line + 120), 2.4);
+      line += 1;
     }
   }
 }
@@ -1193,6 +1421,7 @@ function placeLots(
   span: number,
   seedLots: Lot[] = [],
   plazas: Array<{ x: number; y: number; r: number }> = [],
+  wardAt: (x: number, y: number) => string | undefined = () => undefined,
 ): Lot[] {
   const lots: Lot[] = seedLots.slice();
   const rule = style.lots;
@@ -1223,11 +1452,18 @@ function placeLots(
     const length = polylineLength(edge.points);
     let arc = 6;
     while (arc < length - 5 && lots.length < target) {
-      const frontage = tight
-        ? 6
+      const along = pointAt(edge.points, arc);
+      if (!along) break;
+      const plotKind = tight ? (wardAt(along.x, along.y) ?? 'residential') : '';
+      const plot = tight ? lotSpec(plotKind) : null;
+      const roll = tight ? hash2(Math.floor(along.x * 2), Math.floor(arc), edge.rank + 7) : 0;
+      const frontage = plot
+        ? plot.frontage[0] + roll * (plot.frontage[1] - plot.frontage[0])
         : rng.range(rule.frontage[0], rule.frontage[1]) * style.scale * fit;
-      const depth = tight ? 7.4 : rng.range(rule.depth[0], rule.depth[1]) * style.scale * fit;
-      const setback = tight ? 0.45 : rng.range(rule.setback[0], rule.setback[1]);
+      const depth = plot
+        ? plot.depth[0] + hash2(Math.floor(arc), edge.rank, 3) * (plot.depth[1] - plot.depth[0])
+        : rng.range(rule.depth[0], rule.depth[1]) * style.scale * fit;
+      const setback = plot ? plot.setback : rng.range(rule.setback[0], rule.setback[1]);
       const at = pointAt(edge.points, arc + frontage / 2);
       const tan = tangentAt(edge.points, arc + frontage / 2);
       if (!at || !tan) break;
@@ -1246,7 +1482,9 @@ function placeLots(
         } else if (!tight && rule.facing === 'free') {
           yaw += rng.range(-40, 40);
         }
-        if (!tight) {
+        if (plot) {
+          yaw += (hash2(Math.floor(obbCx), Math.floor(obbCy), side + 5) - 0.5) * plot.yaw;
+        } else if (!tight) {
           yaw += rng.range(-rule.yawJitterDeg, rule.yawJitterDeg) * (0.35 + curviness);
         }
         const obb: Obb = {
@@ -1275,7 +1513,9 @@ function placeLots(
         });
         indexLot(index);
       }
-      arc += frontage + (tight ? 0.06 : rng.range(1.2, 2.4));
+      const passage =
+        tight && hash2(Math.floor(arc * 2), edge.rank, 29) < (plotKind === 'slums' ? 0.2 : 0.1);
+      arc += frontage + (tight ? (passage ? 2.4 : 0.18) : rng.range(1.2, 2.4));
     }
   }
   if (!lots.length && contains(centre.x, centre.y)) {
