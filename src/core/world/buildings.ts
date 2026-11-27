@@ -84,6 +84,7 @@ export interface PlacedBuilding extends BuildingDef {
   placeholder?: boolean;
   form?: string;
   roleColour?: string;
+  roofMaterial?: 'tile' | 'slate' | 'thatch';
   obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
 }
 
@@ -805,6 +806,7 @@ export function settlementLayout(node: MapNode, world: WorldData): PlacedBuildin
         ...(b.placeholder ? { placeholder: true } : {}),
         ...(b.form ? { form: b.form } : {}),
         ...(b.roleColour ? { roleColour: b.roleColour } : {}),
+        ...(b.roofMaterial ? { roofMaterial: b.roofMaterial } : {}),
         ...(b.obb ? { obb: b.obb } : {}),
       };
     });
@@ -1116,6 +1118,7 @@ export function toPlacedSprite(b: PlacedBuilding, originX: number, originY: numb
     ...(b.placeholder ? { placeholder: true } : {}),
     ...(b.form ? { form: b.form } : {}),
     ...(b.roleColour ? { roleColour: b.roleColour } : {}),
+    ...(b.roofMaterial ? { roofMaterial: b.roofMaterial } : {}),
     ...(b.obb ? { obb: b.obb } : {}),
   };
 }

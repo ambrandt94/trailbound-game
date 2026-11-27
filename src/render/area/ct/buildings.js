@@ -591,6 +591,7 @@ const row=layoutOne(b,origin||{x:0,y:0},meters||1,gy);
 if(row){
 row.yawDeg=b.yawDeg;row.role=b.role;row.roleLabel=b.roleLabel;
 row.placeholder=!!b.placeholder;row.form=b.form;row.roleColour=b.roleColour;
+row.roofMaterial=b.roofMaterial||"";row.obb=b.obb||null;
 out.push(row);
 }
 }
@@ -1173,28 +1174,113 @@ changed=true;
 }
 if(changed)st.mesh.instanceMatrix.needsUpdate=true;
 }
+function civicRow(row){
+return row.role==="keep"||row.role==="temple"||row.role==="town_hall"||row.role==="guildhall"||row.role==="bank";
+}
+/* Unit gable or hip. X is width, Z is depth, Y is rise. Scale (w, d, d) keeps the pitch.
+   Party walls have no side overhang; eaves overhang the street and the yard.
+   UVs are metres at scale 1, and the material stretches them by the instance scale. */
+function pitchedRoofGeo(kind){
+const rise=kind==="hip"?0.48:0.44;
+const oh=0.07,thick=0.045,K=10/32;
+const pos=[],uv=[];
+function face(a,b,c){[a,b,c].forEach(function(p){pos.push(p[0],p[1],p[2]);uv.push(p[3],p[4]);});}
+function quad(p0,p1,p2,p3){face(p0,p1,p2);face(p0,p2,p3);}
+function slope(p0,p1,p2,p3){
+quad(p0,p1,p2,p3);
+const d=function(p){return [p[0],p[1]-thick,p[2],p[3],p[4]];};
+quad(d(p0),d(p3),d(p2),d(p1));
+}
+if(kind==="hip"){
+const yE=-rise*oh/0.5;
+const ridge=0.08;
+const nL=[-0.5-oh,yE,-0.5-oh,0,0],nR=[0.5+oh,yE,-0.5-oh,K,0],sR=[0.5+oh,yE,0.5+oh,K,K],sL=[-0.5-oh,yE,0.5+oh,0,K];
+const r0=[-ridge,rise,0,K*0.42,K*0.5],r1=[ridge,rise,0,K*0.58,K*0.5];
+slope(nL,nR,r1,r0);
+slope(sL,sR,r1,r0);
+function triSlope(a,b,c){
+face(a,b,c);
+const d=function(p){return [p[0],p[1]-thick,p[2],p[3],p[4]];};
+face(d(a),d(c),d(b));
+}
+triSlope(nL,sL,r0);
+triSlope(sR,nR,r1);
+}else{
+const yE=-rise*(oh/0.5);
+const zE=0.5+oh;
+const run=Math.hypot(0.5+oh,rise-yE);
+const e0=[-0.5,yE,-zE,0,0],e1=[0.5,yE,-zE,K,0],r1=[0.5,rise,0,K,run*K],r0=[-0.5,rise,0,0,run*K];
+const f0=[-0.5,yE,zE,0,0],f1=[0.5,yE,zE,K,0];
+slope(e0,r0,r1,e1);
+slope(f0,f1,r1,r0);
+function end(x,out){
+const o0=[x,yE,-0.5,0,0],o1=[x,yE,0.5,K,0],peak=[x,rise,0,K*0.5,rise*K];
+if(out>0)face(o0,peak,o1);else face(o0,o1,peak);
+}
+end(-0.5,-1);end(0.5,1);
+const cap=0.04,hz=0.045;
+quad([-0.5,rise+cap,-hz,0,0],[0.5,rise+cap,-hz,K,0],[0.5,rise+0.012,hz,K,hz*2*K],[-0.5,rise+0.012,hz,0,hz*2*K]);
+}
+const geo=new THREE.BufferGeometry();
+geo.setAttribute("position",new THREE.Float32BufferAttribute(pos,3));
+geo.setAttribute("uv",new THREE.Float32BufferAttribute(uv,2));
+geo.computeVertexNormals();
+return geo;
+}
+function scaledRoofMat(src){
+const m=src.clone();
+m.customProgramCacheKey=function(){return "tb-roof-scale";};
+const prev=m.onBeforeCompile;
+m.onBeforeCompile=function(sh){
+if(prev)prev(sh);
+sh.vertexShader=sh.vertexShader.replace("#include <uv_vertex>","#include <uv_vertex>\n#ifdef USE_INSTANCING\nvMapUv.x*=length(instanceMatrix[0].xyz);\nvMapUv.y*=length(instanceMatrix[2].xyz);\n#endif");
+};
+return m;
+}
+function roofMatOf(kind){
+const T=window.TBTiles&&TBTiles.MAT;
+const src=T&&kind==="tile"?T.clay:T&&kind==="thatch"?T.thatch:T?T.slate:null;
+if(src)return scaledRoofMat(src);
+return pixelMaterial(kind==="thatch"?"#c6a15a":kind==="tile"?"#c46a3a":"#6a7c8c","roof");
+}
+function wallMatOf(stone){
+const T=window.TBTiles&&TBTiles.MAT;
+const src=T?(stone?T.stone:T.plaster):null;
+if(!src)return pixelMaterial(stone?"#d6ccba":"#e6d2b4","block");
+const m=src.clone();
+return m;
+}
+function spanOf(row){
+const box=row.obb;
+const w=Math.max(3.2,box&&box.w?box.w:(row.houseW||row.fw||6));
+const d=Math.max(3.2,box&&box.d?box.d:(row.houseD||row.fd||6));
+return {w:w,d:d};
+}
+/* Whole capitals stay on a handful of instanced meshes, including past 96 m,
+   so a denser ward does not add a draw per house. */
 function instanceTownhouses(holder,rows,groundY){
 const body=new THREE.BoxGeometry(1,1,1);
 body.translate(0,0.5,0);
-const roof=gableGeometry(1,1,0.72);
-const timber=pixelMaterial("#c4a574","cabin");
-const stone=pixelMaterial("#d6ccba","block");
-const roofMat=pixelMaterial("#8d4b3a","roof");
-function civic(row){
-return row.role==="keep"||row.role==="temple"||row.role==="town_hall"||row.role==="guildhall"||row.role==="bank";
+const uv=body.attributes.uv;
+for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*3.2,uv.getY(i)*2.4);
+const roofs={gable:pitchedRoofGeo("gable"),hip:pitchedRoofGeo("hip")};
+const mats={};
+function matFor(kind){
+if(!mats[kind])mats[kind]=roofMatOf(kind);
+return mats[kind];
 }
-function add(list,geo,mat,heightOf,baseOf){
-if(!list.length)return;
+const walls={plaster:wallMatOf(false),stone:wallMatOf(true)};
+function add(list,geo,mat,scaleOf,yOf){
+if(!list.length)return null;
 const mesh=new THREE.InstancedMesh(geo,mat,list.length);
 const dummy=new THREE.Object3D();
 for(let i=0;i<list.length;i++){
-const row=list[i];
+const row=list[i],span=spanOf(row);
 const y=groundY(row.cx,row.cz)||0;
-const w=Math.max(4.6,row.houseW||row.fw||6);
-const d=Math.max(6.2,row.houseD||row.fd||8);
-dummy.position.set(row.cx,y+baseOf(row),row.cz);
+const sc=scaleOf(row,span);
+dummy.position.set(row.cx,y+yOf(row,span),row.cz);
 dummy.rotation.set(0,(row.yawDeg||0)*Math.PI/180,0);
-dummy.scale.set(w,heightOf(row),d);
+dummy.scale.set(sc[0],sc[1],sc[2]);
 dummy.updateMatrix();
 mesh.setMatrixAt(i,dummy.matrix);
 }
@@ -1202,12 +1288,30 @@ mesh.instanceMatrix.needsUpdate=true;
 mesh.castShadow=true;mesh.receiveShadow=true;mesh.frustumCulled=false;
 mesh.userData.tbKeep=1;
 holder.add(mesh);
+return mesh;
 }
-const wood=[],rock=[];
-rows.forEach(function(row){(civic(row)?rock:wood).push(row);});
-add(wood,body,timber,function(){return 3.3;},function(){return 0;});
-add(rock,body,stone,function(){return 4.6;},function(){return 0;});
-add(rows,roof,roofMat,function(){return 1.2;},function(row){return civic(row)?4.6:3.3;});
+const bins={};
+rows.forEach(function(row){
+const stone=civicRow(row)?"stone":"plaster";
+(bins[stone]||(bins[stone]=[])).push(row);
+const roof=(civicRow(row)?"hip":"gable")+"|"+(row.roofMaterial||"slate");
+(bins[roof]||(bins[roof]=[])).push(row);
+});
+Object.keys(bins).forEach(function(key){
+const list=bins[key];
+if(key==="plaster"||key==="stone"){
+add(list,body,walls[key],function(row,span){
+const h=key==="stone"?6.2:5.2;
+return [span.w,h,span.d];
+},function(){return 0;});
+return;
+}
+const hip=key.indexOf("hip|")===0;
+const kind=key.slice(hip?4:6);
+add(list,roofs[hip?"hip":"gable"],matFor(kind),function(row,span){
+return [span.w,span.d,span.d];
+},function(row){return civicRow(row)?6.2:5.2;});
+});
 }
 function place(parent,groundY,buildings,origin,meters,blocks){
 window.TBBuildings._lod=null;

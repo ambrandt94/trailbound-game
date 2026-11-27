@@ -918,6 +918,7 @@ export interface PlacedSprite {
   placeholder?: boolean;
   form?: string;
   roleColour?: string;
+  roofMaterial?: 'tile' | 'slate' | 'thatch';
   obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
   rot?: number;
   /** Trees only, 0.9–1.1. */

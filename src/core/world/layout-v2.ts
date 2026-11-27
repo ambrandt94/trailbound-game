@@ -70,6 +70,8 @@ export interface PlanBuilding {
   placeholder?: boolean;
   form?: string;
   roleColour?: string;
+  /** Generation 3 roof albedo: clay tile, slate, or thatch. */
+  roofMaterial?: 'tile' | 'slate' | 'thatch';
   obb?: { cx: number; cy: number; w: number; d: number; yawDeg: number };
 }
 

@@ -456,12 +456,40 @@ describe('generation gates', () => {
     const plan = buildLayoutV3(capitalWorld, capital);
     expect(plan.layoutGen).toBe(3);
     expect(plan.culture).toBe('human');
-    expect(plan.buildings.length).toBeGreaterThanOrEqual(250);
-    expect(plan.buildings.length).toBeLessThanOrEqual(400);
+    expect(plan.buildings.length).toBeGreaterThanOrEqual(800);
+    expect(plan.buildings.length).toBeLessThanOrEqual(4000);
+    const open = new Set(['market', 'temple']);
+    let quadCount = 0;
+    let built = 0;
+    for (const ward of plan.wards ?? []) {
+      if (open.has(ward.kind)) continue;
+      for (const quad of ward.quadrants) {
+        quadCount += 1;
+        const x = (quad.x + 0.5) * 64;
+        const y = (quad.y + 0.5) * 64;
+        if (plan.buildings.some((b) => Math.hypot((b.obb?.cx ?? 0) - x, (b.obb?.cy ?? 0) - y) < 40))
+          built += 1;
+      }
+    }
+    expect(quadCount).toBeGreaterThan(8);
+    expect(built / quadCount).toBeGreaterThan(0.7);
+    const sideStreets = plan.roads.filter((road) => road.rank >= 2 && road.points.length >= 4);
+    expect(sideStreets.length).toBeGreaterThan(8);
+    for (const road of sideStreets) {
+      const a = road.points[0]!;
+      const b = road.points[road.points.length - 1]!;
+      expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeGreaterThan(8);
+    }
     expect(plan.wards && plan.wards.length).toBeGreaterThan(1);
     expect(plan.wards?.some((ward) => ward.kind === 'keep')).toBe(true);
     expect(plan.buildings.some((b) => b.role === 'keep')).toBe(true);
     expect(plan.buildings.every((b) => b.form === 'house')).toBe(true);
+    expect(
+      plan.buildings.every(
+        (b) =>
+          b.roofMaterial === 'tile' || b.roofMaterial === 'slate' || b.roofMaterial === 'thatch',
+      ),
+    ).toBe(true);
     const closedRank1 = plan.roads.filter((road) => {
       if (road.rank !== 1 || road.points.length < 4) return false;
       const a = road.points[0]!;
@@ -500,20 +528,20 @@ describe('generation gates', () => {
     const capitalMs = performance.now() - t0;
     expect(area.version).toBe('0.9.0');
     expect(area.area.city?.wardCount).toBeGreaterThan(1);
-    expect(area.buildings.length).toBeGreaterThanOrEqual(250);
+    expect(area.buildings.length).toBeGreaterThanOrEqual(800);
     expect(capitalMs).toBeLessThan(6000);
 
     const metroWorld = generateWorld(7741, settings(3));
     const metroNode = adopt(metroWorld, 'metropolis', 48);
     const metro = buildLayoutV3(metroWorld, metroNode);
-    expect(metro.buildings.length).toBeGreaterThanOrEqual(400);
-    expect(metro.buildings.length).toBeLessThanOrEqual(900);
+    expect(metro.buildings.length).toBeGreaterThanOrEqual(1500);
+    expect(metro.buildings.length).toBeLessThanOrEqual(7000);
     expect(metro.segments.some((segment) => segment.id.startsWith('keep'))).toBe(true);
 
     const t1 = performance.now();
     const metroArea = buildAreaExport(metroWorld, metroNode);
     const metroMs = performance.now() - t1;
-    expect(metroArea.buildings.length).toBeGreaterThanOrEqual(400);
+    expect(metroArea.buildings.length).toBeGreaterThanOrEqual(1500);
     expect(metroMs).toBeLessThan(6000);
     console.info(
       `c2b bake capital ${Math.round(capitalMs)} ms / ${area.buildings.length} buildings, metropolis ${Math.round(metroMs)} ms / ${metroArea.buildings.length} buildings`,

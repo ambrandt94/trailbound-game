@@ -9,6 +9,7 @@ import {
   blendCurviness,
   resolveBiomeSet,
   resolveBuilding,
+  roofMaterialForSet,
   urbanForm,
   type BiomeSetId,
 } from './biome-building-sets';
@@ -184,15 +185,36 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
   );
   const span = Math.max(8, Math.min(maxX - minX, maxY - minY));
   const big = cls === 'capital' || cls === 'metropolis';
-  let lots = placeLots(style, edges, contains, centre, cls, target, curviness, rngLot, span);
-  const districts = seedDistricts(style, centre, entries, tiles, heightAt);
+  const lotTarget = big ? (cls === 'metropolis' ? 9000 : 6000) : target;
   let wards: PlanWard[] | undefined;
+  let seedLots: Lot[] = [];
+  let plazas: Array<{ x: number; y: number; r: number }> = [];
+  let planned: ReturnType<typeof planWards> | undefined;
   if (big && tiles.length) {
     const biomeAt = (x: number, y: number) => {
       if (x < 0 || y < 0 || x >= world.width || y >= world.height) return Biome.Water;
       return world.biomes[x + y * world.width] ?? Biome.Plains;
     };
-    const planned = planWards(tiles, centre, entries, heightAt, waterBeside(tiles, biomeAt));
+    planned = planWards(tiles, centre, entries, heightAt, waterBeside(tiles, biomeAt));
+    const seeded = plazaLots(planned, edges, contains);
+    seedLots = seeded.lots;
+    plazas = seeded.plazas;
+  }
+  let lots = placeLots(
+    style,
+    edges,
+    contains,
+    centre,
+    cls,
+    lotTarget,
+    curviness,
+    rngLot,
+    span,
+    seedLots,
+    plazas,
+  );
+  const districts = seedDistricts(style, centre, entries, tiles, heightAt);
+  if (big && tiles.length && planned) {
     const byId = new Map(planned.wards.map((ward) => [ward.id, ward]));
     const kept: Lot[] = [];
     for (const lot of lots) {
@@ -227,7 +249,7 @@ export function buildLayoutV3(world: WorldData, node: MapNode): SettlementPlan {
   }
 
   const gateCount = Math.max(1, entries.length);
-  const assigned = assignRoles(style, cls, lots, target, gateCount, rngRole, dropNotes);
+  const assigned = assignRoles(style, cls, lots, target, gateCount, rngRole, dropNotes, big);
   const buildings = assigned.flatMap((role, index) => {
     const lot = lots[index];
     if (!lot || !role) return [];
@@ -715,6 +737,8 @@ function buildEdges(
     for (const piece of ringPieces(centre, contains, reach * 0.55, curviness)) {
       if (piece.length >= 4) push(1, 4.5, piece);
     }
+    layBlockGrid(edges, centre, contains, cls, curviness, rng);
+    return edges;
   }
   if (style.streets.kind === 'radial') {
     const reach = reachOf(centre, contains);
@@ -921,6 +945,59 @@ function ringPieces(
   return pieces;
 }
 
+/**
+ * Side streets of a capital: one gently warped grid, open at both ends, so
+ * blocks read as a medieval street plan instead of dead-end loops.
+ */
+function layBlockGrid(
+  edges: Edge[],
+  centre: { x: number; y: number },
+  contains: (x: number, y: number) => boolean,
+  cls: SettlementClass,
+  curviness: number,
+  rng: Rng,
+): void {
+  const reach = reachOf(centre, contains, cls === 'metropolis' ? 720 : 480);
+  const pitch = cls === 'metropolis' ? 28 : 30;
+  const tilt = ((12 + rng.range(0, 16)) * Math.PI) / 180;
+  const amp = Math.min(1.5, 0.7 + curviness);
+  for (const dir of [tilt, tilt + Math.PI / 2]) {
+    const dx = Math.cos(dir);
+    const dy = Math.sin(dir);
+    const px = -dy;
+    const py = dx;
+    const count = Math.ceil((reach * 2) / pitch);
+    for (let i = -count; i <= count; i++) {
+      const ox = centre.x + px * i * pitch;
+      const oy = centre.y + py * i * pitch;
+      let run: Array<[number, number]> = [];
+      const flush = () => {
+        if (run.length >= 5 && polylineLength(run) >= 22 && !polylineCrossesSelf(run)) {
+          edges.push({
+            id: `e${edges.length}`,
+            rank: 2,
+            widthM: 3.2,
+            points: run,
+            samples: samplePolyline(run, 2),
+          });
+        }
+        run = [];
+      };
+      for (let t = -reach; t <= reach; t += 6) {
+        const wob = Math.sin(t * 0.045 + i * 0.7) * amp;
+        const x = ox + dx * t + px * wob;
+        const y = oy + dy * t + py * wob;
+        if (!contains(x, y)) {
+          flush();
+          continue;
+        }
+        run.push([q(x), q(y)]);
+      }
+      flush();
+    }
+  }
+}
+
 function growBranch(
   edges: Edge[],
   style: LayoutStyle,
@@ -995,6 +1072,115 @@ function nearOther(edges: Edge[], x: number, y: number, dist: number, skip: stri
   return false;
 }
 
+function roadCells(edges: Edge[]): Map<string, Array<[number, number]>> {
+  const grid = new Map<string, Array<[number, number]>>();
+  const cell = 8;
+  for (const edge of edges) {
+    for (const sample of edge.samples) {
+      const key = `${Math.floor(sample[0] / cell)},${Math.floor(sample[1] / cell)}`;
+      const list = grid.get(key);
+      if (list) list.push(sample);
+      else grid.set(key, [sample]);
+    }
+  }
+  return grid;
+}
+
+function nearRoad(obb: Obb, grid: Map<string, Array<[number, number]>>, pad: number): boolean {
+  const grown: Obb = { ...obb, w: obb.w + pad * 2, d: obb.d + pad * 2 };
+  const box = aabbOf(grown);
+  const cell = 8;
+  for (let y = box.y; y <= box.y + box.d; y += cell) {
+    for (let x = box.x; x <= box.x + box.w; x += cell) {
+      const list = grid.get(`${Math.floor(x / cell)},${Math.floor(y / cell)}`);
+      if (!list) continue;
+      for (const sample of list) {
+        if (pointInObb(sample[0], sample[1], grown)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function wardCentre(quads: ReadonlyArray<{ x: number; y: number }>): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  for (const quad of quads) {
+    x += (quad.x + 0.5) * 64;
+    y += (quad.y + 0.5) * 64;
+  }
+  const n = Math.max(1, quads.length);
+  return { x: x / n, y: y / n };
+}
+
+function lotFitsWard(
+  obb: Obb,
+  wardId: number,
+  wardIdAt: (x: number, y: number) => number | undefined,
+): boolean {
+  if (wardIdAt(obb.cx, obb.cy) !== wardId) return false;
+  return cornersOf(obb).every(([x, y]) => {
+    const other = wardIdAt(x, y);
+    return other === undefined || other === wardId;
+  });
+}
+
+/** A wide lot on the market, temple, and keep, and an open circle around the two plazas. */
+function plazaLots(
+  planned: ReturnType<typeof planWards>,
+  edges: Edge[],
+  contains: (x: number, y: number) => boolean,
+): { lots: Lot[]; plazas: Array<{ x: number; y: number; r: number }> } {
+  const lots: Lot[] = [];
+  const plazas: Array<{ x: number; y: number; r: number }> = [];
+  for (const ward of planned.wards) {
+    if (ward.kind !== 'market' && ward.kind !== 'temple' && ward.kind !== 'keep') continue;
+    const at = wardCentre(ward.quadrants);
+    const open = ward.kind === 'keep' ? 0 : ward.kind === 'market' ? 22 : 18;
+    if (open) plazas.push({ x: at.x, y: at.y, r: open });
+    const size = ward.kind === 'keep' ? 16 : 14;
+    let yaw = 0;
+    let best = Infinity;
+    for (const edge of edges) {
+      if (edge.rank !== 1) continue;
+      for (let i = 1; i < edge.points.length; i++) {
+        const a = edge.points[i - 1]!;
+        const b = edge.points[i]!;
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const len2 = dx * dx + dy * dy || 1;
+        const t = Math.max(0, Math.min(1, ((at.x - a[0]) * dx + (at.y - a[1]) * dy) / len2));
+        const px = a[0] + dx * t;
+        const py = a[1] + dy * t;
+        const dist = Math.hypot(px - at.x, py - at.y);
+        if (dist < best) {
+          best = dist;
+          yaw = yawToward(dx, dy);
+        }
+      }
+    }
+    const obb: Obb = {
+      cx: q(at.x),
+      cy: q(at.y),
+      w: size,
+      d: size,
+      yawDeg: qYaw(yaw),
+    };
+    if (!lotFitsWard(obb, ward.id, planned.wardIdAt)) continue;
+    if (!lotInside(obb, contains)) continue;
+    if (hitsRoad(obb, edges, 1.2)) continue;
+    lots.push({
+      edge: 'plaza',
+      rank: 1,
+      arc: 0,
+      obb,
+      district: ward.kind,
+      weights: ward.weights,
+    });
+  }
+  return { lots, plazas };
+}
+
 function placeLots(
   style: LayoutStyle,
   edges: Edge[],
@@ -1005,8 +1191,10 @@ function placeLots(
   curviness: number,
   rng: Rng,
   span: number,
+  seedLots: Lot[] = [],
+  plazas: Array<{ x: number; y: number; r: number }> = [],
 ): Lot[] {
-  const lots: Lot[] = [];
+  const lots: Lot[] = seedLots.slice();
   const rule = style.lots;
   const fit = Math.min(1, Math.max(0.42, span / 64));
   const clear = Math.min(
@@ -1016,19 +1204,30 @@ function placeLots(
   const buckets = new Map<string, number[]>();
   const cell = 16;
   const bucket = (x: number, y: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)}`;
+  const indexLot = (index: number) => {
+    const box = aabbOf(lots[index]!.obb);
+    for (let y = box.y; y <= box.y + box.d; y += cell) {
+      for (let x = box.x; x <= box.x + box.w; x += cell) {
+        const k = bucket(x, y);
+        const list = buckets.get(k);
+        if (list) list.push(index);
+        else buckets.set(k, [index]);
+      }
+    }
+  };
+  lots.forEach((_, index) => indexLot(index));
+  const tight = cls === 'capital' || cls === 'metropolis';
+  const roads = tight ? roadCells(edges) : null;
   const ordered = edges.slice().sort((a, b) => a.rank - b.rank || a.id.localeCompare(b.id));
   for (const edge of ordered) {
     const length = polylineLength(edge.points);
     let arc = 6;
-    const tight = cls === 'capital' || cls === 'metropolis';
     while (arc < length - 5 && lots.length < target) {
       const frontage = tight
-        ? rng.range(5.6, 7.4)
+        ? 6
         : rng.range(rule.frontage[0], rule.frontage[1]) * style.scale * fit;
-      const depth = tight
-        ? rng.range(7, 9)
-        : rng.range(rule.depth[0], rule.depth[1]) * style.scale * fit;
-      const setback = tight ? 0.35 : rng.range(rule.setback[0], rule.setback[1]);
+      const depth = tight ? 7.4 : rng.range(rule.depth[0], rule.depth[1]) * style.scale * fit;
+      const setback = tight ? 0.45 : rng.range(rule.setback[0], rule.setback[1]);
       const at = pointAt(edge.points, arc + frontage / 2);
       const tan = tangentAt(edge.points, arc + frontage / 2);
       if (!at || !tan) break;
@@ -1039,14 +1238,17 @@ function placeLots(
         const obbCx = at.x + nx * (setback + depth / 2 + edge.widthM / 2);
         const obbCy = at.y + ny * (setback + depth / 2 + edge.widthM / 2);
         if (Math.hypot(obbCx - centre.x, obbCy - centre.y) < clear) continue;
+        if (plazas.some((plaza) => Math.hypot(obbCx - plaza.x, obbCy - plaza.y) < plaza.r))
+          continue;
         let yaw = yawToward(-nx, -ny);
-        if (rule.facing === 'centre') {
+        if (!tight && rule.facing === 'centre') {
           yaw = yawToward(centre.x - obbCx, centre.y - obbCy);
-        } else if (rule.facing === 'free') {
+        } else if (!tight && rule.facing === 'free') {
           yaw += rng.range(-40, 40);
         }
-        const jitter = tight ? 2 : rule.yawJitterDeg;
-        yaw += rng.range(-jitter, jitter) * (tight ? 0.4 : 0.35 + curviness);
+        if (!tight) {
+          yaw += rng.range(-rule.yawJitterDeg, rule.yawJitterDeg) * (0.35 + curviness);
+        }
         const obb: Obb = {
           cx: q(obbCx),
           cy: q(obbCy),
@@ -1055,7 +1257,12 @@ function placeLots(
           yawDeg: qYaw(yaw),
         };
         if (!lotInside(obb, contains)) continue;
-        if (hitsRoad(obb, edges, edge.widthM * 0.35 + 0.6)) continue;
+        if (
+          roads
+            ? nearRoad(obb, roads, edge.widthM * 0.35 + 0.6)
+            : hitsRoad(obb, edges, edge.widthM * 0.35 + 0.6)
+        )
+          continue;
         if (hitsLots(obb, lots, buckets, bucket)) continue;
         const index = lots.length;
         lots.push({
@@ -1066,17 +1273,9 @@ function placeLots(
           district: 'residential',
           weights: new Map(),
         });
-        const box = aabbOf(obb);
-        for (let y = box.y; y <= box.y + box.d; y += cell) {
-          for (let x = box.x; x <= box.x + box.w; x += cell) {
-            const k = bucket(x, y);
-            const list = buckets.get(k);
-            if (list) list.push(index);
-            else buckets.set(k, [index]);
-          }
-        }
+        indexLot(index);
       }
-      arc += frontage + (tight ? rng.range(0.25, 0.6) : rng.range(1.2, 2.4));
+      arc += frontage + (tight ? 0.06 : rng.range(1.2, 2.4));
     }
   }
   if (!lots.length && contains(centre.x, centre.y)) {
@@ -1330,6 +1529,7 @@ function assignRoles(
   gates: number,
   rng: Rng,
   dropNotes: string[],
+  wideCivic = false,
 ): Array<BuildingRole | null> {
   const roles: Array<BuildingRole | null> = lots.map(() => null);
   const queue: BuildingRole[] = [];
@@ -1345,7 +1545,7 @@ function assignRoles(
   }
   const used = new Set<number>();
   for (const role of queue) {
-    const index = pickLot(lots, used, role);
+    const index = pickLot(lots, used, role, wideCivic);
     if (index < 0) {
       dropNotes.push(`dropped ${role}: no lot`);
       continue;
@@ -1353,7 +1553,7 @@ function assignRoles(
     used.add(index);
     roles[index] = role;
   }
-  const homeBudget = Math.max(0, Math.round(lots.length * 0.82));
+  const homeBudget = wideCivic ? lots.length : Math.max(0, Math.round(lots.length * 0.82));
   let homes = roles.filter((role) => role === 'home').length;
   for (let i = 0; i < lots.length; i++) {
     if (roles[i]) continue;
@@ -1387,7 +1587,29 @@ function demandFor(cls: SettlementClass, count: number, gates: number): RoleDema
   return base;
 }
 
-function pickLot(lots: Lot[], used: Set<number>, role: BuildingRole): number {
+function pickLot(lots: Lot[], used: Set<number>, role: BuildingRole, wideCivic = false): number {
+  if (
+    wideCivic &&
+    (role === 'keep' ||
+      role === 'temple' ||
+      role === 'market' ||
+      role === 'town_hall' ||
+      role === 'guildhall')
+  ) {
+    let best = -1;
+    let area = -1;
+    for (let i = 0; i < lots.length; i++) {
+      if (used.has(i)) continue;
+      const lot = lots[i]!;
+      if ((lot.weights.get(role) ?? 0) <= 0) continue;
+      const next = lot.obb.w * lot.obb.d;
+      if (next > area) {
+        area = next;
+        best = i;
+      }
+    }
+    if (best >= 0) return best;
+  }
   let fallback = -1;
   const strict = role === 'dock';
   for (let i = 0; i < lots.length; i++) {
@@ -1460,6 +1682,7 @@ function makeBuilding(
     structure: { x: q(box.x), y: q(box.y), w: q(box.w), d: q(box.d) },
     role,
     roleLabel: resolved.label,
+    roofMaterial: roofMaterialForSet(set.id),
     yawDeg: lot.obb.yawDeg,
     placeholder: resolved.placeholder,
     form: resolved.form.form,
