@@ -689,7 +689,9 @@ export async function createTownSession(canvas, hooks) {
      beside it, rides the bench, or walks free on a soft leash. */
   let convoyFrame = null;
   /* The wagon is not in this zone: it rolled off, or has not got here yet. Hidden; the hero
-     is free and nothing pulls them back. It shows again when its road brings it inside. */
+     is free and nothing pulls them back. It shows again when its road brings it inside.
+     Arriving does not walk the hero over: the leash pull lives in nextConvoyMode and
+     only runs when CONVOY_AUTO_APPROACH is on (it is off). */
   let convoyGone = false;
   let convoyAway = false;
   function readConvoy() {
@@ -705,6 +707,7 @@ export async function createTownSession(canvas, hooks) {
       convoyFrame = null;
     } else if (convoyFrame && convoyGone) {
       // Back in this zone (or arriving for the first time): the one wagon shows where it is.
+      // The hero stays in free. They are not walked to the wagon.
       convoyGone = false;
       convoyAway = false;
       cv.idle = 0;

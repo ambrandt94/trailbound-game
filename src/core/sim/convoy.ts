@@ -36,8 +36,17 @@ export const CONVOY_SIDE_M = 2.5;
 export const CONVOY_AHEAD_M = 0.8;
 /** Past this, the HUD offers to rejoin. */
 export const LEASH_HINT_M = 30;
-/** Past this with no move input, the hero walks back on their own. */
+/** Past this with no move input, the hero walks back on their own — if auto-approach is on. */
 export const LEASH_PULL_M = 40;
+/**
+ * Walk a free hero back to the wagon once they are past `LEASH_PULL_M`.
+ * That is what runs them across the zone when the wagon rolls in: the wagon
+ * was away, so they are free, and the moment it is inside they are usually
+ * farther than the leash. Off by default: they stay put until they rejoin,
+ * step onto the bench in reach, or idle in the walking slot. Walk-beside
+ * (already in `walk`), the wagon's roll, halt, and re-cut do not read this.
+ */
+export const CONVOY_AUTO_APPROACH = false;
 /** Free walk re-latches onto the wagon after standing this long near the slot. */
 export const RELATCH_SLOT_M = 3;
 export const RELATCH_IDLE_SEC = 0.8;
@@ -280,10 +289,18 @@ export interface ConvoyModeInput {
 
 /**
  * Walk beside the wagon until a move key takes over. Free walk lasts until
- * the hero is pulled back past the leash, asks to rejoin, or stands still
- * by the slot. The bench toggles; a move key steps off it.
+ * the hero asks to rejoin or stands still by the slot. With
+ * `CONVOY_AUTO_APPROACH` on, standing past the leash also walks them back
+ * (the pull that used to fire when the wagon entered the zone). The bench
+ * toggles; a move key steps off it.
+ *
+ * `autoApproach` defaults to the flag so callers keep the shipped behaviour.
+ * Tests pass `true` to keep the old pull covered.
  */
-export function nextConvoyMode(input: ConvoyModeInput): ConvoyMode {
+export function nextConvoyMode(
+  input: ConvoyModeInput,
+  autoApproach: boolean = CONVOY_AUTO_APPROACH,
+): ConvoyMode {
   if (input.bench) {
     if (input.mode === 'bench') return 'walk';
     return input.dist <= BENCH_REACH_M ? 'bench' : 'walk';
@@ -292,7 +309,7 @@ export function nextConvoyMode(input: ConvoyModeInput): ConvoyMode {
   if (input.mode === 'bench') return input.hasInput ? 'free' : 'bench';
   if (input.hasInput) return 'free';
   if (input.mode === 'walk') return 'walk';
-  if (input.dist > LEASH_PULL_M) return 'walk';
+  if (autoApproach && input.dist > LEASH_PULL_M) return 'walk';
   if (input.slotDist < RELATCH_SLOT_M && input.idleSec >= RELATCH_IDLE_SEC) return 'walk';
   return 'free';
 }
