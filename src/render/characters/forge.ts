@@ -231,6 +231,8 @@ export interface AvatarBody {
   present(pose: AvatarPose): void;
   /** Replace the overlay set. Missing names are stopped. */
   layers(stack: readonly AvatarLayer[]): void;
+  /** Clip names on this body. A private pack can add Sprint, Start, Stop, or Skid. */
+  clipNames(): readonly string[];
   /** Attachment point. Null on the placeholder pawn and on runtimes without sockets. */
   socket(name: AvatarSocket): THREE.Object3D | null;
   update(dt: number): void;
@@ -536,6 +538,9 @@ export function placeholderAvatar(seed: number): AvatarBody {
       body.clip = state.clip;
     },
     layers() {},
+    clipNames() {
+      return [];
+    },
     socket() {
       return null;
     },
@@ -781,6 +786,9 @@ function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
           action.time = Math.min(duration - 0.0001, Math.max(0, layer.time));
         }
       }
+    },
+    clipNames() {
+      return Object.keys(built.clips ?? {});
     },
     socket(name) {
       return built.socket?.(name) ?? null;

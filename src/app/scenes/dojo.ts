@@ -1,4 +1,5 @@
 import { DEFAULT_MOTOR } from '../../core/combat/motor';
+import type { PostureTuning } from '../../core/combat/posture';
 import { cameraWish } from '../../core/combat/space';
 import { createFight, type Fight } from '../../core/combat/fight';
 import { DojoInput, stickToInput } from '../../input/dojo-input';
@@ -21,6 +22,12 @@ import {
   dojoDodgeTime,
   dojoDodgeCooldown,
   dojoIFrames,
+  dojoSprintLean,
+  dojoSkidLean,
+  dojoSkidCrouch,
+  dojoSkidDuration,
+  dojoBankMax,
+  dojoHeadStab,
   dojoHud,
   dojoNotice,
   dojoTimeScale,
@@ -45,6 +52,17 @@ function motorTuning() {
     evadeDuration: dojoDodgeTime.value,
     evadeCooldown: dojoDodgeCooldown.value,
     evadeIFrames: dojoIFrames.value,
+  };
+}
+
+function postureTuning(): PostureTuning {
+  return {
+    maxSprintLean: dojoSprintLean.value,
+    skidLean: dojoSkidLean.value,
+    skidCrouch: dojoSkidCrouch.value,
+    skidDuration: dojoSkidDuration.value,
+    bankMax: dojoBankMax.value,
+    headStabilization: dojoHeadStab.value,
   };
 }
 
@@ -119,6 +137,7 @@ export class DojoScene implements Scene {
     // to the midpoint and does not rotate, so a held stick keeps one direction.
     const wish = cameraWish(stick.ix, stick.iz, this.yaw);
     const snap = this.fight.step(dt * scale, stickToInput(stick, wish));
+    this.view.setPosture(postureTuning());
     this.view.sync(snap, dojoHitboxes.value, dojoWeapon.value, dt * scale);
     dojoHud.value = {
       playerHp: snap.player.hp,

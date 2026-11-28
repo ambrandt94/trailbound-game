@@ -32,9 +32,20 @@ import {
   type ForgeRaceMetrics,
 } from '../characters/forge';
 import { attackClipTime, chargeWeight, type ChargeLevel } from '../../core/combat/charge';
-import type { DodgeKind, Gait } from '../../core/combat/motor';
+import { wrapAngle, type DodgeKind, type Gait } from '../../core/combat/motor';
+import {
+  approachPosture,
+  blendWithPlant,
+  plantEnvelope,
+  resolvePosture,
+  DEFAULT_POSTURE,
+  type LocoBlend,
+  type PostureTuning,
+} from '../../core/combat/posture';
 import { attackClip, dodgeClip, stanceClip } from './clips';
 import { motionPose, type MotionPose } from './motion';
+import { dojoPlaybackRate } from './playback';
+import { applyPosture } from './posture-apply';
 import { createWeaponKit, type WeaponKit } from './weapons';
 
 const VIEW = AREA_VIEWS[5] ?? {
@@ -75,6 +86,13 @@ export class DojoView {
   private disposed = false;
   private bodiesReady = 0;
   private readonly clock = { t: 0 };
+  private postureTuning: PostureTuning = DEFAULT_POSTURE;
+  private plantT = 0;
+  private planting = false;
+  private prevYaw = 0;
+  private yawReady = false;
+  private yawRate = 0;
+  private shownPose: ReturnType<typeof resolvePosture> | null = null;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.scene.background = new Color('#d9c7a4');
@@ -111,6 +129,10 @@ export class DojoView {
 
   start(): void {
     void this.upgradeBodies();
+  }
+
+  setPosture(tuning: PostureTuning): void {
+    this.postureTuning = tuning;
   }
 
   sync(snapshot: FightSnapshot, showHitboxes: boolean, weaponId: string, dt: number): void {
@@ -211,23 +233,32 @@ export class DojoView {
     actor.root.visible = true;
     actor.root.position.set(fighter.x, 0, fighter.z);
     actor.root.rotation.y = fighter.yaw;
+    actor.root.rotation.x = 0;
+    actor.root.rotation.z = 0;
     const skeletal = fighter.id === 'player' && actor.body?.source === 'forge';
     const pose = skeletal ? REST_POSE : motionPose(fighter.motion, fighter.phase);
     actor.pivot.position.set(0, pose.hop, pose.lunge);
     actor.pivot.rotation.x = pose.lean;
+    actor.pivot.rotation.z = 0;
     actor.kit?.apply(pose);
     const moving =
       fighter.state === 'move' || fighter.gait === 'strafe' || fighter.gait === 'backpedal';
     const speed = fighter.speed;
+    const locomotion =
+      skeletal && actor.body ? this.playerLocomotion(fighter, actor.body, speed, dt) : null;
     actor.body?.present({
       clip: moving ? 'Walk' : 'Idle',
-      timeScale: locomotionRate(speed),
+      timeScale: locomotion ? locomotion.rate : locomotionRate(speed),
       fade: 0.12,
-      blend: skeletal ? locomotionBlend(speed, fighter.gait) : undefined,
+      blend: locomotion?.blend,
     });
     if (skeletal) actor.body?.layers(playerLayers(fighter));
     else actor.body?.layers([]);
     actor.body?.update(dt);
+    if (skeletal && locomotion && !locomotion.pose.replaced && actor.body) {
+      const metrics = metricsOf(actor.body.object3D);
+      applyPosture(actor.body.object3D, locomotion.pose, metrics?.scale ?? 1);
+    }
     const cue = fighter.telegraph;
     actor.marker.visible = cue !== 'none';
     const material = actor.marker.material as MeshLambertMaterial;
@@ -263,6 +294,57 @@ export class DojoView {
         cue === 'open' ? '#7ee0ff' : '#ff5a4a',
       );
     }
+  }
+
+  /**
+   * Spine lean, bank, and the plant. The root stays upright. A latched plant
+   * finishes even after the motor has already called the gait idle.
+   */
+  private playerLocomotion(
+    fighter: FighterView,
+    body: AvatarBody,
+    speed: number,
+    dt: number,
+  ): { blend: LocoBlend; rate: number; pose: ReturnType<typeof resolvePosture> } {
+    if (dt > 1e-4) {
+      if (this.yawReady) this.yawRate = wrapAngle(fighter.yaw - this.prevYaw) / dt;
+      this.prevYaw = fighter.yaw;
+      this.yawReady = true;
+    }
+    const braking = fighter.gait === 'skid' || fighter.gait === 'stop';
+    const settled = fighter.gait === 'idle' || fighter.gait === 'guard';
+    if (braking) {
+      if (!this.planting) {
+        this.planting = true;
+        this.plantT = 0;
+      }
+      this.plantT += dt;
+    } else if (this.planting && settled && this.plantT < this.postureTuning.skidDuration) {
+      this.plantT += dt;
+    } else {
+      this.planting = false;
+      this.plantT = 0;
+    }
+    const plant = this.planting ? plantEnvelope(this.plantT, this.postureTuning.skidDuration) : 0;
+    const gait = this.planting && settled ? 'stop' : fighter.gait;
+    const blend = blendWithPlant(locomotionBlend(speed, gait), plant);
+    const metrics = metricsOf(body.object3D);
+    const pose = resolvePosture({
+      gait,
+      plant,
+      speed,
+      yawRate: this.yawRate,
+      blend,
+      clips: body.clipNames(),
+      tuning: this.postureTuning,
+    });
+    const shown = this.shownPose ? approachPosture(this.shownPose, pose, dt) : pose;
+    this.shownPose = shown;
+    return {
+      blend,
+      rate: dojoPlaybackRate(speed, blend, pose.strideScale, metrics),
+      pose: shown,
+    };
   }
 
   private async upgradeBodies(): Promise<void> {
@@ -429,10 +511,8 @@ function leanFor(
     return { name: side >= 0 ? 'strafe-right' : 'strafe-left', time: 0.5, weight: 0.85 };
   }
   if (gait === 'backpedal') return { name: 'backpedal', time: 0.5, weight: 0.85 };
-  if (gait === 'start') return { name: 'start', time: 0.45, weight: 0.75 };
-  if (gait === 'stop') return { name: 'stop', time: 0.4, weight: 0.8 };
-  if (gait === 'skid') return { name: 'skid', time: 0.35, weight: 1 };
-  if (gait === 'sprint') return { name: 'sprint', time: 0.5, weight: 0.85 };
+  // Sprint, start, stop, and skid lean live in posture.ts. Layering these
+  // clips as well pitches the hips and tips the whole skeleton.
   return null;
 }
 
