@@ -1,0 +1,126 @@
+{
+ "format": "cf.bundle",
+ "name": "character-forge",
+ "engine": {
+  "name": "character-forge",
+  "version": "2.6.0"
+ },
+ "generator": {
+  "version": 1
+ },
+ "recipe": {
+  "version": 2,
+  "schema": "recipe.schema.json"
+ },
+ "api": 2,
+ "three": {
+  "peer": true,
+  "range": ">=0.187 <0.190",
+  "builtAgainst": "0.187.0"
+ },
+ "entry": "cf-runtime.mjs",
+ "types": "cf-runtime.d.ts",
+ "assets": "assets.json",
+ "baseUrl": "relative to this folder (pass CF.init({ baseUrl }))",
+ "wardrobe": {
+  "tags": "cf-wardrobe-tags/1 (garment.tags = { sets, slot, style })",
+  "access": "cf-access/1: CF.init({ access | accessUrl }) / CF.setAccess / CF.loadAccess; default = everything loaded",
+  "sets": [
+   "blitzball/swimwear",
+   "trailbound/basics",
+   "trailbound/homestead",
+   "trailbound/western",
+   "trailbound/adventurer",
+   "trailbound/armor"
+  ]
+ },
+ "clips": {
+  "builtin": [
+   "Idle",
+   "Walk",
+   "Run"
+  ],
+  "locomotion": "2.2.1 policy.locomotion 'full' (default): Idle/Walk/Run = KI_* (private, when enabled) else CC0 Quaternius; CF_Idle/CF_Walk = CF-authored",
+  "flyerAliases": [
+   "Hover",
+   "FlyMove"
+  ],
+  "optionalCC0": "policy animationSet: \"cf+cc0\" (Quaternius UAL, CC0)",
+  "excluded": "Kevin Iglesias (private licence) never bundled"
+ },
+ "licenses": "LICENSES.md",
+ "kits": {
+  "format": "cf-kit/1",
+  "rig": "cf-humanoid-29",
+  "api": [
+   "registerSlot",
+   "registerGarment",
+   "registerRace",
+   "registerClip",
+   "loadKit",
+   "unloadKit",
+   "registry",
+   "validateKit"
+  ],
+  "recipeField": "kits (optional, written only when a recipe uses a kit)"
+ },
+ "files": {
+  "API.md": {
+   "bytes": 21040,
+   "sha256": "61c78390983b20a664ec1659159dc4092663a766dd50f73c6159770fccd453ad"
+  },
+  "CHANGELOG.md": {
+   "bytes": 17446,
+   "sha256": "c03b91283910b1f72bfa081e671805903607a07c0211bb65da4c151127f65c4c"
+  },
+  "LICENSES.md": {
+   "bytes": 7555,
+   "sha256": "536589ea5fe6c9216cb6bc14c0e867d7f39a393334d69136512e3aae714d519c"
+  },
+  "README.md": {
+   "bytes": 20053,
+   "sha256": "e655c3a69a6d2209964c342bd327e07699db73b54451ba6c74ca02deaaaa7c07"
+  },
+  "assets.json": {
+   "bytes": 18475,
+   "sha256": "393c8868691851afd0523c81331ac158004ae2562e06213ba56395d7e5493ddc"
+  },
+  "cf-runtime.d.ts": {
+   "bytes": 13731,
+   "sha256": "e27b338bb38e74260f11c8bb69b8451737a6c882e9cf29effc92f5360e2282d0"
+  },
+  "cf-runtime.mjs": {
+   "bytes": 114801,
+   "sha256": "fb5fde4bd1dec6129953ce45067ab2f620eb2e4d6c2b9f8992083690ffeea921"
+  },
+  "chunks/chunk-GCCWDNAC.mjs": {
+   "bytes": 1697,
+   "sha256": "43cce502ee36b21fd4cc0f1fef7c2bfe36a4051322b6e9d0d90721498abd10ff"
+  },
+  "chunks/chunk-N3GHYLXL.mjs": {
+   "bytes": 71979,
+   "sha256": "05434b5aa0028277d844e053d578ca885435d2689b96626a93450eea7bbf710f"
+  },
+  "chunks/chunk-NRATNN6A.mjs": {
+   "bytes": 9682,
+   "sha256": "d7661688fb28f8ffab725043eb53a6ecd34229200cf9e24e38952fea60527f6d"
+  },
+  "chunks/engine_entry-JQENSI4G.mjs": {
+   "bytes": 237439,
+   "sha256": "6e6d9974df7e72f456cc8dcd4bfae8f6888114a409d97ab7f3f35a25f0cc0c4e"
+  },
+  "chunks/kitmesh-GYE3COTY.mjs": {
+   "bytes": 15800,
+   "sha256": "417bc1ba4566db739cb67bd59cccef825b07e43c151d4c959075b1006b519ca3"
+  },
+  "licenses.json": {
+   "bytes": 14456,
+   "sha256": "887fefd25eb0eb7fcc5082ae15f297190aee70f60e84de16978761a41fc6a1ba"
+  },
+  "recipe.schema.json": {
+   "bytes": 5292,
+   "sha256": "11d833fdac5b999f617a57012504d962805b1b8e8d12c6a2d17b51215c3173bb"
+  }
+ },
+ "builtAt": "2026-11-27T19:41:08.097Z"
+}

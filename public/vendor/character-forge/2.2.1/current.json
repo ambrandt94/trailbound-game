@@ -1,9 +1,0 @@
-{
- "version": "2.2.1",
- "api": 2,
- "generatorVersion": 1,
- "recipeVersion": 2,
- "bundle": "bundle.json",
- "runtimeEsm": "cf-runtime.mjs",
- "three": ">=0.187 <0.190"
-}

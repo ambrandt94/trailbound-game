@@ -265,7 +265,7 @@ export class CharacterCreatorScene implements Scene {
       setGarmentState: (name, value) => this.changeState(name, value),
       setClip: (clip) => {
         this.clip = clip;
-        this.working?.play(clip);
+        this.working?.play(this.shownClip());
         this.publish();
       },
       setTurntable: (on) => {
@@ -526,7 +526,7 @@ export class CharacterCreatorScene implements Scene {
         this.note = '';
         this.hash = body.recipeHash;
       }
-      body.play(this.clip);
+      body.play(this.shownClip());
       const previous = this.working;
       this.working = body;
       creatorSource.value = body.source;
@@ -662,7 +662,7 @@ export class CharacterCreatorScene implements Scene {
       clip: this.clip,
       turntable: this.turntable,
       pixieNote: this.flyerRaces.includes(this.race)
-        ? `${pretty(this.race)} hovers. Idle is a hover and Walk is flight.`
+        ? `${pretty(this.race)} hovers in place. Walk stays on the ground.`
         : '',
     };
     creatorView.value = view;
@@ -671,6 +671,15 @@ export class CharacterCreatorScene implements Scene {
     root.dataset.building = creatorBusy.value ? 'true' : 'false';
     root.dataset.avatarSource = creatorSource.value;
     root.dataset.cfInitMs = forgeReady().initMs.toFixed(0);
+  }
+
+  /**
+   * Standing clip for this race. Winged races use Hover. The Walk toggle stays
+   * the ground walk. The dojo does not use this path; it plays Idle.
+   */
+  private shownClip(): 'Idle' | 'Walk' | 'Hover' {
+    if (this.clip === 'Walk') return 'Walk';
+    return this.flyerRaces.includes(this.race) ? 'Hover' : 'Idle';
   }
 
   private mountCanvas(): void {

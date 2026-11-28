@@ -106,6 +106,7 @@ function raceMetricsOf(object: { userData: Record<string, unknown> }): ForgeRace
     walkDuration: metrics.walkDuration,
     scale: typeof metrics.scale === 'number' && metrics.scale > 0 ? metrics.scale : undefined,
     ...(runDuration && runStrideM ? { runDuration, runStrideM } : {}),
+    ...(metrics.flyer === true ? { flyer: true } : {}),
   };
 }
 import type { PlayerAvatar } from '../core/people/avatar';

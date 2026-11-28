@@ -4,7 +4,7 @@
  * missing channels so the creator swatches are not solid black.
  *
  * Hair mid-ramp colours come from
- * `public/vendor/character-forge/2.2.1/assets/shared/hair.json`.
+ * `public/vendor/character-forge/2.6.0/assets/shared/hair.json`.
  * Iris mid colours come from the v2 engine `IRIS` table.
  */
 import type { AvatarEngine } from '../core/people/avatar';

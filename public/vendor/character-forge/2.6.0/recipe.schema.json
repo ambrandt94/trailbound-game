@@ -1,0 +1,312 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "cf.character.v2",
+ "title": "Character Forge recipe v2",
+ "type": "object",
+ "required": [
+  "format",
+  "v",
+  "generatorVersion",
+  "seed",
+  "race",
+  "bodyType",
+  "tone",
+  "outfit"
+ ],
+ "additionalProperties": true,
+ "properties": {
+  "format": {
+   "const": "cf.character"
+  },
+  "v": {
+   "const": 2
+  },
+  "generatorVersion": {
+   "type": "integer",
+   "minimum": 1
+  },
+  "seed": {
+   "type": [
+    "integer",
+    "string"
+   ]
+  },
+  "style": {
+   "type": "string"
+  },
+  "name": {
+   "type": "string"
+  },
+  "race": {
+   "anyOf": [
+    {
+     "enum": [
+      "human",
+      "wood_elf",
+      "dark_elf",
+      "great_elf",
+      "mousefolk",
+      "tiefling",
+      "halfling",
+      "gnome",
+      "dwarf",
+      "goliath",
+      "firbolg",
+      "orc",
+      "goblin",
+      "kobold",
+      "imp",
+      "pixie",
+      "dragonborn"
+     ]
+    },
+    {
+     "type": "string",
+     "pattern": "^[a-z][a-z0-9_-]{1,31}/[a-z0-9][a-z0-9_-]{0,47}$",
+     "description": "registered race (kit)"
+    }
+   ]
+  },
+  "kits": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "namespace"
+    ],
+    "properties": {
+     "namespace": {
+      "type": "string"
+     },
+     "version": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "description": "2.2.0: kits this recipe needs (CF.loadKit); absent for builtin-only recipes"
+  },
+  "bodyType": {
+   "enum": [
+    "neutral",
+    "masc",
+    "fem"
+   ]
+  },
+  "bodyAmt": {
+   "type": "number",
+   "minimum": 0,
+   "maximum": 1
+  },
+  "tone": {
+   "type": "integer",
+   "minimum": 0
+  },
+  "marks": {
+   "type": "boolean"
+  },
+  "hair": {
+   "type": "string",
+   "description": "'auto' or a hair style id (catalog.hair.styles)"
+  },
+  "hairColor": {
+   "type": "string"
+  },
+  "fade": {
+   "type": "string"
+  },
+  "beard": {
+   "type": "string"
+  },
+  "beardColor": {
+   "type": "string"
+  },
+  "ears": {
+   "type": "string"
+  },
+  "snout": {
+   "type": "string"
+  },
+  "horns": {
+   "type": "string"
+  },
+  "hornSize": {
+   "type": "number"
+  },
+  "hornDye": {
+   "type": "string"
+  },
+  "wings": {
+   "type": "string"
+  },
+  "eyes": {
+   "type": "string"
+  },
+  "brows": {
+   "type": "string"
+  },
+  "iris": {
+   "type": "string"
+  },
+  "browColor": {
+   "type": "string"
+  },
+  "eyeOffset": {
+   "type": "array",
+   "items": {
+    "type": "number"
+   },
+   "minItems": 2,
+   "maxItems": 2
+  },
+  "expression": {
+   "type": "object",
+   "properties": {
+    "eye": {
+     "type": "string"
+    },
+    "brow": {
+     "type": "string"
+    },
+    "mouth": {
+     "type": "string"
+    }
+   }
+  },
+  "body": {
+   "type": "object",
+   "required": [
+    "h",
+    "b",
+    "s"
+   ],
+   "properties": {
+    "h": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 1
+    },
+    "b": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 1
+    },
+    "s": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 1
+    },
+    "mu": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 2,
+     "description": "2.4.0 Frame: Build (skinny .. bulky), clamped to the race range (CF.options(race).frame); absent = 0"
+    },
+    "fat": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 2,
+     "description": "2.4.0 Frame: Weight (lean .. heavy), clamped to the race range; absent = 0"
+    }
+   }
+  },
+  "outfit": {
+   "type": "object",
+   "propertyNames": {
+    "anyOf": [
+     {
+      "enum": [
+       "smallclothes",
+       "socks",
+       "torso_inner",
+       "legs",
+       "feet",
+       "skirt",
+       "torso_mid",
+       "belt",
+       "baldric",
+       "chaps",
+       "apron",
+       "neck_wrap",
+       "chest",
+       "arm_l",
+       "arm_r",
+       "hand_l",
+       "hand_r",
+       "shin_l",
+       "shin_r",
+       "tabard",
+       "outer",
+       "hands",
+       "hood"
+      ]
+     },
+     {
+      "pattern": "^[a-z][a-z0-9_-]{1,31}/[a-z0-9][a-z0-9_-]{0,47}$"
+     }
+    ]
+   },
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "id"
+    ],
+    "properties": {
+     "id": {
+      "anyOf": [
+       {
+        "enum": [
+         "homespun_shirt",
+         "smallclothes",
+         "broadfall_trousers",
+         "wool_socks",
+         "leather_belt",
+         "calico_vest",
+         "baldric",
+         "tank",
+         "tee",
+         "tunic",
+         "coat",
+         "painted_shorts",
+         "trousers",
+         "breeches",
+         "shoes",
+         "tall_boots",
+         "bracers",
+         "gloves",
+         "strap",
+         "scarf",
+         "hood",
+         "hooded_cloak"
+        ]
+       },
+       {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_-]{1,31}/[a-z0-9][a-z0-9_-]{0,47}$"
+       }
+      ]
+     },
+     "variant": {
+      "type": "string"
+     },
+     "states": {
+      "type": "object"
+     }
+    }
+   }
+  },
+  "dye": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": {
+     "type": "string",
+     "description": "'#rrggbb' (procedural / mesh regions, kit tint regions) or a ramp id (painted regions A-D)"
+    }
+   }
+  }
+ },
+ "description": "Semantic checks (race-specific parts, garment race cuts, variants) are done by CF.validateRecipe / CF.normalize."
+}

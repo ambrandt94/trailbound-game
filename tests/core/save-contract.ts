@@ -56,7 +56,7 @@ export async function expectSaveRoundTrip(
     recipeHash: '0123456789abcdef',
     engine: 'cf1',
   });
-  expect(manifest?.cfPin).toEqual({ version: '1.2.0', generatorVersion: '1' });
+  expect(manifest?.cfPin).toEqual({ version: '2.6.0', generatorVersion: '1' });
   expect(manifest?.gameVersion).toBe('0.0.0');
   expect(manifest?.savedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 

@@ -13,16 +13,15 @@ export function readCfPin(value: { version: string; generatorVersion: number }):
 }
 
 /**
- * v1 fallback pin (`current.json`). The v1 backend checks its runtime against
- * this, and saves record it. A 2.x sync does not replace it: pointing it at
- * a 2.x version would make the 1.2.1 fallback fail its own pin check.
+ * Save pin (`current.json`). A 2.x sync writes this and `current-v2.json` to
+ * the same version. Saves record it. There is no separate v1 pin.
  */
 export const CF_PIN: CfPin = readCfPin(pin);
 
-/** Default runtime pin (`current-v2.json`). Loaded when `?cf=` is absent. */
+/** Runtime pin (`current-v2.json`). This is the Character Forge the game loads. */
 export const CF2_PIN: CfPin = readCfPin(pinV2);
 
-/** Runtime and asset root for the pinned version. 1.2.0 stays on disk when a later pin is synced. */
+/** Runtime and asset root for a Character Forge version. */
 export function characterForgePaths(version: string = CF_PIN.version): {
   runtime: string;
   base: string;

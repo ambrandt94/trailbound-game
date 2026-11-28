@@ -1,8 +1,7 @@
 /**
- * Character Forge is reached through `forge.ts`. v2 (`backends/v2.ts`) is the
- * default. v1 (`backends/v1.ts`) stays available with `?cf=1` and is the
- * fallback when v2 fails to init or preload. The town uses the block rig in
- * `pawns.ts` when no forge body has been adopted.
+ * Character Forge is reached through `forge.ts`. `backends/v2.ts` loads
+ * runtime 2.6.0. There is no v1 runtime. `?cf=0` skips it and the town uses
+ * the block rig in `pawns.ts` until a forge body is adopted.
  */
 export {
   adoptPlayerBody,
