@@ -37,6 +37,20 @@ function mesh(
   return item;
 }
 
+/**
+ * Primitive stand-ins. The repo has no weapon meshes to attach.
+ * The mesh length runs along local +Y. On the 2.6.0 idle the hand's +Y
+ * points down through the floor, so a resting weapon is turned 180° and
+ * lies back up the forearm. A swing's pitch takes over once it leaves rest.
+ */
+const CARRY_PITCH = Math.PI;
+const CARRY_BLEND = 0.35;
+
+function carried(pitch: number, yaw: number, roll: number): [number, number, number] {
+  const amount = Math.min(1, Math.abs(pitch) / CARRY_BLEND);
+  return [pitch * amount + CARRY_PITCH * (1 - amount), yaw * amount, roll * amount];
+}
+
 /** Primitive stand-ins. The repo has no weapon meshes to attach. */
 export function createWeaponKit(styleId: string): WeaponKit {
   const right = new Group();
@@ -74,8 +88,9 @@ export function createWeaponKit(styleId: string): WeaponKit {
     right,
     left,
     apply(pose: MotionPose) {
-      right.rotation.set(pose.weaponPitch, pose.weaponYaw, pose.weaponRoll);
-      if (left) left.rotation.set(pose.offPitch, 0, 0);
+      const [pitch, yaw, roll] = carried(pose.weaponPitch, pose.weaponYaw, pose.weaponRoll);
+      right.rotation.set(pitch, yaw, roll);
+      if (left) left.rotation.set(carried(pose.offPitch, 0, 0)[0], 0, 0);
     },
     dispose() {
       disposeGroup(right);

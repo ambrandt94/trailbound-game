@@ -1,8 +1,7 @@
 /**
  * Character engine seam. `forge.ts` talks to this, never to a Forge runtime.
  *
- * v1 (`backends/v1.ts`) wraps Character Forge 1.x (`cf.*`, including `pixelSun`).
- * A future v2 backend maps Character Forge 2.0 onto the same methods:
+ * `backends/v2.ts` wraps Character Forge 2.6.0. The method map:
  *
  *   CF.init({ THREE, baseUrl })                          -> init
  *   randomRecipe(seed, { race, bodyType, role, tier,
@@ -22,7 +21,7 @@
  * Stage contract for every backend: feet at y = 0, +Z forward, metres.
  * Sockets, when `build` exposes them: hand_l, hand_r, back, belt, head.
  * No `?cf=` param selects `backends/v2.ts`. `?cf=2` (also `v2` / `cf2`) does too.
- * `?cf=1` (also `v1` / `cf1`) selects `backends/v1.ts`. `?cf=0` skips the runtime.
+ * The retired `?cf=1` values do too. `?cf=0` skips the runtime.
  */
 import type { AnimationClip, AnimationMixer, Camera, Object3D } from 'three';
 import type { AvatarEngine, PlayerProfileEntry } from '../../../core/people/avatar';
@@ -89,7 +88,7 @@ export interface BuiltCharacter {
   object3D: Object3D;
   mixer: AnimationMixer;
   clips?: Record<string, AnimationClip>;
-  play(name: 'Idle' | 'Walk' | 'Run', phase?: number): void;
+  play(name: 'Idle' | 'Hover' | 'Walk' | 'Run', phase?: number): void;
   /** v2. v1 playback sets `mixer.timeScale` directly. */
   setTimeScale?(scale: number): void;
   /** v2 attachment point. */

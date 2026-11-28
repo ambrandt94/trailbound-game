@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { defaultPlayerAvatar, isPlayerAvatar } from '../../src/core/people/avatar';
 import type { PlayerAvatar } from '../../src/core/people/avatar';
-import { assertPackedWorld, migrate, SAVE_SCHEMA } from '../../src/core/save/migrations';
+import {
+  assertPackedWorld,
+  CURRENT_CF_PIN,
+  legacyCfPin,
+  migrate,
+  SAVE_SCHEMA,
+} from '../../src/core/save/migrations';
 import type { PackedWorld, SaveManifest } from '../../src/core/save/types';
 import { createWorld } from '../../src/core/state/world-state';
 
@@ -34,12 +40,41 @@ function manifest(schema: number): SaveManifest {
   };
 }
 
-test('schema 5 is the current save and passes through', () => {
+test('schema 5 on the current pin passes through', () => {
   expect(SAVE_SCHEMA).toBe(5);
+  expect(CURRENT_CF_PIN).toEqual({ version: '2.6.0', generatorVersion: '1' });
   const current = manifest(5);
-  const result = migrate(current, core);
+  current.cfPin = { ...CURRENT_CF_PIN };
+  const packed: PackedWorld = { ...core, cfPin: { ...CURRENT_CF_PIN } };
+  const result = migrate(current, packed);
   expect(result.manifest).toBe(current);
-  expect(result.core).toBe(core);
+  expect(result.core).toBe(packed);
+});
+
+test('schema 5 saves pinned to 1.x or 2.2.1 are re-pinned to 2.6.0', () => {
+  for (const version of ['1.0.0', '1.2.0', '1.2.1', '2.2.1']) {
+    expect(legacyCfPin({ version, generatorVersion: '1' })).toBe(true);
+    const saved = manifest(5);
+    saved.cfPin = { version, generatorVersion: '1' };
+    const packed: PackedWorld = { ...core, cfPin: { version, generatorVersion: '1' } };
+    const result = migrate(saved, packed);
+    expect(result.manifest).not.toBe(saved);
+    expect(result.core).not.toBe(packed);
+    expect(result.manifest.schema).toBe(5);
+    expect(result.manifest.cfPin).toEqual(CURRENT_CF_PIN);
+    expect(result.core?.cfPin).toEqual(CURRENT_CF_PIN);
+    expect(result.manifest.player).toBe(saved.player);
+    expect(result.core?.player.avatar).toBe(packed.player.avatar);
+    expect(result.core?.clockHours).toBe(packed.clockHours);
+  }
+  expect(legacyCfPin({ version: '2.6.0', generatorVersion: '1' })).toBe(false);
+  expect(legacyCfPin({ version: '1', generatorVersion: '1' })).toBe(false);
+  const other = manifest(5);
+  other.cfPin = { version: '9.9.9', generatorVersion: '3' };
+  const otherCore: PackedWorld = { ...core, cfPin: other.cfPin };
+  const kept = migrate(other, otherCore);
+  expect(kept.manifest).toBe(other);
+  expect(kept.core).toBe(otherCore);
 });
 
 test('schema 3 gains a player avatar and keeps the hero', () => {
@@ -67,6 +102,8 @@ test('schema 3 gains a player avatar and keeps the hero', () => {
   expect(result.manifest.player.avatar?.legacyRecipe).toBeUndefined();
   expect(result.core?.player.avatar?.legacyRecipe).toBeUndefined();
   expect(result.core?.player.avatar?.recipeHash).toBe('');
+  expect(result.manifest.cfPin).toEqual(CURRENT_CF_PIN);
+  expect(result.core?.cfPin).toEqual(CURRENT_CF_PIN);
 });
 
 test('schemas other than 3, 4, and 5 are rejected', () => {
@@ -98,6 +135,8 @@ test('schema 4 avatars become cf1 and keep the v1 recipe verbatim', () => {
     const result = migrate(saved, packed);
 
     expect(result.manifest.schema).toBe(5);
+    expect(result.manifest.cfPin).toEqual(CURRENT_CF_PIN);
+    expect(result.core?.cfPin).toEqual(CURRENT_CF_PIN);
     const loaded = result.core?.player.avatar;
     const listed = result.manifest.player.avatar;
     expect(loaded?.engine).toBe('cf1');

@@ -9,8 +9,7 @@ import { clipTimeScale } from '../../core/state/area-pace';
 import { WALK_MAX_MPS } from '../area/locomotion';
 import { createCharacterBackend } from './backends/select';
 import type { BuiltCharacter, CharacterBackend, CharacterPlatform } from './backends/types';
-import { createV1Backend } from './backends/v1';
-import { characterForgePaths, characterForgeV2Paths } from './cf-pin';
+import { characterForgeV2Paths } from './cf-pin';
 
 export interface ForgeStatus {
   ok: boolean;
@@ -50,7 +49,8 @@ export interface ForgeCatalog {
  * Metres used to time locomotion. `strideM` and `walkDuration` come from the
  * Walk clip (planted-foot travel and the clip length). `scale` is the one town
  * factor, 1.4 / the v2 human height, shared by every race. `runDuration` and
- * `runStrideM` are set when the body has a ground Run clip.
+ * `runStrideM` are set when the body has a ground Run clip. `flyer` is set
+ * for a winged race, whose standing clip is Hover.
  */
 export interface ForgeRaceMetrics {
   heightM: number;
@@ -59,10 +59,15 @@ export interface ForgeRaceMetrics {
   scale?: number;
   runDuration?: number;
   runStrideM?: number;
+  flyer?: boolean;
 }
 
-/** Clips a forged body can present. Flyers still use Idle and Walk. */
-export type BodyClip = 'Idle' | 'Walk' | 'Run';
+/**
+ * Clips a forged body can present.
+ * Hover is the standing clip for a winged race. Idle is the ground stand
+ * (the dojo, and any non-flyer). Walk and Run stay on the ground.
+ */
+export type BodyClip = 'Idle' | 'Hover' | 'Walk' | 'Run';
 
 /** Public fields the API documents, plus the untouched engine recipe. */
 export interface CharacterRecipe {
@@ -248,8 +253,9 @@ interface InitOptions {
   /**
    * Pass false to force the placeholder path. `?cf=0` does the same.
    * With no `?cf=` param the Character Forge 2 backend is selected.
-   * `?cf=1` (also `v1` / `cf1`) selects v1. `?cf=2` (also `v2` / `cf2`)
-   * still selects v2. A v2 init or preload failure falls back to v1.
+   * `?cf=2` (also `v2` / `cf2`) does the same. The retired `?cf=1` values
+   * do too: there is no v1 runtime. Init or preload failure leaves the
+   * placeholder pawn.
    */
   enabled?: boolean;
   profile?: unknown;
@@ -278,7 +284,6 @@ let status: ForgeStatus = { ok: false, reason: 'not started', initMs: 0 };
 let adopted: AvatarBody | null = null;
 let buildMs = 0;
 let buildError = '';
-let initOptions: InitOptions = {};
 
 export function initForge(options: InitOptions = {}): Promise<ForgeStatus> {
   if (pending && !options.force) return pending;
@@ -397,7 +402,8 @@ export function forgePresentation(
     };
   }
   const scale = metrics.scale && metrics.scale > 0 ? metrics.scale : 1;
-  if (!moving) return { scale, timeScale: 1, clip: 'Idle' };
+  // Winged races stand in Hover. Walk and Run stay planted on the ground.
+  if (!moving) return { scale, timeScale: 1, clip: metrics.flyer ? 'Hover' : 'Idle' };
   if (
     metrics.runDuration &&
     metrics.runStrideM &&
@@ -580,21 +586,25 @@ export function aimForgeSun(camera: THREE.Camera): void {
   backend?.aimSun(camera);
 }
 
-/** Warm v2 race assets during the loading screen. v1 has nothing to preload. */
+/** Warm race assets during the loading screen. Failure leaves the placeholder. */
 export async function preloadForge(): Promise<void> {
-  if (queryDisablesForge() || createCharacterBackend().id !== 'cf2') return;
+  if (queryDisablesForge()) return;
   const ready = await initForge();
-  if (!ready.ok || backend?.id !== 'cf2') return;
+  if (!ready.ok || !backend) return;
   try {
     await backend.preload?.();
   } catch (error) {
-    await fallBackToV1(error, 'preload');
+    const reason = error instanceof Error ? error.message : 'forge preload failed';
+    console.warn(`Character Forge failed to preload (${reason}).`);
+    backend.dispose();
+    backend = null;
+    status = { ok: false, reason, initMs: status.initMs };
+    pending = Promise.resolve(status);
   }
 }
 
 async function runInit(options: InitOptions): Promise<ForgeStatus> {
   const started = now();
-  initOptions = options;
   backend?.dispose();
   backend = null;
   if (options.enabled === false || queryDisablesForge()) {
@@ -603,68 +613,32 @@ async function runInit(options: InitOptions): Promise<ForgeStatus> {
   }
   const selected = createCharacterBackend();
   try {
-    await bindBackend(selected, options, false);
+    await bindBackend(selected, options);
     backend = selected;
     status = { ok: true, reason: '', initMs: now() - started };
     return status;
   } catch (error) {
     selected.dispose();
     backend = null;
-    if (selected.id !== 'cf2') {
-      status = {
-        ok: false,
-        reason: error instanceof Error ? error.message : 'forge init failed',
-        initMs: now() - started,
-      };
-      return status;
-    }
-    const fallen = await fallBackToV1(error, 'init');
-    status = { ...fallen, initMs: now() - started };
-    pending = Promise.resolve(status);
-    return status;
-  }
-}
-
-async function bindBackend(
-  selected: CharacterBackend,
-  options: InitOptions,
-  fallback: boolean,
-): Promise<void> {
-  const paths = selected.id === 'cf2' ? characterForgeV2Paths() : characterForgePaths();
-  await selected.init({
-    runtimeUrl: (fallback ? undefined : options.runtimeUrl) ?? resolvePublic(paths.runtime),
-    baseUrl: (fallback ? undefined : options.baseUrl) ?? resolvePublic(paths.base),
-    profile: options.profile,
-    privateAnimBaseUrl: options.privateAnimBaseUrl,
-    platform: options.platform,
-  });
-}
-
-/** v2 failed. Warn and load the vendored 1.2.1 runtime so the player still has a body. */
-async function fallBackToV1(error: unknown, stage: 'init' | 'preload'): Promise<ForgeStatus> {
-  const reason = error instanceof Error ? error.message : `forge ${stage} failed`;
-  console.warn(`Character Forge v2 failed to ${stage} (${reason}); falling back to v1.`);
-  backend?.dispose();
-  backend = null;
-  const fallback = createV1Backend();
-  const started = now();
-  try {
-    await bindBackend(fallback, initOptions, true);
-    backend = fallback;
-    status = { ok: true, reason: '', initMs: status.initMs || now() - started };
-    pending = Promise.resolve(status);
-    return status;
-  } catch (fallbackError) {
-    fallback.dispose();
-    backend = null;
     status = {
       ok: false,
-      reason: fallbackError instanceof Error ? fallbackError.message : 'forge init failed',
+      reason: error instanceof Error ? error.message : 'forge init failed',
       initMs: now() - started,
     };
     pending = Promise.resolve(status);
     return status;
   }
+}
+
+async function bindBackend(selected: CharacterBackend, options: InitOptions): Promise<void> {
+  const paths = characterForgeV2Paths();
+  await selected.init({
+    runtimeUrl: options.runtimeUrl ?? resolvePublic(paths.runtime),
+    baseUrl: options.baseUrl ?? resolvePublic(paths.base),
+    profile: options.profile,
+    privateAnimBaseUrl: options.privateAnimBaseUrl,
+    platform: options.platform,
+  });
 }
 
 function feature(name: 'describe' | 'options' | 'checkEdit' | 'edit' | 'editCatalog'): boolean {
@@ -684,20 +658,28 @@ function dominantClip(blend: { idle: number; walk: number; run: number }): BodyC
   return 'Idle';
 }
 
+function flyerBody(built: BuiltCharacter): boolean {
+  const metrics = built.object3D.userData.cfMetrics as { flyer?: boolean } | undefined;
+  return metrics?.flyer === true && !!built.clips?.Hover;
+}
+
 function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
-  const state = { clip: 'Idle' as BodyClip, disposed: false };
+  // Winged races start in Hover. Ground bodies stay on Idle. The dojo's blend
+  // present asks for Idle even if a body was built hovering.
+  const rest: BodyClip = flyerBody(built) ? 'Hover' : 'Idle';
+  const state: { clip: BodyClip; disposed: boolean } = { clip: rest, disposed: false };
   const overlays = new Map<string, THREE.AnimationAction>();
   built.object3D.name = 'CF_avatar';
   // The town, the creator, and instance games all borrow this one object.
   // Teardown detaches it. It must not be disposed with a scene.
   built.object3D.userData.sharedAsset = 1;
   built.object3D.userData.tbKeep = 1;
-  built.play('Idle');
+  built.play(rest);
   const body: AvatarBody = {
     object3D: built.object3D,
     source: 'forge',
     recipeHash: hash,
-    clip: 'Idle',
+    clip: rest,
     play(name) {
       state.clip = name;
       body.clip = name;
@@ -708,6 +690,12 @@ function wrapForge(built: BuiltCharacter, hash: string): AvatarBody {
       const fade = Math.max(0, pose.fade);
       const rate = Number.isFinite(pose.timeScale) ? pose.timeScale : 1;
       if (pose.blend && built.clips?.Idle && built.clips.Walk) {
+        // Ground locomotion. A winged body's Hover must not keep playing under it.
+        const hover = actionFor(built, 'Hover');
+        if (hover?.isRunning()) {
+          hover.setEffectiveWeight(0);
+          hover.stop();
+        }
         const weights = { Idle: pose.blend.idle, Walk: pose.blend.walk, Run: pose.blend.run };
         for (const name of ['Idle', 'Walk', 'Run'] as const) {
           const action = actionFor(built, name);

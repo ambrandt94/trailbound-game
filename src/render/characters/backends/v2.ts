@@ -1,11 +1,14 @@
 /**
- * Character Forge 2.2.1 backend. This is the only file that imports the v2
- * runtime or calls `CF.*` for api 2. v1 stays in `backends/v1.ts`.
+ * Character Forge 2.6.0 backend. This is the only file that imports the
+ * runtime or calls `CF.*`.
  *
  * Public builds keep animation policy `cf`. Locomotion defaults to `full`, so
- * Idle, Walk, and Run are the CC0 Quaternius clips. `VITE_CF_PRIVATE_ANIM_URL`
- * is the only switch to the private Kevin Iglesias pack (`cf+ki`). That pack
- * is never vendored.
+ * Idle, Walk, and Run are the CC0 Quaternius clips retargeted to the v2
+ * skeleton. `flyerIdle` stays the runtime default `hover`: a winged race
+ * stands in Hover. Callers that want the ground idle (the dojo) play `Idle`
+ * themselves. `VITE_CF_PRIVATE_ANIM_URL` is the only switch to the private
+ * Kevin Iglesias pack (`cf+ki`), and that URL must be the v2-rig pack
+ * (Character Forge store `runtime_v2/private_ki/`). The pack is never vendored.
  */
 import * as THREE from 'three';
 import type { PlayerProfileEntry } from '../../../core/people/avatar';
@@ -85,7 +88,11 @@ interface Cf2Api {
     baseUrl: string;
     /** Sets the policy directly. Registering a pack does not. */
     animationSet?: 'cf' | 'cf+ki';
-    policy?: { missingRaces: Record<string, string> };
+    policy?: {
+      missingRaces: Record<string, string>;
+      /** Default `hover`. `idle` would plant winged races. This backend leaves it unset. */
+      flyerIdle?: 'hover' | 'idle';
+    };
     privateAnimBaseUrl?: string;
     platform?: CharacterBackendInit['platform'];
   }): Promise<{ notes?: string[] }>;
@@ -181,6 +188,8 @@ export function createV2Backend(): CharacterBackend {
         THREE,
         baseUrl: options.baseUrl,
         animationSet,
+        // `flyerIdle` is left at the 2.6.0 default `hover`. Ground idle is
+        // chosen per call site by playing `Idle` (the dojo) instead of `Hover`.
         policy: { missingRaces: { ...V1_TO_V2_RACE } },
         ...(privateUrl ? { privateAnimBaseUrl: privateUrl } : {}),
         ...(options.platform ? { platform: options.platform } : {}),
@@ -337,7 +346,7 @@ export function createV2Backend(): CharacterBackend {
       // the clip's own stride. Flyers keep Walk and do not take the ground Run.
       const walkStride = walk ? plantedStride(body, walk) : null;
       const runStride = !flyer && run ? plantedStride(body, run) : null;
-      restoreIdle(body);
+      restoreIdle(body, flyer);
       const humanM = catalog?.raceMetrics?.human?.heightM;
       body.object3D.userData.cfMetrics = {
         heightM: body.info?.heightM ?? metrics?.heightM ?? 0,
@@ -345,6 +354,7 @@ export function createV2Backend(): CharacterBackend {
         walkDuration: walk?.duration ?? metrics?.walkDuration ?? 0,
         // One uniform factor for every race, from the human catalog height.
         scale: humanM && humanM > 0 ? HERO_HEIGHT_M / humanM : 1,
+        ...(flyer ? { flyer: true } : {}),
         ...(run && runStride ? { runDuration: run.duration, runStrideM: runStride } : {}),
       };
       return {
@@ -462,6 +472,10 @@ export function createV2Backend(): CharacterBackend {
  * Metres the planted foot travels backward in one cycle, in character space.
  * The lower foot's backward speed, while it is near the ground, times the
  * clip length. Null keeps the catalog stride.
+ *
+ * The v2 ankle sits about 18 mm higher than the old skeleton. The floor test
+ * is relative to that foot's own min and max, so the higher pivot does not
+ * change which samples count as planted.
  */
 function plantedStride(body: CfBody, clip: THREE.AnimationClip): number | null {
   const mesh = skinnedMesh(body.object3D);
@@ -513,10 +527,13 @@ function plantedStride(body: CfBody, clip: THREE.AnimationClip): number | null {
   return stride > 0.05 ? stride : null;
 }
 
-/** Put the body back on the Idle frame CF.build posed, after a stride sample. */
-function restoreIdle(body: CfBody): void {
+/**
+ * Put the body back on its standing clip after a stride sample.
+ * A winged race returns to Hover. Everyone else returns to ground Idle.
+ */
+function restoreIdle(body: CfBody, flyer: boolean): void {
   body.mixer.stopAllAction();
-  body.play('Idle', { fade: 0 });
+  body.play(flyer ? 'Hover' : 'Idle', { fade: 0 });
   body.mixer.update(0);
 }
 

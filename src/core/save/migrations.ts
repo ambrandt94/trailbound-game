@@ -1,7 +1,7 @@
 import { defaultPlayerAvatar, isPlayerAvatar } from '../people/avatar';
 import type { PlayerAvatar } from '../people/avatar';
 import { clampSettings, DEFAULT_WORLD_SETTINGS, type WorldSettings } from '../world/models';
-import type { PackedWorld, PlayerSave, SaveManifest } from './types';
+import type { CfPin, PackedWorld, PlayerSave, SaveManifest } from './types';
 
 /**
  * World generation settings a save was made with. Saves before `worldSettings`
@@ -53,18 +53,30 @@ export function assertPackedWorld(value: PackedWorld): PackedWorld {
 /**
  * Schema 3 = the people-store schema 2 plus `voice` and `race`.
  * Schema 4 adds `player.avatar` (name, seed, profile entry, generator, hash, race, gender).
- * Schema 5 tags that avatar with `engine` (`cf1` for every current save) and copies a
- * stored v1 recipe into `legacyRecipe` verbatim, for a later lossy move to Character Forge 2.
+ * Schema 5 tags that avatar with `engine` (`cf1` for a Character Forge 1 recipe) and copies a
+ * stored v1 recipe into `legacyRecipe` verbatim. The runtime migrates that copy in memory.
  * The schema 2 → 3 steps still land with people in G3.
+ *
+ * A save's `cfPin` is separate from the schema. Pins from Character Forge 1.x
+ * and from 2.2.1 (the last old-skeleton runtime this game shipped) are rewritten
+ * to {@link CURRENT_CF_PIN} on load. The avatar recipe is not rewritten here.
  */
 export const SAVE_SCHEMA = 5;
+
+/** Character Forge runtime a migrated save records. Matches `current.json`. */
+export const CURRENT_CF_PIN: CfPin = { version: '2.6.0', generatorVersion: '1' };
+
+/** True for a Character Forge 1.x pin or the old-skeleton 2.2.1 pin. */
+export function legacyCfPin(pin: CfPin): boolean {
+  return pin.version === '2.2.1' || /^1\.\d+\.\d+$/.test(pin.version);
+}
 
 export function migrate(
   manifest: SaveManifest,
   core: PackedWorld | null,
 ): { manifest: SaveManifest; core: PackedWorld | null } {
   if (manifest.schema === SAVE_SCHEMA) {
-    return { manifest, core };
+    return repin(manifest, core);
   }
   if (manifest.schema !== 3 && manifest.schema !== 4) {
     throw new Error(
@@ -72,7 +84,23 @@ export function migrate(
     );
   }
   const withBodies = manifest.schema === 3 ? addAvatars(manifest, core) : { manifest, core };
-  return tagEngines(withBodies.manifest, withBodies.core);
+  const tagged = tagEngines(withBodies.manifest, withBodies.core);
+  return repin(tagged.manifest, tagged.core);
+}
+
+function repin(
+  manifest: SaveManifest,
+  core: PackedWorld | null,
+): { manifest: SaveManifest; core: PackedWorld | null } {
+  const nextManifest = pinOf(manifest);
+  const nextCore = core ? pinOf(core) : core;
+  if (nextManifest === manifest && nextCore === core) return { manifest, core };
+  return { manifest: nextManifest, core: nextCore };
+}
+
+function pinOf<T extends { cfPin: CfPin }>(value: T): T {
+  if (!legacyCfPin(value.cfPin)) return value;
+  return { ...value, cfPin: { ...CURRENT_CF_PIN } };
 }
 
 function addAvatars(

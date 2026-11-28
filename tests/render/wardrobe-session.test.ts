@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { h, render } from 'preact';
 import { beforeAll, expect, test, vi } from 'vitest';
 import { manifestFor } from '../../src/platform/storage/slot';
@@ -27,22 +27,79 @@ const vendor = path.resolve('public', characterForgePaths().base);
 
 vi.mock('../../src/render/characters/forge', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/render/characters/forge')>();
+  const runtimeUrl = pathToFileURL(
+    path.resolve('public/vendor/character-forge/2.6.0/cf-runtime.mjs'),
+  ).href;
+  class CanvasShim {
+    width: number;
+    height: number;
+    constructor(width = 32, height = 32) {
+      this.width = width;
+      this.height = height;
+    }
+    getContext(): unknown {
+      return {
+        canvas: this,
+        fillStyle: '',
+        fillRect() {},
+        clearRect() {},
+        drawImage() {},
+        getImageData(_x: number, _y: number, w = 1, h = 1) {
+          return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+        },
+        putImageData() {},
+        createImageData(w = 1, h = 1) {
+          return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+        },
+        measureText() {
+          return { width: 0 };
+        },
+        fillText() {},
+        save() {},
+        restore() {},
+        translate() {},
+        scale() {},
+        beginPath() {},
+        rect() {},
+        clip() {},
+        setTransform() {},
+        resetTransform() {},
+        createPattern() {
+          return {};
+        },
+      };
+    }
+  }
+  const platform = {
+    createCanvas: () => new CanvasShim(),
+    createImageBitmap: async () => ({ width: 8, height: 8, close() {} }),
+    document: { createElement: () => new CanvasShim() },
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => globalThis.fetch(input, init),
+  };
+  const withRuntime = (options: Parameters<typeof actual.initForge>[0] = {}) => ({
+    ...options,
+    runtimeUrl: options.runtimeUrl ?? runtimeUrl,
+    baseUrl: options.baseUrl ?? 'http://cf-test/',
+    platform: options.platform ?? platform,
+  });
   return {
     ...actual,
     initForge(options: Parameters<typeof actual.initForge>[0] = {}) {
-      return actual.initForge({
-        ...options,
-        runtimeUrl: options.runtimeUrl ?? pathToFileURL(path.join(vendor, 'cf-runtime.mjs')).href,
-        baseUrl: options.baseUrl ?? 'http://cf-test/',
-      });
+      return actual.initForge(withRuntime(options));
+    },
+    // The real preload calls initForge inside the module, past this mock,
+    // and would import the runtime from the page origin.
+    preloadForge() {
+      if (actual.forgeReady().ok) return Promise.resolve();
+      return actual.initForge(withRuntime({ force: true })).then(() => undefined);
     },
   };
 });
 
 beforeAll(() => {
-  // These cases exercise the v1 wardrobe. The default runtime is v2.
+  // The paperdoll runs on the default runtime (Character Forge 2.6.0).
   (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(
-    `${window.location.origin}${window.location.pathname}?cf=1`,
+    `${window.location.origin}${window.location.pathname}`,
   );
   installCanvasShim();
   installBitmapShim();
@@ -81,7 +138,7 @@ test('schema 3 edit migrates without inventing a recipe or saving, and warnings 
     expect(manifest?.schema).toBe(3);
     expect(manifest?.player.avatar).toBeUndefined();
 
-    creatorCommands.setStubble(0.1);
+    creatorCommands.setSlider('h', 9);
     expect(creatorView.value.warnings.length).toBeGreaterThan(0);
     const host = document.createElement('div');
     render(
@@ -119,24 +176,13 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     );
     expect(creatorView.value.paperdoll).toBe(false);
     const rolled = creatorView.value.hash;
-    expect(creatorView.value.regionsReady).toBe(true);
+    // 2.6.0 has no v1 edit catalog, so upper/lower regions stay closed.
+    expect(creatorView.value.regionsReady).toBe(false);
     creatorCommands.setFocus('upper');
-    const upperSlots = [...creatorView.value.slots];
-    expect(creatorView.value.hash).toBe(rolled);
-    expect(upperSlots).toContain('chest');
-    expect(upperSlots).not.toContain('feet');
-    creatorCommands.setFocus('lower');
-    const lowerSlots = [...creatorView.value.slots];
-    expect(creatorView.value.hash).toBe(rolled);
-    expect(lowerSlots).toContain('feet');
-    expect(lowerSlots).not.toContain('chest');
-    expect(new Set([...upperSlots, ...lowerSlots]).size).toBe(
-      upperSlots.length + lowerSlots.length,
-    );
-    creatorCommands.setFocus('full');
     expect(creatorView.value.hash).toBe(rolled);
     expect(creatorView.value.focus).toBe('full');
-    expect(creatorView.value.slots).toHaveLength(upperSlots.length + lowerSlots.length);
+    expect(creatorView.value.slots).toContain('torso_inner');
+    expect(creatorView.value.slots).toContain('feet');
 
     creatorCommands.openPaperdoll();
     const hashes = [creatorView.value.hash];
@@ -147,34 +193,16 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
       expect(creatorView.value.hash).not.toBe(before);
       hashes.push(creatorView.value.hash);
     };
-    creatorCommands.setSlot('chest');
+    creatorCommands.setSlot('torso_inner');
     if (creatorView.value.garment === 'tunic') {
       const other = creatorView.value.garments.find((id) => id !== 'tunic');
       expect(other).toBeTruthy();
       changed(() => creatorCommands.setGarment(other ?? ''));
     }
     changed(() => creatorCommands.setGarment('tunic'));
-    expect(creatorView.value.worn.chest).toBe('tunic');
-    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+    expect(creatorView.value.worn.torso_inner).toBe('tunic');
 
-    creatorCommands.setSlot('head_inner');
-    expect(creatorView.value.garments).toContain('bandana');
-    changed(() => creatorCommands.setGarment('bandana'));
-    const wear = creatorView.value.states.find((state) => state.name === 'wear');
-    expect(wear?.options).toEqual(expect.arrayContaining(['head', 'neck']));
-    const destination = wear?.value === 'neck' ? 'head' : 'neck';
-    changed(() => creatorCommands.setGarmentState('wear', destination));
-    if (destination === 'neck') {
-      expect(creatorView.value.worn.neck_wrap).toBe('bandana');
-      expect(creatorView.value.worn.head_inner).not.toBe('bandana');
-      expect(creatorView.value.slot).toBe('neck_wrap');
-    } else {
-      expect(creatorView.value.worn.head_inner).toBe('bandana');
-      expect(creatorView.value.worn.neck_wrap).not.toBe('bandana');
-    }
     const edited = creatorView.value.hash;
-    creatorCommands.setFocus('lower');
-    expect(creatorView.value.hash).toBe(edited);
 
     for (let index = hashes.length - 2; index >= 0; index -= 1) {
       creatorCommands.undo();
@@ -186,36 +214,18 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
       expect(creatorView.value.hash).toBe(hashes[index]);
     }
     expect(creatorView.value.hash).toBe(edited);
-    expect(creatorView.value.worn.chest).toBe('tunic');
-    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+    expect(creatorView.value.worn.torso_inner).toBe('tunic');
 
     const wornBeforeUnequip = creatorView.value.hash;
-    creatorCommands.setSlot('chest');
+    creatorCommands.setSlot('torso_inner');
     creatorCommands.setGarment('');
     expect(creatorView.value.errors).toEqual([]);
-    expect(creatorView.value.worn.chest).toBeFalsy();
-    expect(creatorView.value.worn.torso_mid).toBeFalsy();
+    expect(creatorView.value.worn.torso_inner).toBeFalsy();
     creatorCommands.undo();
     expect(creatorView.value.hash).toBe(wornBeforeUnequip);
-    expect(creatorView.value.worn.chest).toBe('tunic');
-    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+    expect(creatorView.value.worn.torso_inner).toBe('tunic');
 
-    creatorCommands.setFocus('upper');
-    expect(creatorView.value.hash).toBe(wornBeforeUnequip);
-    expect(creatorView.value.slots).toContain('torso_mid');
-    creatorCommands.setSlot('torso_mid');
-    expect(creatorView.value.slot).toBe('torso_mid');
-    creatorCommands.setGarment('');
-    expect(creatorView.value.errors, creatorView.value.errors.join('; ')).toEqual([]);
-    expect(creatorView.value.worn.chest).toBeFalsy();
-    expect(creatorView.value.worn.torso_mid).toBeFalsy();
-    creatorCommands.undo();
-    expect(creatorView.value.hash).toBe(wornBeforeUnequip);
-    expect(creatorView.value.worn.chest).toBe('tunic');
-    expect(creatorView.value.worn.torso_mid).toBe('tunic');
-    creatorCommands.setFocus('full');
-
-    creatorCommands.setSlot('chest');
+    creatorCommands.setSlot('torso_inner');
     const alternate = creatorView.value.garments.find(
       (id) => id !== 'tunic' && id !== creatorView.value.garment,
     );
@@ -228,8 +238,13 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     await waitFor(() => creatorBusy.value === false);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(creatorView.value.hash).toBe(latestLook);
-    expect(creatorView.value.worn.chest).toBe('tunic');
-    expect(creatorView.value.worn.torso_mid).toBe('tunic');
+    expect(creatorView.value.worn.torso_inner).toBe('tunic');
+    const otherSkin = creatorView.value.skins.find(
+      (swatch) => swatch.id !== creatorView.value.skin,
+    );
+    expect(otherSkin).toBeTruthy();
+    creatorCommands.setSkin(otherSkin?.id ?? '');
+    expect(creatorView.value.hash).not.toBe(latestLook);
 
     creatorCommands.cancel();
     // Back from a new traveller returns to the World step; its Back goes to the title.
@@ -249,37 +264,31 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
         creatorView.value.hash !== stale &&
         /^[0-9a-f]{16}$/.test(creatorView.value.hash),
     );
-    creatorCommands.setSlot('chest');
+    creatorCommands.setSlot('torso_inner');
     if (creatorView.value.garment === 'tunic') {
       creatorCommands.setGarment(creatorView.value.garments.find((id) => id !== 'tunic') ?? '');
     }
     creatorCommands.setGarment('tunic');
     creatorCommands.setSlot('feet');
     expect(creatorView.value.garments, creatorView.value.garments.join(',')).toContain(
-      'riding_boots',
+      'tall_boots',
     );
-    creatorCommands.setGarment('riding_boots');
+    creatorCommands.setGarment('tall_boots');
     expect(creatorView.value.errors, creatorView.value.errors.join('; ')).toEqual([]);
     const savedHash = creatorView.value.hash;
     expect(savedHash).toMatch(/^[0-9a-f]{16}$/);
     expect(savedHash.startsWith('ph:')).toBe(false);
-    expect(creatorView.value.worn.feet).toBe('riding_boots');
-    expect(creatorView.value.worn.shins).toBe('riding_boots');
+    expect(creatorView.value.worn.feet).toBe('tall_boots');
+    expect(creatorView.value.worn.torso_inner).toBe('tunic');
 
-    creatorCommands.setFocus('lower');
-    expect(creatorView.value.hash).toBe(savedHash);
-    expect(creatorView.value.slots).toContain('feet');
     creatorCommands.setSlot('feet');
     expect(creatorView.value.slot).toBe('feet');
     creatorCommands.setGarment('');
     expect(creatorView.value.errors, creatorView.value.errors.join('; ')).toEqual([]);
     expect(creatorView.value.worn.feet).toBeFalsy();
-    expect(creatorView.value.worn.shins).toBeFalsy();
     creatorCommands.undo();
     expect(creatorView.value.hash).toBe(savedHash);
-    expect(creatorView.value.worn.feet).toBe('riding_boots');
-    expect(creatorView.value.worn.shins).toBe('riding_boots');
-    creatorCommands.setFocus('full');
+    expect(creatorView.value.worn.feet).toBe('tall_boots');
 
     creatorCommands.confirm();
     await waitFor(() => saves.writes === 1 && screen.value === 'title');
@@ -290,10 +299,8 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     const loaded = recipeFromStored(recipe, stored?.player.avatar?.seed ?? 0);
     expect(recipeHashOf(loaded)).toBe(savedHash);
     const look = describeRecipe(loaded);
-    expect(look.outfit.chest?.id).toBe('tunic');
-    expect(look.outfit.torso_mid?.id).toBe('tunic');
-    expect(look.outfit.feet?.id).toBe('riding_boots');
-    expect(look.outfit.shins?.id).toBe('riding_boots');
+    expect(look.outfit.torso_inner?.id).toBe('tunic');
+    expect(look.outfit.feet?.id).toBe('tall_boots');
   } finally {
     game.stop();
   }
@@ -308,8 +315,8 @@ test('cancel writes nothing, undo restores exact hashes, focus does not, and con
     expect(reloaded.world.avatar.recipe).toEqual(core?.player.avatar?.recipe);
     const again = recipeFromStored(reloaded.world.avatar.recipe, reloaded.world.avatar.seed);
     expect(recipeHashOf(again)).toBe(reloaded.world.avatar.recipeHash);
-    expect(describeRecipe(again).outfit.feet?.id).toBe('riding_boots');
-    expect(describeRecipe(again).outfit.chest?.id).toBe('tunic');
+    expect(describeRecipe(again).outfit.feet?.id).toBe('tall_boots');
+    expect(describeRecipe(again).outfit.torso_inner?.id).toBe('tunic');
   } finally {
     reloaded.stop();
   }
@@ -418,6 +425,17 @@ function installFetch(): void {
   const contentRoot = path.resolve('content');
   globalThis.fetch = async (input, init) => {
     const url = String(input);
+    if (url.startsWith('file:')) {
+      const file = fileURLToPath(url.split('?')[0] ?? url);
+      const publicRoot = path.resolve('public');
+      const allowed =
+        file === publicRoot ||
+        file.startsWith(`${publicRoot}${path.sep}`) ||
+        file === contentRoot ||
+        file.startsWith(`${contentRoot}${path.sep}`);
+      if (!allowed) throw new Error(`forge test fetch escaped: ${file}`);
+      return new Response(await readFile(file));
+    }
     const forgeAt = url.indexOf('cf-test/');
     if (forgeAt >= 0) {
       const rel = decodeURIComponent(url.slice(forgeAt + 'cf-test/'.length).split('?')[0] ?? '');
@@ -443,7 +461,8 @@ function installFetch(): void {
 }
 
 function installBitmapShim(): void {
-  if (typeof globalThis.createImageBitmap === 'function') return;
+  // happy-dom's createImageBitmap rejects the forge decoder's stand-in.
+  // The paperdoll test only needs a body recipe, not decoded pixels.
   globalThis.createImageBitmap = async () =>
     ({
       width: 4,

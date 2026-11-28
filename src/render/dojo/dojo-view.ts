@@ -216,6 +216,7 @@ export class DojoView {
     actor.pivot.position.set(0, pose.hop, pose.lunge);
     actor.pivot.rotation.x = pose.lean;
     actor.kit?.apply(pose);
+    // Ground idle, even for a winged body. Hover is the town and map stand.
     const moving =
       fighter.state === 'move' || fighter.gait === 'strafe' || fighter.gait === 'backpedal';
     const speed = fighter.speed;

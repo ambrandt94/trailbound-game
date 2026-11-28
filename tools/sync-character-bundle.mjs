@@ -9,10 +9,8 @@
  * CF_DIST is the directory that contains bundle.json and cf-runtime.mjs
  * (the unpacked dist/<version>/ folder, not the tarball root).
  *
- * A 1.x dist updates current.json, the v1 fallback pin. A 2.x dist is copied
- * the same way but leaves that pin alone and writes current-v2.json, the pin
- * the game loads by default. Do not point current.json at a 2.x build: the
- * v1 backend checks its runtime against that file.
+ * A 2.x dist writes current-v2.json and current.json to that same version.
+ * There is one runtime. A 1.x dist is refused: the old skeleton is not vendored.
  */
 import {
   cpSync,
@@ -71,9 +69,18 @@ export function syncCharacterBundle(dist, options = {}) {
   }
 
   const major = Number(version.split('.')[0]);
-  const pinFile = options.pinFile ?? (major === 2 ? 'current-v2.json' : 'current.json');
+  if (major < 2) {
+    rmSync(dest, { recursive: true, force: true });
+    throw new Error(`Character Forge ${version} is the old skeleton and is not vendored`);
+  }
   const pin = { version, generatorVersion };
-  writeFileSync(join(destRoot, pinFile), `${JSON.stringify(pin, null, 2)}\n`);
+  const text = `${JSON.stringify(pin, null, 2)}\n`;
+  const pinFile = options.pinFile ?? (major === 2 ? 'current-v2.json' : 'current.json');
+  writeFileSync(join(destRoot, pinFile), text);
+  // Saves and the runtime share one pin. A 2.x sync updates both files.
+  if (major === 2 && pinFile !== 'current.json') {
+    writeFileSync(join(destRoot, 'current.json'), text);
+  }
   return { version, generatorVersion, dest, files, pinFile };
 }
 

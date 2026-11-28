@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -8,31 +7,25 @@ import { CF_PIN } from '../../src/app/version';
 import { characterForgePaths, readCfPin } from '../../src/render/characters/cf-pin';
 import { syncCharacterBundle } from '../../tools/sync-character-bundle.mjs';
 
-test('current.json stays the 1.2.1 fallback pin and the v1 loader follows it', async () => {
+test('current.json and current-v2.json both pin 2.6.0 and the old skeleton is gone', async () => {
   const pin = JSON.parse(await readFile('public/vendor/character-forge/current.json', 'utf8')) as {
     version: string;
     generatorVersion: number;
   };
-  expect(pin).toEqual({ version: '1.2.1', generatorVersion: 1 });
+  const v2 = JSON.parse(
+    await readFile('public/vendor/character-forge/current-v2.json', 'utf8'),
+  ) as { version: string; generatorVersion: number };
+  expect(pin).toEqual({ version: '2.6.0', generatorVersion: 1 });
+  expect(v2).toEqual(pin);
   expect(CF_PIN).toEqual({ version: pin.version, generatorVersion: String(pin.generatorVersion) });
   expect(characterForgePaths().runtime).toBe(
     `vendor/character-forge/${CF_PIN.version}/cf-runtime.mjs`,
   );
   expect(characterForgePaths().base).toBe(`vendor/character-forge/${CF_PIN.version}/`);
   expect(existsSync(`public/${characterForgePaths().runtime}`)).toBe(true);
-  const sha = (file: string) => createHash('sha256').update(readFileSync(file)).digest('hex');
-  expect(sha('public/vendor/character-forge/1.2.0/bundle.json')).toBe(
-    'bf94f33dd30629d2cfaae51ae389a5c8d40a4d76acf11e71efc5f628555a28ff',
-  );
-  expect(sha('public/vendor/character-forge/1.2.0/cf-runtime.mjs')).toBe(
-    'fb8a7ef8e7e918d7f24c1a175f1c1ef42a10300f2899a13149b8d31bb75cdc90',
-  );
-  expect(sha('public/vendor/character-forge/1.2.1/bundle.json')).toBe(
-    '35a4f51f91193030ea3844331f2055f33d71b09a58ee08f1db94f36edc8fa6a9',
-  );
-  expect(sha('public/vendor/character-forge/1.2.1/cf-runtime.mjs')).toBe(
-    '3280ddb5e7f655e829cb0fc9455035cb6044fb8eddb422fc1725b91f1a2b209c',
-  );
+  expect(existsSync('public/vendor/character-forge/1.2.0')).toBe(false);
+  expect(existsSync('public/vendor/character-forge/1.2.1')).toBe(false);
+  expect(existsSync('public/vendor/character-forge/2.2.1')).toBe(false);
 });
 
 test('a pin that is not a version triple is refused', () => {
@@ -69,7 +62,7 @@ test('sync copies a dist into public/vendor/character-forge/<version> and writes
   );
 });
 
-test('sync of a 2.x dist writes current-v2.json and leaves the v1 pin', async () => {
+test('sync of a 2.x dist writes current-v2.json and current.json to that version', async () => {
   const dist = await mkdtemp(path.join(tmpdir(), 'cf2-dist-'));
   const dest = await mkdtemp(path.join(tmpdir(), 'cf2-dest-'));
   await writeFile(path.join(dest, 'current.json'), '{"version":"1.2.1","generatorVersion":1}\n');
@@ -93,11 +86,23 @@ test('sync of a 2.x dist writes current-v2.json and leaves the v1 pin', async ()
     version: string;
     generatorVersion: number;
   };
-  expect(active).toEqual({ version: '1.2.1', generatorVersion: 1 });
+  expect(active).toEqual({ version: '2.1.0', generatorVersion: 1 });
   expect(side).toEqual({ version: '2.1.0', generatorVersion: 1 });
   expect(await readFile(path.join(dest, '2.1.0', 'cf-runtime.mjs'), 'utf8')).toContain(
     'export default',
   );
+});
+
+test('sync refuses a 1.x dist', async () => {
+  const dist = await mkdtemp(path.join(tmpdir(), 'cf1-dist-'));
+  const dest = await mkdtemp(path.join(tmpdir(), 'cf1-dest-'));
+  await writeFile(
+    path.join(dist, 'bundle.json'),
+    JSON.stringify({ engine: { version: '1.2.1' }, generator: { version: 1 } }),
+  );
+  await writeFile(path.join(dist, 'cf-runtime.mjs'), 'export default {}\n');
+  expect(() => syncCharacterBundle(dist, { destRoot: dest })).toThrow(/old skeleton/);
+  expect(existsSync(path.join(dest, '1.2.1'))).toBe(false);
 });
 
 test('sync refuses a file over the size guard', async () => {
