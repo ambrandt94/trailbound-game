@@ -21,6 +21,7 @@ import {
   CONVOY_RECUT_EDGE_M,
   CONVOY_SIDE_M,
   AUTO_JOG_MPS,
+  CONVOY_AUTO_APPROACH,
   CONVOY_MPS,
   FOLLOW_RUN_MPS,
   followCap,
@@ -190,7 +191,7 @@ test('leash: hint past 30 m, pull past 40 m only without input', () => {
   expect(leashState(LEASH_PULL_M + 1, false)).toBe('pull');
 });
 
-test('convoy modes: walk until input, bench toggles, free re-latches or is pulled back', () => {
+test('convoy modes: walk until input, bench toggles, free re-latches and is not pulled', () => {
   const base: ConvoyModeInput = {
     mode: 'walk',
     hasInput: false,
@@ -212,10 +213,28 @@ test('convoy modes: walk until input, bench toggles, free re-latches or is pulle
   // Too far to climb aboard: the bench key walks the hero back first.
   expect(nextConvoyMode({ ...free, bench: true })).toBe('walk');
   expect(nextConvoyMode({ ...free, dist: BENCH_REACH_M, bench: true })).toBe('bench');
-  expect(nextConvoyMode({ ...free, dist: LEASH_PULL_M + 1 })).toBe('walk');
+  // Past the leash the hero used to be pulled back. That pull is off: they stay put.
+  expect(nextConvoyMode({ ...free, dist: LEASH_PULL_M + 1 })).toBe('free');
   expect(nextConvoyMode({ ...free, dist: LEASH_PULL_M + 1, hasInput: true })).toBe('free');
   expect(nextConvoyMode({ ...free, slotDist: 1, idleSec: 1 })).toBe('walk');
   expect(nextConvoyMode({ ...free, slotDist: 1, idleSec: 0.2 })).toBe('free');
+});
+
+test('a wagon that enters the zone does not pull a hero standing across it', () => {
+  // The wagon has just rolled into the zone; the hero is free and well past the leash.
+  const standing: ConvoyModeInput = {
+    mode: 'free',
+    hasInput: false,
+    dist: LEASH_PULL_M + 30,
+    slotDist: LEASH_PULL_M + 28,
+    idleSec: 4,
+    bench: false,
+    rejoin: false,
+  };
+  expect(CONVOY_AUTO_APPROACH).toBe(false);
+  expect(nextConvoyMode(standing)).toBe('free');
+  expect(nextConvoyMode(standing, true)).toBe('walk');
+  expect(nextConvoyMode({ ...standing, rejoin: true })).toBe('walk');
 });
 
 test('a re-cut is due near the playable edge', () => {
